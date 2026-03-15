@@ -1,0 +1,92 @@
+{
+  "run_id": "ee290eb5-fd1e-4109-9227-7aef95a28bb6",
+  "generated_utc": "2026-03-15T11:41:08.364813+00:00",
+  "total_records": 18,
+  "profiles_found": [
+    "live",
+    "paper_loose",
+    "paper_strict"
+  ],
+  "loose_only_execute_count": 1,
+  "strict_not_live_count": 1,
+  "per_profile": [
+    {
+      "policy_profile": "live",
+      "total_candidates": 6,
+      "execution_rate": 0.3333,
+      "rejection_reasons": {
+        "STALE_PRICING": 1,
+        "WEAK_CALIBRATION": 1,
+        "SUSPICIOUS_UNDERROUND": 1,
+        "LOW_LIQUIDITY": 1
+      },
+      "ev_mean": 0.316,
+      "ev_p25": 0.276,
+      "ev_p75": 0.356,
+      "sanity_note_count": 0
+    },
+    {
+      "policy_profile": "paper_strict",
+      "total_candidates": 6,
+      "execution_rate": 0.5,
+      "rejection_reasons": {
+        "STALE_PRICING": 1,
+        "WEAK_CALIBRATION": 1,
+        "LOW_LIQUIDITY": 1
+      },
+      "ev_mean": 0.322667,
+      "ev_p25": 0.276,
+      "ev_p75": 0.356,
+      "sanity_note_count": 0
+    },
+    {
+      "policy_profile": "paper_loose",
+      "total_candidates": 6,
+      "execution_rate": 0.6667,
+      "rejection_reasons": {
+        "NEGATIVE_EDGE": 1,
+        "LOW_LIQUIDITY": 1
+      },
+      "ev_mean": 0.326,
+      "ev_p25": 0.336,
+      "ev_p75": 0.356,
+      "sanity_note_count": 0
+    }
+  ],
+  "cross_profile": [
+    {
+      "profile_a": "live",
+      "profile_b": "paper_loose",
+      "shared_candidates": 6,
+      "both_execute": 2,
+      "both_reject": 2,
+      "a_executes_b_rejects": 0,
+      "b_executes_a_rejects": 2,
+      "agreement_rate": 0.6667,
+      "divergence_rate": 0.3333
+    },
+    {
+      "profile_a": "live",
+      "profile_b": "paper_strict",
+      "shared_candidates": 6,
+      "both_execute": 2,
+      "both_reject": 3,
+      "a_executes_b_rejects": 0,
+      "b_executes_a_rejects": 1,
+      "agreement_rate": 0.8333,
+      "divergence_rate": 0.1667
+    },
+    {
+      "profile_a": "paper_loose",
+      "profile_b": "paper_strict",
+      "shared_candidates": 6,
+      "both_execute": 3,
+      "both_reject": 2,
+      "a_executes_b_rejects": 1,
+      "b_executes_a_rejects": 0,
+      "agreement_rate": 0.8333,
+      "divergence_rate": 0.1667
+    }
+  ],
+  "formatted_text": "Shadow Run Policy Comparison Report\nrun_id:    ee290eb5-fd1e-4109-9227-7aef95a28bb6\ngenerated: 2026-03-15T11:41:08.364813+00:00\nrecords:   18\nprofiles:  live, paper_loose, paper_strict\n\n=== Per-Profile Summary ===\n\n[live]\n  candidates:     6\n  execute:        2  (33.3%)\n  reject:         4\n    STALE_PRICING: 1\n    WEAK_CALIBRATION: 1\n    SUSPICIOUS_UNDERROUND: 1\n    LOW_LIQUIDITY: 1\n  exec_adj_ev:    mean=0.3160  p25=0.2760  p75=0.3560\n\n[paper_loose]\n  candidates:     6\n  execute:        4  (66.7%)\n  reject:         2\n    NEGATIVE_EDGE: 1\n    LOW_LIQUIDITY: 1\n  exec_adj_ev:    mean=0.3260  p25=0.3360  p75=0.3560\n\n[paper_strict]\n  candidates:     6\n  execute:        3  (50.0%)\n  reject:         3\n    STALE_PRICING: 1\n    WEAK_CALIBRATION: 1\n    LOW_LIQUIDITY: 1\n  exec_adj_ev:    mean=0.3227  p25=0.2760  p75=0.3560\n\n=== Cross-Profile Comparison ===\n\nlive vs paper_loose (6 shared candidates)\n  agreement:       66.7%\n  divergence:      33.3%\n  both execute:    2\n  both reject:     2\n  live exec / paper_loose reject: 0\n  paper_loose exec / live reject: 2\n\nlive vs paper_strict (6 shared candidates)\n  agreement:       83.3%\n  divergence:      16.7%\n  both execute:    2\n  both reject:     3\n  live exec / paper_strict reject: 0\n  paper_strict exec / live reject: 1\n\npaper_loose vs paper_strict (6 shared candidates)\n  agreement:       83.3%\n  divergence:      16.7%\n  both execute:    3\n  both reject:     2\n  paper_loose exec / paper_strict reject: 1\n  paper_strict exec / paper_loose reject: 0\n\n*** OBSERVATION ZONE: 1 candidate(s) execute only in paper_loose \u2014 do not use as live signal ***\n\n  1 candidate(s) execute in paper_strict but not live \u2014 edge_threshold or size difference"
+}

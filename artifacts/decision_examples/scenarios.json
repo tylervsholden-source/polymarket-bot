@@ -1,0 +1,128 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "S01",
+      "label": "clean_live_execute",
+      "description": "Strong calibration, healthy liquidity, clean pricing \u2192 EXECUTE_YES in live",
+      "profile": "live",
+      "decision": "EXECUTE_YES",
+      "rejection_reason": null,
+      "gross_ev": 0.38,
+      "execution_adjusted_ev": 0.356,
+      "fill_fraction": 1.0,
+      "pricing_sanity_notes": null,
+      "raw_confidence": 0.82,
+      "ask_yes": 0.44,
+      "liquidity": 5000.0
+    },
+    {
+      "scenario_id": "S02",
+      "label": "suspicious_underround_reject",
+      "description": "ask_yes + ask_no = 0.96 < 0.97 threshold \u2192 SUSPICIOUS_UNDERROUND reject",
+      "profile": "live",
+      "decision": "REJECT",
+      "rejection_reason": "SUSPICIOUS_UNDERROUND",
+      "gross_ev": null,
+      "execution_adjusted_ev": null,
+      "fill_fraction": null,
+      "ask_yes": 0.46,
+      "ask_no": 0.5,
+      "sum_ask": 0.96,
+      "threshold": 0.97
+    },
+    {
+      "scenario_id": "S03",
+      "label": "stale_pricing_reject",
+      "description": "Pricing snapshot is 200s old (>120s threshold) \u2192 STALE_PRICING reject in live",
+      "profile": "live",
+      "decision": "REJECT",
+      "rejection_reason": "STALE_PRICING",
+      "snapshot_age_seconds": 200.0,
+      "stale_threshold_seconds": 120
+    },
+    {
+      "scenario_id": "S04",
+      "label": "weak_calibration_reject",
+      "description": "CalibrationQuality.WEAK \u2192 WEAK_CALIBRATION reject in live-like mode",
+      "profile": "live",
+      "decision": "REJECT",
+      "rejection_reason": "WEAK_CALIBRATION",
+      "calibration_quality": "WEAK",
+      "raw_confidence": 0.8
+    },
+    {
+      "scenario_id": "S05",
+      "label": "partial_fill_rejected_or_small_fill",
+      "description": "Liquidity=50 USDC, intended_size=20 USDC \u2192 partial fill scenario in live mode",
+      "profile": "live",
+      "decision": "REJECT",
+      "rejection_reason": "LOW_LIQUIDITY",
+      "fill_fraction": null,
+      "liquidity": 50.0,
+      "intended_size_usdc": 20.0
+    },
+    {
+      "scenario_id": "S06",
+      "label": "paper_loose_pass_live_reject",
+      "description": "Weak calibration: live and paper_strict reject. paper_loose may execute depending on threshold. This is the observation zone \u2014 paper_loose results are NOT pilot evidence.",
+      "live_decision": "REJECT",
+      "live_rejection_reason": "WEAK_CALIBRATION",
+      "paper_strict_decision": "REJECT",
+      "paper_strict_rejection_reason": "WEAK_CALIBRATION",
+      "paper_loose_decision": "EXECUTE_YES",
+      "paper_loose_rejection_reason": null,
+      "paper_loose_pricing_sanity_notes": null,
+      "interpretation": "If paper_loose=EXECUTE and live=REJECT: this candidate is in the OBSERVATION ZONE. paper_loose execution here provides ZERO evidence of live readiness."
+    },
+    {
+      "scenario_id": "S07",
+      "label": "insufficient_evidence_no_go",
+      "description": "Only 5 live-like records over <1 day \u2192 evidence gate fails \u2192 NO_GO",
+      "live_like_evaluated": 5,
+      "required_live_like_evaluated": 50,
+      "observation_days": 0.167,
+      "required_observation_days": 3.0,
+      "evidence_sufficient": false,
+      "gaps": [
+        "live_like_evaluated",
+        "live_like_executes",
+        "live_like_rejects",
+        "observation_days"
+      ],
+      "verdict": "NO_GO",
+      "verdict_reason": "Insufficient shadow evidence: Need 50 live-like evaluated decisions for meaningful statistics; have 5.; Need 10 live-like execute decisions to observe EV distribution; have 1.; Need 20 live-like reject decisions to observe rejection composition; have 4.; Need 3.0 calendar days of observation; have 0.17. A short sample cannot distinguish stable from lucky."
+    },
+    {
+      "scenario_id": "S08",
+      "label": "high_execution_rate_warn_or_blocker",
+      "description": "Very permissive policy (paper_loose, high confidence) \u2192 very high execution rate. If >85% \u2192 BLOCKER. If 60-85% \u2192 WARN. Gates not functioning when everything passes.",
+      "execution_rate": 0.0125,
+      "verdict": "NO_GO",
+      "checks": [],
+      "verdict_reason": "Insufficient shadow evidence: Need 5 live-like execute decisions to observe EV distribution; have 1."
+    },
+    {
+      "scenario_id": "S09",
+      "label": "candidate_for_pilot_review",
+      "description": "Sufficient corpus, behavioral checks pass \u2192 readiness assessment available. Verdict depends on actual metric values. See readiness_report_sample.json for full detail.",
+      "evidence_sufficient": true,
+      "live_like_evaluated": 121,
+      "observation_days": 5.29,
+      "execution_rate": 0.6612,
+      "verdict": "GO",
+      "blockers": [],
+      "fails": [],
+      "warns": [
+        "execution_rate",
+        "paper_loose_vs_live_divergence"
+      ],
+      "pilot_constraints_applied": {
+        "asset": "BTC",
+        "max_size_usdc": 10.0,
+        "max_positions": 1,
+        "pilot_days": 3
+      }
+    }
+  ],
+  "generated_utc": "2026-03-15T14:00:54.449355+00:00"
+}

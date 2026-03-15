@@ -1,0 +1,72 @@
+{
+  "generated_utc": "2026-03-15T14:00:54.446126+00:00",
+  "profile": "live",
+  "total_evaluated": 121,
+  "execute_count": 80,
+  "reject_count": 41,
+  "execution_rate": 0.6612,
+  "rejection_composition": {
+    "WEAK_CALIBRATION": {
+      "count": 15,
+      "rate_of_total": 0.124
+    },
+    "STALE_PRICING": {
+      "count": 10,
+      "rate_of_total": 0.0826
+    },
+    "SUSPICIOUS_UNDERROUND": {
+      "count": 8,
+      "rate_of_total": 0.0661
+    },
+    "LOW_LIQUIDITY": {
+      "count": 8,
+      "rate_of_total": 0.0661
+    }
+  },
+  "dominant_rejection_reason": "WEAK_CALIBRATION",
+  "dominant_rejection_rate": 0.124,
+  "pricing_sanity": {
+    "suspicious_underround_count": 8,
+    "suspicious_underround_rate": 0.0661,
+    "stale_pricing_count": 10,
+    "stale_pricing_rate": 0.0826
+  },
+  "fillability": {
+    "full_fill_execute_count": 80,
+    "partial_fill_execute_count": 0,
+    "partial_fill_rejected_count": 0,
+    "partial_fill_rejection_rate": 0.0
+  },
+  "ev_realism": {
+    "mean_gross_ev": 0.38,
+    "mean_executable_ev": 0.356,
+    "mean_ev_haircut_abs": 0.024,
+    "mean_ev_haircut_pct": 0.0632,
+    "ev_haircut_sample_size": 80
+  },
+  "regime_stability": {
+    "is_stable": false,
+    "rolling_windows_computed": 23,
+    "window_size": 10,
+    "flags": {
+      "rejection_rate_spike": true,
+      "ev_trend_negative": false,
+      "fillability_degrading": false,
+      "underround_rising": true
+    },
+    "notes": [
+      "Rejection rate spike detected: max adjacent delta = 50.0% > 15% threshold.",
+      "Suspicious underround rising: 0.0% \u2192 30.0%, rise=30.0%."
+    ],
+    "summary": "Instability detected over 23 rolling windows. Rejection rate spike detected: max adjacent delta = 50.0% > 15% threshold. | Suspicious underround rising: 0.0% \u2192 30.0%, rise=30.0%."
+  },
+  "profile_comparison": {
+    "live_exec_rate": 0.6612,
+    "paper_strict_exec_rate": 0.7273,
+    "paper_loose_exec_rate": 0.9339,
+    "loose_vs_live_divergence_pp": 27.3,
+    "strict_vs_live_divergence_pp": 6.6,
+    "paper_loose_annotated_executes": 0,
+    "warning": "paper_loose execution rate is significantly above live \u2014 paper_loose results MUST NOT be used as evidence of live readiness."
+  }
+}

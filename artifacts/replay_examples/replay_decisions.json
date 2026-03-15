@@ -1,0 +1,62 @@
+[
+  {
+    "record_id": "7b218e1b-2f1d-45fb-a8a7-af3fab5bdfa7",
+    "policy_profile": "live",
+    "market_id": "mkt-btc-001",
+    "original_decision": "EXECUTE_YES",
+    "original_rejection": null,
+    "replayed_decision": "EXECUTE_YES",
+    "replayed_rejection": null,
+    "match": true,
+    "mismatch_reason": null,
+    "execution_adjusted_ev": 0.356
+  },
+  {
+    "record_id": "231ee1c2-6cda-4714-b35c-2f8cfa4d09ce",
+    "policy_profile": "paper_strict",
+    "market_id": "mkt-btc-001",
+    "original_decision": "EXECUTE_YES",
+    "original_rejection": null,
+    "replayed_decision": "EXECUTE_YES",
+    "replayed_rejection": null,
+    "match": true,
+    "mismatch_reason": null,
+    "execution_adjusted_ev": 0.356
+  },
+  {
+    "record_id": "64789e73-8686-4ae9-bf64-f65fe41827f5",
+    "policy_profile": "paper_loose",
+    "market_id": "mkt-btc-001",
+    "original_decision": "EXECUTE_YES",
+    "original_rejection": null,
+    "replayed_decision": "EXECUTE_YES",
+    "replayed_rejection": null,
+    "match": true,
+    "mismatch_reason": null,
+    "execution_adjusted_ev": 0.356
+  },
+  {
+    "record_id": "1a84b6d6-ea5e-44fb-9f5b-85292cade6b1",
+    "policy_profile": "live",
+    "market_id": "mkt-btc-003",
+    "original_decision": "REJECT",
+    "original_rejection": "STALE_PRICING",
+    "replayed_decision": "REJECT",
+    "replayed_rejection": "STALE_PRICING",
+    "match": true,
+    "mismatch_reason": null,
+    "execution_adjusted_ev": null
+  },
+  {
+    "record_id": "87a7fc9c-0462-4955-a34a-4218eba3b74f",
+    "policy_profile": "paper_strict",
+    "market_id": "mkt-btc-003",
+    "original_decision": "REJECT",
+    "original_rejection": "STALE_PRICING",
+    "replayed_decision": "REJECT",
+    "replayed_rejection": "STALE_PRICING",
+    "match": true,
+    "mismatch_reason": null,
+    "execution_adjusted_ev": null
+  }
+]

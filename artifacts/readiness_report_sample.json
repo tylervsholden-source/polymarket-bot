@@ -1,0 +1,124 @@
+{
+  "generated_utc": "2026-03-15T14:00:54.445357+00:00",
+  "verdict": "GO",
+  "evidence_sufficient": true,
+  "verdict_reason": "All checks passed or acceptable. Warns: 2, Fails: 0, Blockers: 0. Tiny constrained pilot may proceed \u2014 see pilot_constraints.",
+  "evidence_summary": {
+    "live_like_evaluated": 121,
+    "live_like_executes": 80,
+    "live_like_rejects": 41,
+    "assets_covered": [
+      "BTC"
+    ],
+    "horizons_covered": [
+      15
+    ],
+    "observation_days": 5.29,
+    "gaps": []
+  },
+  "live_metrics": {
+    "profile": "live",
+    "total_evaluated": 121,
+    "execute_count": 80,
+    "reject_count": 41,
+    "execution_rate": 0.6612,
+    "rejection_counts": {
+      "STALE_PRICING": 10,
+      "WEAK_CALIBRATION": 15,
+      "SUSPICIOUS_UNDERROUND": 8,
+      "LOW_LIQUIDITY": 8
+    },
+    "rejection_rates": {
+      "STALE_PRICING": 0.0826,
+      "WEAK_CALIBRATION": 0.124,
+      "SUSPICIOUS_UNDERROUND": 0.0661,
+      "LOW_LIQUIDITY": 0.0661
+    },
+    "mean_gross_ev": 0.38,
+    "mean_executable_ev": 0.356,
+    "mean_ev_haircut_pct": 0.0632,
+    "ev_haircut_sample_size": 80,
+    "suspicious_underround_count": 8,
+    "suspicious_underround_rate": 0.0661,
+    "stale_pricing_count": 10,
+    "stale_pricing_rate": 0.0826,
+    "partial_fill_rejected_count": 0,
+    "partial_fill_rejection_rate": 0.0,
+    "full_fill_execute_count": 80,
+    "observation_days": 5.29
+  },
+  "paper_strict_metrics": {
+    "total_evaluated": 121,
+    "execution_rate": 0.7273,
+    "reject_count": 33
+  },
+  "paper_loose_metrics": {
+    "total_evaluated": 121,
+    "execution_rate": 0.9339,
+    "reject_count": 8,
+    "annotated_execute_count": 0
+  },
+  "profile_divergence_pp": 27.3,
+  "checks": [
+    {
+      "name": "execution_rate",
+      "level": "WARN",
+      "metric_value": 0.6612,
+      "message": "Execution rate 66.1% > 60% \u2014 suspiciously high. Check if edge threshold is too permissive."
+    },
+    {
+      "name": "ev_haircut_pct",
+      "level": "GREEN",
+      "metric_value": 0.0632,
+      "message": "EV haircut 6.3% \u2264 30% \u2014 acceptable friction level."
+    },
+    {
+      "name": "suspicious_underround_rate",
+      "level": "GREEN",
+      "metric_value": 0.0661,
+      "message": "Suspicious underround rate 6.6% \u2264 10% \u2014 acceptable."
+    },
+    {
+      "name": "stale_pricing_rate",
+      "level": "GREEN",
+      "metric_value": 0.0826,
+      "message": "Stale pricing rate 8.3% \u2264 10% \u2014 acceptable."
+    },
+    {
+      "name": "partial_fill_rejection_rate",
+      "level": "GREEN",
+      "metric_value": 0.0,
+      "message": "Partial fill rejection rate 0.0% \u2264 20% \u2014 acceptable."
+    },
+    {
+      "name": "paper_loose_vs_live_divergence",
+      "level": "WARN",
+      "metric_value": 0.2727,
+      "message": "paper_loose vs live divergence 27.3% pp > 20% \u2014 paper_loose is materially more permissive than live. Use paper_strict as reference."
+    },
+    {
+      "name": "rejection_concentration",
+      "level": "GREEN",
+      "metric_value": 0.124,
+      "message": "No single rejection reason exceeds 70% of total evaluations. Composition looks diverse."
+    }
+  ],
+  "blockers": [],
+  "fails": [],
+  "warns": [
+    "execution_rate",
+    "paper_loose_vs_live_divergence"
+  ],
+  "pilot_constraints": {
+    "pilot_asset": "BTC",
+    "pilot_horizon_minutes": 15,
+    "max_open_positions": 1,
+    "max_nominal_usdc": 10.0,
+    "daily_max_loss_usdc": 5.0,
+    "single_loss_kill_usdc": 3.0,
+    "mandatory_review_hours": 24,
+    "pilot_evaluation_days": 3,
+    "notes": "Live pilot is tiny and constrained. GO verdict authorizes a 3-day, single-asset, $10 max position pilot only. This is NOT authorization for general live trading."
+  },
+  "formatted_report": "======================================================================\nLIVE PILOT READINESS REPORT\nVerdict: GO\nEvidence sufficient: True\n----------------------------------------------------------------------\nReason: All checks passed or acceptable. Warns: 2, Fails: 0, Blockers: 0. Tiny constrained pilot may proceed \u2014 see pilot_constraints.\n\nCHECKS:\n  [WARN   ] execution_rate: 0.6612 \u2014 Execution rate 66.1% > 60% \u2014 suspiciously high. Check if edge threshold is too permissive.\n  [GREEN  ] ev_haircut_pct: 0.0632 \u2014 EV haircut 6.3% \u2264 30% \u2014 acceptable friction level.\n  [GREEN  ] suspicious_underround_rate: 0.0661 \u2014 Suspicious underround rate 6.6% \u2264 10% \u2014 acceptable.\n  [GREEN  ] stale_pricing_rate: 0.0826 \u2014 Stale pricing rate 8.3% \u2264 10% \u2014 acceptable.\n  [GREEN  ] partial_fill_rejection_rate: 0.0000 \u2014 Partial fill rejection rate 0.0% \u2264 20% \u2014 acceptable.\n  [WARN   ] paper_loose_vs_live_divergence: 0.2727 \u2014 paper_loose vs live divergence 27.3% pp > 20% \u2014 paper_loose is materially more permissive than live. Use paper_strict as reference.\n  [GREEN  ] rejection_concentration: 0.1240 \u2014 No single rejection reason exceeds 70% of total evaluations. Composition looks diverse.\n\nPILOT CONSTRAINTS (if proceeding):\n  Asset:              BTC\n  Horizon:            15m\n  Max open positions: 1\n  Max nominal size:   $10.00\n  Daily max loss:     $5.00\n  Kill threshold:     $3.00 per trade\n  Mandatory review:   every 24h\n  Evaluation window:  3 days\n  Note: Live pilot is tiny and constrained. GO verdict authorizes a 3-day, single-asset, $10 max position pilot only. This is NOT authorization for general live trading.\n======================================================================"
+}

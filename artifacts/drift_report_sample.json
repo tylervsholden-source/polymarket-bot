@@ -1,0 +1,144 @@
+{
+  "baseline_window_size": 12,
+  "current_window_size": 15,
+  "profiles_checked": [
+    "live",
+    "paper_strict",
+    "paper_loose"
+  ],
+  "ts_computed_utc": "2026-03-15T11:41:08.366133+00:00",
+  "rejection_rate_delta": {
+    "live": 0.4,
+    "paper_strict": 0.4,
+    "paper_loose": 0.4
+  },
+  "ev_mean_delta": {
+    "live": -0.0024999999999999467,
+    "paper_strict": -0.0024999999999999467,
+    "paper_loose": -0.0024999999999999467
+  },
+  "divergence_delta": {
+    "live/paper_strict": 0.0,
+    "live/paper_loose": 0.0,
+    "paper_strict/paper_loose": 0.0
+  },
+  "baseline_divergence": {
+    "live/paper_strict": 0.0,
+    "live/paper_loose": 0.0,
+    "paper_strict/paper_loose": 0.0
+  },
+  "baseline_rejection": {
+    "live": {
+      "total_records": 4,
+      "execute_count": 4,
+      "reject_count": 0,
+      "rejection_rate": 0.0,
+      "reason_counts": {},
+      "policy_profile": "live"
+    },
+    "paper_strict": {
+      "total_records": 4,
+      "execute_count": 4,
+      "reject_count": 0,
+      "rejection_rate": 0.0,
+      "reason_counts": {},
+      "policy_profile": "paper_strict"
+    },
+    "paper_loose": {
+      "total_records": 4,
+      "execute_count": 4,
+      "reject_count": 0,
+      "rejection_rate": 0.0,
+      "reason_counts": {},
+      "policy_profile": "paper_loose"
+    }
+  },
+  "current_rejection": {
+    "live": {
+      "total_records": 5,
+      "execute_count": 3,
+      "reject_count": 2,
+      "rejection_rate": 0.4,
+      "reason_counts": {
+        "STALE_PRICING": 2
+      },
+      "policy_profile": "live"
+    },
+    "paper_strict": {
+      "total_records": 5,
+      "execute_count": 3,
+      "reject_count": 2,
+      "rejection_rate": 0.4,
+      "reason_counts": {
+        "STALE_PRICING": 2
+      },
+      "policy_profile": "paper_strict"
+    },
+    "paper_loose": {
+      "total_records": 5,
+      "execute_count": 3,
+      "reject_count": 2,
+      "rejection_rate": 0.4,
+      "reason_counts": {
+        "NEGATIVE_EDGE": 2
+      },
+      "policy_profile": "paper_loose"
+    }
+  },
+  "divergence": [
+    {
+      "profile_a": "live",
+      "profile_b": "paper_strict",
+      "total_shared": 5,
+      "agreement_count": 5,
+      "divergence_rate": 0.0
+    },
+    {
+      "profile_a": "live",
+      "profile_b": "paper_loose",
+      "total_shared": 5,
+      "agreement_count": 5,
+      "divergence_rate": 0.0
+    },
+    {
+      "profile_a": "paper_strict",
+      "profile_b": "paper_loose",
+      "total_shared": 5,
+      "agreement_count": 5,
+      "divergence_rate": 0.0
+    }
+  ],
+  "alerts": [
+    {
+      "level": "CRITICAL",
+      "metric": "rejection_rate",
+      "policy_profile": "live",
+      "message": "[live] rejection rate CRITICAL drift: 0.0% \u2192 40.0% (\u0394=+40.0%)",
+      "baseline_value": 0.0,
+      "current_value": 0.4,
+      "delta": 0.4,
+      "threshold": 0.3
+    },
+    {
+      "level": "CRITICAL",
+      "metric": "rejection_rate",
+      "policy_profile": "paper_strict",
+      "message": "[paper_strict] rejection rate CRITICAL drift: 0.0% \u2192 40.0% (\u0394=+40.0%)",
+      "baseline_value": 0.0,
+      "current_value": 0.4,
+      "delta": 0.4,
+      "threshold": 0.3
+    },
+    {
+      "level": "CRITICAL",
+      "metric": "rejection_rate",
+      "policy_profile": "paper_loose",
+      "message": "[paper_loose] rejection rate CRITICAL drift: 0.0% \u2192 40.0% (\u0394=+40.0%)",
+      "baseline_value": 0.0,
+      "current_value": 0.4,
+      "delta": 0.4,
+      "threshold": 0.3
+    }
+  ],
+  "alert_count": 3
+}

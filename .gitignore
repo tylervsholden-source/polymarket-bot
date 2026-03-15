@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+
+# Runtime data (regenerated at runtime — not source)
+data/positions.json
+data/status.json
+data/control.json
+data/readiness_verdict.json
+data/readiness_verdict.json.tmp
+logs/
+*.log
+
+# Generated / temp files
+dump.txt
+*.zip
+full_run_tests.txt
+pytest_results.txt
+run_tests_results.txt
+project_snapshot.zip

@@ -1,0 +1,180 @@
+# crypto_directional/config/defaults.yaml
+# Tüm eşikler ve parametreler burada tanımlanır.
+# Hardcoded değer kabul edilmez — her parametre buradan okunur.
+
+# ─────────────────────────────────────────────
+# Semboller ve Horizonlar
+# ─────────────────────────────────────────────
+symbols:
+  - BTCUSDT
+  - ETHUSDT
+
+horizons:
+  - 5m
+  - 15m
+
+# ─────────────────────────────────────────────
+# Label Eşikleri (round-trip maliyet sonrası)
+# ─────────────────────────────────────────────
+thresholds:
+  taker_fee_pct: 0.0004       # Binance Futures standart taker fee
+  maker_fee_pct: 0.0002       # Limit order hedefi
+  slippage_pct: 0.00015       # Muhafazakâr tahmin (BTC/ETH için)
+  min_edge_pct: 0.0002        # Minimum anlamlı fiyat hareketi
+  # Tek yön label eşiği:  taker + slippage + min_edge = 0.00075
+  # Round-trip maliyet:   taker×2 + slippage×2 + min_edge = 0.0013
+  #                       (0.0008 + 0.0003 + 0.0002)
+  # NOT: min_edge round-trip'te tek sayılır — yön beklentisi, her iki uçta aynı
+
+  # Horizon başına label threshold — başlangıçta her ikisi de base
+  # Faz 3 backtest sonrası veriye dayalı kalibre edilir
+  # Kalibrasyon yöntemi: expectancy > 0 olan minimum threshold sweep
+  label_threshold_5m: 0.00075    # taker(0.0004) + slip(0.00015) + edge(0.0002)
+  label_threshold_15m: 0.00075   # Başlangıçta eşit; Faz 3'te kalibre edilir
+
+# ─────────────────────────────────────────────
+# Veri Parametreleri
+# ─────────────────────────────────────────────
+data:
+  ohlcv_intervals:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  history_days: 180           # Minimum geçmiş (6 ay)
+  ob_depth: 20                # Order book seviye sayısı
+  max_data_age_sec: 30        # Canlı veri freshness eşiği
+  funding_forward_fill: true  # Funding'i bar bazına yay
+
+# ─────────────────────────────────────────────
+# Feature Parametreleri
+# ─────────────────────────────────────────────
+features:
+  # Aktif feature'lar (false = devre dışı)
+  momentum:
+    return_1b: true
+    return_3b: true
+    return_5b: true
+    return_10b: true
+    return_20b: true
+    ema_cross_5_20: true
+    ema_cross_9_21: true
+    rsi_14: true
+    macd_hist_norm: true
+    ema_slope_9: true
+
+  mean_reversion:
+    zscore_close_20: true
+    bb_position_20: true
+    price_dev_ema_21: true
+    price_vs_vwap: true
+
+  volatility:
+    realized_vol_10: true
+    realized_vol_20: true
+    realized_vol_50: true
+    vol_ratio_5_20: true
+    atr_14_norm: true
+    intrabar_range: true
+
+  microstructure:
+    ob_imbalance_5: true
+    ob_imbalance_10: true
+    spread_pct: true
+    spread_zscore_20: true
+    taker_buy_ratio: true
+    volume_ratio_20: true
+
+  derivatives:
+    funding_rate: true
+    funding_8h_sum: true
+    oi_change_3b: true
+    oi_zscore_20: true
+    liq_imbalance: true
+    perp_premium: false       # Spot veri gerektirir — başlangıçta kapalı
+
+  regime:
+    vol_regime: true
+    adx_14: true
+    autocorr_1_20: false      # P3 — başlangıçta kapalı
+    btc_return_1b: true       # Sadece ETH modeli için
+
+# ─────────────────────────────────────────────
+# Model Parametreleri
+# ─────────────────────────────────────────────
+model:
+  random_seed: 42
+  min_confidence: 0.55        # Trade açmak için minimum P(class)
+  class_weight: balanced      # Class imbalance (NO_TRADE çok fazla)
+
+  logistic_regression:
+    C: 1.0
+    max_iter: 1000
+    solver: lbfgs
+
+  random_forest:
+    n_estimators: 200
+    max_depth: 10
+    min_samples_leaf: 20
+
+  lightgbm:
+    n_estimators: 300
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 20
+
+# ─────────────────────────────────────────────
+# Validation Parametreleri
+# ─────────────────────────────────────────────
+validation:
+  method: walk_forward_expanding
+  n_folds: 5
+  val_pct: 0.15               # Her fold'da validation oranı
+  min_train_bars: 2000        # Minimum train set büyüklüğü
+  shuffle: false              # YASAK — her zaman false
+
+# ─────────────────────────────────────────────
+# Trade Filtre Parametreleri
+# ─────────────────────────────────────────────
+trade_filter:
+  min_confidence: 0.55
+  max_spread_pct: 0.0005      # Spread bu değeri geçerse işlem açma
+  max_data_age_sec: 30        # Veri bu kadar eskiyse işlem açma
+  max_funding_pct: 0.003      # Funding bu kadar yüksekse işlem açma
+
+# ─────────────────────────────────────────────
+# Risk Parametreleri
+# ─────────────────────────────────────────────
+risk:
+  daily_loss_limit_pct: 0.02        # -%2 günlük zarar limiti
+  max_consecutive_losses: 5
+  max_concurrent_positions: 2
+  max_risk_per_trade_pct: 0.005     # İşlem başına sermayenin %0.5'i
+  max_notional_pct: 0.05            # Max toplam exposure %5
+  stop_loss_pct: 0.005              # Giriş fiyatından %0.5
+  take_profit_pct: 0.015            # Giriş fiyatından %1.5 (1:3 RR)
+  max_hold_bars: 3                  # Horizon'dan fazla tutma
+
+# Kill switch eşikleri
+kill_switches:
+  vol_spike_multiplier: 3.0         # Normal vol'un 3 katı → dur
+  spread_spike_multiplier: 5.0      # Normal spread'in 5 katı → dur
+  stale_data_sec: 60                # 60s veri yoksa → kapat
+  api_failure_retry: 3              # 3 başarısız istek → kapat
+
+# ─────────────────────────────────────────────
+# Sermaye
+# ─────────────────────────────────────────────
+capital:
+  initial: 1000.0                   # Başlangıç paper trading sermayesi
+  # NOT: Canlı execution'da bu değer exchange bakiyesinden okunur
+  #      Hardcoded kullanılmaz
+
+# ─────────────────────────────────────────────
+# Loglama
+# ─────────────────────────────────────────────
+logging:
+  level: INFO
+  log_dir: crypto_directional/data/logs
+  paper_log_format: jsonl
+  rotation: daily
