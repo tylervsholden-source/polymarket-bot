@@ -5,6 +5,7 @@ Claude AI signal kaldırıldı — Bayesian estimator spot fiyat bazlı sinyal �
 """
 import asyncio
 import os
+import uuid
 from datetime import datetime, timezone
 from loguru import logger
 
@@ -16,6 +17,13 @@ from agents.smart_trader_tracker import SmartTraderTracker
 from core.polymarket_client import PolymarketClient
 from core.position_manager import PositionManager
 from strategies.arbitrage_engine import ArbitrageEngine
+from shadow_runner.journal import JournalWriter
+from shadow_runner.types import (
+    DecisionSummary,
+    PricingSnapshot,
+    ShadowDecisionRecord,
+    SignalSnapshot,
+)
 
 
 class Orchestrator:
@@ -39,6 +47,12 @@ class Orchestrator:
         self.min_hours = float(os.getenv("MIN_HOURS_TO_CLOSE", 0.0))
 
         self._cycle_count: int = 0
+
+        # Shadow journal — rotates daily, records all evaluated candidates
+        self._shadow_writer: JournalWriter | None = None
+        self._shadow_writer_date: str = ""
+        self._shadow_run_id: str = str(uuid.uuid4())
+
         logger.info("Orchestrator başlatıldı — Arbitrage Engine (6 model) aktif.")
 
     async def run(self):
@@ -114,6 +128,11 @@ class Orchestrator:
         # Arbitrage Engine — 6 model çalıştır
         signals = await self.arb_engine.analyze(candidates, capital)
         logger.info(f"{len(signals)} arbitraj sinyali üretildi.")
+
+        # Shadow journal — tüm adayları kaydet (EXECUTE + REJECT)
+        ctrl = self._read_control()
+        intended_size = float(ctrl.get("min_bet", 20.0))
+        self._record_shadow_decisions(candidates, signals, intended_size)
 
         # Dashboard'dan min_bet oku — kullanıcının seçtiği miktar (1/5/10/20$)
         ctrl = self._read_control()
@@ -434,6 +453,150 @@ class Orchestrator:
             except Exception as e:
                 logger.debug(f"Live data loop hatası: {e}")
             await asyncio.sleep(60)
+
+    # ------------------------------------------------------------------ #
+    # Shadow journal
+    # ------------------------------------------------------------------ #
+
+    def _get_shadow_writer(self) -> JournalWriter:
+        """Return the journal writer for today, rotating if the date changed."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if self._shadow_writer_date != today:
+            if self._shadow_writer is not None:
+                try:
+                    self._shadow_writer.flush()
+                    self._shadow_writer.close()
+                except Exception:
+                    pass
+            data_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "data",
+            )
+            os.makedirs(data_dir, exist_ok=True)
+            path = os.path.join(data_dir, f"shadow_journal_{today}.jsonl")
+            self._shadow_writer = JournalWriter(path)
+            self._shadow_writer_date = today
+            logger.info(f"Shadow journal açıldı: {path}")
+        return self._shadow_writer  # type: ignore[return-value]
+
+    @staticmethod
+    def _shadow_detect_asset(question: str) -> str:
+        q = question.lower()
+        if "bitcoin" in q or "btc" in q:   return "BTC"
+        if "ethereum" in q or "eth" in q:  return "ETH"
+        if "solana" in q or "sol" in q:    return "SOL"
+        if "xrp" in q or "ripple" in q:    return "XRP"
+        if "dogecoin" in q or "doge" in q: return "DOGE"
+        if "bnb" in q:                     return "BNB"
+        if "hyperliquid" in q or "hype" in q: return "HYPE"
+        return "UNKNOWN"
+
+    @staticmethod
+    def _shadow_detect_horizon(question: str) -> int:
+        q = question.lower()
+        if "4 hour" in q or "4h" in q:    return 240
+        if "1 hour" in q or "1h" in q:    return 60
+        if "15 min" in q or "15m" in q:   return 15
+        if "5 min" in q or " 5m" in q:    return 5
+        return 15  # default
+
+    def _record_shadow_decisions(
+        self,
+        candidates: list,
+        signals: list,
+        intended_size: float,
+    ) -> None:
+        """
+        Write one ShadowDecisionRecord per evaluated candidate to the daily journal.
+
+        Signals that produced a TradeSignal → EXECUTE.
+        Candidates that didn't produce a signal → REJECT / NO_SIGNAL_PRODUCED.
+        """
+        if not candidates:
+            return
+        try:
+            now = datetime.now(timezone.utc)
+            writer = self._get_shadow_writer()
+            executed_ids = {
+                s.market.get("condition_id", "") for s in signals
+            }
+
+            for market in candidates:
+                market_id = market.get("condition_id", "")
+                question  = market.get("question", "")
+                ask_yes   = float(market.get("best_ask", 0.5) or 0.5)
+                bid_yes   = float(market.get("best_bid", 0) or 0)
+                liquidity = float(market.get("volume", 0) or 0)
+
+                sig_match = next(
+                    (s for s in signals
+                     if s.market.get("condition_id", "") == market_id),
+                    None,
+                )
+                is_execute = sig_match is not None
+
+                if is_execute:
+                    pred_class = "UP" if sig_match.direction == "YES" else "DOWN"  # type: ignore[union-attr]
+                    yes_prob   = sig_match.bayesian_prob  # type: ignore[union-attr]
+                    gross_ev   = sig_match.edge           # type: ignore[union-attr]
+                else:
+                    pred_class = "NO_TRADE"
+                    yes_prob   = ask_yes
+                    gross_ev   = None
+
+                signal_snap = SignalSnapshot(
+                    asset=self._shadow_detect_asset(question),
+                    horizon_minutes=self._shadow_detect_horizon(question),
+                    signal_timestamp_utc=now,
+                    predicted_class=pred_class,
+                    raw_confidence=yes_prob,
+                    class_probabilities=None,
+                    effective_yes_prob=yes_prob,
+                    effective_no_prob=round(1.0 - yes_prob, 6),
+                )
+
+                pricing_snap = PricingSnapshot(
+                    market_id=market_id,
+                    ask_yes=ask_yes,
+                    bid_yes=bid_yes if bid_yes > 0 else round(ask_yes * 0.99, 4),
+                    ask_no=round(1.0 - (bid_yes if bid_yes > 0 else ask_yes), 4),
+                    bid_no=round(1.0 - ask_yes, 4),
+                    liquidity=liquidity,
+                    pricing_timestamp_utc=now,
+                    snapshot_age_seconds=0.0,
+                )
+
+                decision_summary = DecisionSummary(
+                    decision="EXECUTE" if is_execute else "REJECT",
+                    rejection_reason=None if is_execute else "NO_SIGNAL_PRODUCED",
+                    policy_mode="live",
+                    passes_final_gate=is_execute,
+                    intended_size_usdc_used=intended_size if is_execute else 0.0,
+                    gross_ev=gross_ev,
+                    execution_adjusted_ev=gross_ev,
+                )
+
+                record = ShadowDecisionRecord(
+                    record_id=str(uuid.uuid4()),
+                    run_id=self._shadow_run_id,
+                    ts_recorded_utc=now,
+                    signal=signal_snap,
+                    pricing=pricing_snap,
+                    policy_profile="live",
+                    intended_size_usdc=intended_size,
+                    evidence_source="live_shadow",
+                    decision_summary=decision_summary,
+                )
+                writer.write(record)
+
+            writer.flush()
+            n_exec = len([s for s in signals if s.market.get("condition_id", "") in executed_ids])
+            logger.debug(
+                f"Shadow: {len(candidates)} karar yazıldı "
+                f"({n_exec} EXECUTE / {len(candidates) - n_exec} REJECT)"
+            )
+        except Exception as e:
+            logger.warning(f"Shadow journal yazma hatası: {e}")
 
     async def _fetch_crypto_prices(self):
         # CoinGecko dene, başarısız olursa Binance kullan
