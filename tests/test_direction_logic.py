@@ -46,7 +46,7 @@ async def test_bullish_yields_yes_direction():
 
     # Bayesian'ı 0.60 dön (40c piyasa, %60 tahmin → bullish, edge=0.20)
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.60)
+        mock_est.return_value = MagicMock(probability=0.60, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None, "Bullish edge'de sinyal üretilmeli"
@@ -64,7 +64,7 @@ async def test_bearish_yields_no_direction():
 
     # Bayesian 0.45 → YES 70c'ta pahalı → NO al (30c'tan, edge≈0.25)
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.45)
+        mock_est.return_value = MagicMock(probability=0.45, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None, "Bearish edge'de sinyal üretilmeli"
@@ -81,7 +81,7 @@ async def test_neutral_no_signal():
 
     # Bayesian 0.52 → edge=0.02 < min_edge=0.04
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.52)
+        mock_est.return_value = MagicMock(probability=0.52, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is None, "Yetersiz edge'de sinyal üretilmemeli"
@@ -95,7 +95,7 @@ async def test_no_signal_entry_price_is_no_price():
     market = make_market(yes_price=0.80, no_best_ask=0.20, no_best_bid=0.18)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.35)  # bearish, edge≈0.45
+        mock_est.return_value = MagicMock(probability=0.35, signal_strength=0.5)  # bearish, edge≈0.45
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None
@@ -113,7 +113,7 @@ async def test_yes_signal_market_price_is_yes_price():
     market = make_market(yes_price=0.35)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.65)
+        mock_est.return_value = MagicMock(probability=0.65, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None

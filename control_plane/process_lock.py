@@ -91,7 +91,15 @@ class ProcessLock:
 
     def is_mine(self) -> bool:
         """Lock bu process'e mi ait?"""
-        return self._acquired and self.holder_pid() == os.getpid()
+        if not self._acquired:
+            return False
+        # Basit kontrol: lock dosyası bizim PID'imizi içeriyor mu?
+        # _pid_alive Windows'ta os.kill(pid,0) hatası verebilir,
+        # ama dosyayı biz yazdık, PID eşleşmesi yeterli.
+        if not self._path.exists():
+            return False
+        pid_str = self._path.read_text().strip()
+        return pid_str.isdigit() and int(pid_str) == os.getpid()
 
     def info(self) -> ProcessLockInfo:
         """Dashboard için lock durumu."""

@@ -1,6 +1,6 @@
 """
 CryptoFeed — Bitstamp REST API'den gerçek zamanlı çoklu zaman dilimi verisi.
-(Binance kurumsal proxy/VPN nedeniyle erişilemiyor; Bitstamp çalışıyor.)
+(Bitstamp primary, Binance secondary — Binance erişimi proxy/VPN'e bağlı, graceful degradation ile çalışır.)
 
 Her coin için: anlık fiyat, RSI(14), momentum, hacim oranı, order book imbalance.
 Zaman dilimleri: 5m, 15m, 1h, 4h
@@ -39,6 +39,8 @@ try:
 except ImportError:
     _GARCH_AVAILABLE = False
 
+from agents.enhanced_signals import EnhancedSignals
+
 BITSTAMP_BASE = "https://www.bitstamp.net/api/v2"
 
 # Binance sembol → Bitstamp pair
@@ -73,12 +75,24 @@ class BinanceFeed:
         "XRPUSDT": "XRP/USDT", "DOGEUSDT": "DOGE/USDT", "BNBUSDT": "BNB/USDT",
     }
 
+    # Binance Futures symbol mapping
+    _FUTURES_SYMBOLS: dict[str, str] = {
+        "BTCUSDT": "BTCUSDT", "ETHUSDT": "ETHUSDT", "SOLUSDT": "SOLUSDT",
+        "XRPUSDT": "XRPUSDT", "DOGEUSDT": "DOGEUSDT", "BNBUSDT": "BNBUSDT",
+    }
+
+    # Binance Spot REST base
+    _BINANCE_SPOT_BASE = "https://api.binance.com/api/v3"
+    _BINANCE_FUTURES_BASE = "https://fapi.binance.com/fapi/v1"
+
     def __init__(self, session=None):
         import httpx
         self.session = httpx.AsyncClient(timeout=10)
         self._cache: dict[str, dict] = {}   # symbol → {price, ob_imbalance, intervals}
         self._exchanges: list = []           # ccxt exchange instances
         self._exchanges_initialized = False
+        # Enhanced signals (multi-exchange, options, whale, social)
+        self.enhanced = EnhancedSignals(http_session=self.session)
         # Real-time WebSocket feed (optional, started on first refresh)
         self._ws_feed = None
         self._ws_started = False
@@ -86,6 +100,18 @@ class BinanceFeed:
         self._fng_value: int = 50           # 0=extreme fear, 100=extreme greed
         self._fng_label: str = "Neutral"
         self._fng_last_fetch: float = 0.0
+        # ── Cross-Exchange Lead-Lag ──────────────────────────────────────────
+        self._binance_prices: dict[str, float] = {}   # symbol → Binance spot price
+        # ── Funding Rate + Open Interest ─────────────────────────────────────
+        self._funding_data: dict[str, dict] = {}       # symbol → {rate, predicted, oi, oi_change}
+        self._funding_last_fetch: float = 0.0
+        # ── Liquidation Tracker ──────────────────────────────────────────────
+        self._recent_liqs: dict[str, list] = {}        # symbol → [{side, qty_usd, ts}]
+        self._liq_last_fetch: float = 0.0
+        # ── S&P 500 Correlation ──────────────────────────────────────────────
+        self._spx_change_pct: float = 0.0
+        self._spx_price: float = 0.0
+        self._spx_last_fetch: float = 0.0
 
     # CoinGecko coin ID mapping
     _COINGECKO_IDS: dict[str, str] = {
@@ -121,12 +147,346 @@ class BinanceFeed:
             "fng_signal": (self._fng_value - 50) / 50.0,  # -1 (extreme fear) to +1 (extreme greed)
         }
 
+    # ── Cross-Exchange Lead-Lag ────────────────────────────────────────────
+    async def _fetch_binance_spot_prices(self, symbols: set[str]) -> None:
+        """Fetch Binance spot prices for lead-lag detection vs Bitstamp."""
+        for sym in symbols:
+            if sym not in self._FUTURES_SYMBOLS:
+                continue
+            try:
+                resp = await self.session.get(
+                    f"{self._BINANCE_SPOT_BASE}/ticker/price",
+                    params={"symbol": sym},
+                )
+                if resp.status_code == 200:
+                    self._binance_prices[sym] = float(resp.json().get("price", 0))
+            except Exception:
+                pass
+
+    def get_cross_exchange_signal(self, symbol: str) -> dict:
+        """Compare Binance spot vs Bitstamp. Returns lead-lag signal.
+
+        Returns:
+            {
+                "binance_price": float,
+                "bitstamp_price": float,
+                "spread_pct": float,        # (binance - bitstamp) / bitstamp * 100
+                "signal": str,              # "BULLISH" / "BEARISH" / "NEUTRAL"
+                "boost": float,             # -0.03 to +0.03 edge boost
+            }
+        """
+        binance_p = self._binance_prices.get(symbol, 0)
+        cached = self._cache.get(symbol, {})
+        bitstamp_p = cached.get("bitstamp_price", 0)
+
+        if not binance_p or not bitstamp_p:
+            return {"binance_price": 0, "bitstamp_price": 0, "spread_pct": 0,
+                    "signal": "NEUTRAL", "boost": 0.0}
+
+        spread_pct = (binance_p - bitstamp_p) / bitstamp_p * 100
+
+        # Threshold: > 0.03% = Binance leading up, < -0.03% = leading down
+        # 5dk window'da 0.03% spread = anlamlı lead
+        threshold = 0.03
+        if spread_pct > threshold:
+            signal = "BULLISH"
+            boost = min(0.03, spread_pct * 0.15)  # scale: 0.1% spread → 0.015 boost
+        elif spread_pct < -threshold:
+            signal = "BEARISH"
+            boost = max(-0.03, spread_pct * 0.15)
+        else:
+            signal = "NEUTRAL"
+            boost = 0.0
+
+        return {
+            "binance_price": round(binance_p, 4),
+            "bitstamp_price": round(bitstamp_p, 4),
+            "spread_pct": round(spread_pct, 4),
+            "signal": signal,
+            "boost": round(boost, 4),
+        }
+
+    # ── Funding Rate + Open Interest ─────────────────────────────────────────
+    async def _fetch_funding_oi(self, symbols: set[str]) -> None:
+        """Fetch Binance Futures funding rate + open interest (cached 60s)."""
+        import time as _time
+        now = _time.time()
+        if now - self._funding_last_fetch < 60:
+            return
+        self._funding_last_fetch = now
+
+        for sym in symbols:
+            if sym not in self._FUTURES_SYMBOLS:
+                continue
+            try:
+                # Predicted funding rate + mark price
+                premium_resp, oi_resp = await asyncio.gather(
+                    self.session.get(
+                        f"{self._BINANCE_FUTURES_BASE}/premiumIndex",
+                        params={"symbol": sym},
+                    ),
+                    self.session.get(
+                        f"{self._BINANCE_FUTURES_BASE}/openInterest",
+                        params={"symbol": sym},
+                    ),
+                    return_exceptions=True,
+                )
+
+                funding_rate = 0.0
+                predicted_rate = 0.0
+                if not isinstance(premium_resp, Exception) and premium_resp.status_code == 200:
+                    pdata = premium_resp.json()
+                    funding_rate = float(pdata.get("lastFundingRate", 0))
+                    predicted_rate = float(pdata.get("nextFundingRate", 0) or 0)
+
+                oi_value = 0.0
+                if not isinstance(oi_resp, Exception) and oi_resp.status_code == 200:
+                    oi_value = float(oi_resp.json().get("openInterest", 0))
+
+                # Track OI change
+                prev = self._funding_data.get(sym, {})
+                prev_oi = prev.get("oi", 0)
+                oi_change_pct = ((oi_value - prev_oi) / prev_oi * 100) if prev_oi > 0 else 0.0
+
+                self._funding_data[sym] = {
+                    "rate": funding_rate,
+                    "predicted": predicted_rate,
+                    "oi": oi_value,
+                    "oi_change_pct": round(oi_change_pct, 2),
+                }
+            except Exception as e:
+                logger.debug(f"Funding/OI fetch failed for {sym}: {e}")
+
+    def get_funding_signal(self, symbol: str) -> dict:
+        """Interpret funding rate + OI into directional signal.
+
+        Returns:
+            {
+                "funding_rate": float,
+                "oi": float,
+                "oi_change_pct": float,
+                "signal": str,          # "BULLISH" / "BEARISH" / "NEUTRAL"
+                "risk": str,            # "LONG_SQUEEZE" / "SHORT_SQUEEZE" / "NORMAL"
+                "boost": float,         # -0.03 to +0.03
+            }
+        """
+        data = self._funding_data.get(symbol, {})
+        if not data:
+            return {"funding_rate": 0, "oi": 0, "oi_change_pct": 0,
+                    "signal": "NEUTRAL", "risk": "NORMAL", "boost": 0.0}
+
+        rate = data.get("rate", 0)
+        oi = data.get("oi", 0)
+        oi_chg = data.get("oi_change_pct", 0)
+
+        # Funding rate thresholds (8h rate)
+        # > 0.05% = lots of longs paying shorts → crowded long → pullback risk
+        # < -0.05% = lots of shorts paying longs → crowded short → squeeze risk
+        signal = "NEUTRAL"
+        risk = "NORMAL"
+        boost = 0.0
+
+        if rate > 0.0005:  # 0.05%
+            if oi_chg > 3:  # OI increasing + high funding = very crowded
+                signal = "BEARISH"
+                risk = "LONG_SQUEEZE"
+                boost = max(-0.03, -abs(rate) * 20)  # 0.1% funding → -0.02 boost
+            else:
+                signal = "BEARISH"
+                risk = "NORMAL"
+                boost = max(-0.02, -abs(rate) * 10)
+        elif rate < -0.0005:  # -0.05%
+            if oi_chg > 3:
+                signal = "BULLISH"
+                risk = "SHORT_SQUEEZE"
+                boost = min(0.03, abs(rate) * 20)
+            else:
+                signal = "BULLISH"
+                risk = "NORMAL"
+                boost = min(0.02, abs(rate) * 10)
+
+        return {
+            "funding_rate": round(rate * 100, 4),  # as percentage
+            "oi": round(oi, 2),
+            "oi_change_pct": oi_chg,
+            "signal": signal,
+            "risk": risk,
+            "boost": round(boost, 4),
+        }
+
+    # ── Liquidation Tracker ──────────────────────────────────────────────────
+    async def _fetch_liquidations(self, symbols: set[str]) -> None:
+        """Fetch recent liquidations from Binance Futures (cached 30s)."""
+        import time as _time
+        now = _time.time()
+        if now - self._liq_last_fetch < 30:
+            return
+        self._liq_last_fetch = now
+
+        for sym in symbols:
+            if sym not in self._FUTURES_SYMBOLS:
+                continue
+            try:
+                resp = await self.session.get(
+                    f"{self._BINANCE_FUTURES_BASE}/allForceOrders",
+                    params={"symbol": sym, "limit": 20},
+                )
+                if resp.status_code == 200:
+                    orders = resp.json()
+                    recent = []
+                    for o in orders:
+                        qty = float(o.get("origQty", 0))
+                        price = float(o.get("price", 0))
+                        usd_val = qty * price
+                        if usd_val > 1000:  # only significant liquidations
+                            recent.append({
+                                "side": o.get("side", ""),  # SELL = long liq, BUY = short liq
+                                "qty_usd": round(usd_val, 0),
+                                "ts": o.get("time", 0),
+                            })
+                    self._recent_liqs[sym] = recent
+            except Exception as e:
+                logger.debug(f"Liquidation fetch failed for {sym}: {e}")
+
+    def get_liquidation_signal(self, symbol: str) -> dict:
+        """Analyze recent liquidations for cascade risk.
+
+        Returns:
+            {
+                "long_liq_usd": float,   # total long liquidations (bearish)
+                "short_liq_usd": float,  # total short liquidations (bullish)
+                "net_signal": str,       # "LONG_CASCADE" / "SHORT_CASCADE" / "NEUTRAL"
+                "boost": float,          # -0.02 to +0.02
+                "count": int,
+            }
+        """
+        liqs = self._recent_liqs.get(symbol, [])
+        if not liqs:
+            return {"long_liq_usd": 0, "short_liq_usd": 0,
+                    "net_signal": "NEUTRAL", "boost": 0.0, "count": 0}
+
+        # SELL side = long liquidation (forced sell = bearish)
+        # BUY side = short liquidation (forced buy = bullish)
+        import time as _time
+        now_ms = _time.time() * 1000
+        cutoff = now_ms - 300_000  # last 5 minutes
+
+        long_liq = sum(l["qty_usd"] for l in liqs if l["side"] == "SELL" and l["ts"] > cutoff)
+        short_liq = sum(l["qty_usd"] for l in liqs if l["side"] == "BUY" and l["ts"] > cutoff)
+        count = sum(1 for l in liqs if l["ts"] > cutoff)
+
+        net = short_liq - long_liq  # positive = more short squeezes = bullish
+
+        # Thresholds: $100K+ = meaningful, $500K+ = strong signal
+        signal = "NEUTRAL"
+        boost = 0.0
+        if long_liq > 100_000 and long_liq > short_liq * 2:
+            signal = "LONG_CASCADE"
+            boost = max(-0.02, -long_liq / 10_000_000)  # $1M liq → -0.01
+        elif short_liq > 100_000 and short_liq > long_liq * 2:
+            signal = "SHORT_CASCADE"
+            boost = min(0.02, short_liq / 10_000_000)
+        elif abs(net) > 50_000:
+            boost = max(-0.01, min(0.01, net / 5_000_000))
+
+        return {
+            "long_liq_usd": round(long_liq, 0),
+            "short_liq_usd": round(short_liq, 0),
+            "net_signal": signal,
+            "boost": round(boost, 4),
+            "count": count,
+        }
+
+    # ── S&P 500 Correlation ──────────────────────────────────────────────────
+    async def _fetch_spx(self) -> None:
+        """Fetch S&P 500 intraday change (cached 2 min). Uses Yahoo Finance."""
+        import time as _time
+        now = _time.time()
+        if now - self._spx_last_fetch < 120:
+            return
+        self._spx_last_fetch = now
+
+        try:
+            # Yahoo Finance chart API — 1d range, 5m interval
+            resp = await self.session.get(
+                "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC",
+                params={"range": "1d", "interval": "5m"},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if resp.status_code == 200:
+                result = resp.json().get("chart", {}).get("result", [{}])[0]
+                meta = result.get("meta", {})
+                prev_close = meta.get("chartPreviousClose", 0)
+                current = meta.get("regularMarketPrice", 0)
+                if prev_close > 0 and current > 0:
+                    self._spx_price = current
+                    self._spx_change_pct = (current - prev_close) / prev_close * 100
+                    logger.debug(
+                        f"SPX: ${current:.0f} ({self._spx_change_pct:+.2f}%)"
+                    )
+        except Exception as e:
+            logger.debug(f"SPX fetch failed: {e}")
+
+    def get_spx_signal(self) -> dict:
+        """S&P 500 correlation signal for crypto direction.
+
+        During US market hours, crypto correlates with SPX.
+        Sharp SPX moves predict crypto direction 1-3 minutes ahead.
+
+        Returns:
+            {
+                "spx_price": float,
+                "spx_change_pct": float,
+                "signal": str,           # "BULLISH" / "BEARISH" / "NEUTRAL"
+                "boost": float,          # -0.02 to +0.02
+                "active": bool,          # True during US market hours
+            }
+        """
+        from datetime import datetime, timezone, timedelta
+
+        # Check if US market is open (9:30 AM - 4:00 PM ET)
+        et_offset = timedelta(hours=-4)  # EDT
+        now_et = datetime.now(timezone.utc) + et_offset
+        market_open = now_et.hour > 9 or (now_et.hour == 9 and now_et.minute >= 30)
+        market_close = now_et.hour < 16
+        is_weekday = now_et.weekday() < 5
+        active = market_open and market_close and is_weekday
+
+        if not active or self._spx_price == 0:
+            return {"spx_price": 0, "spx_change_pct": 0,
+                    "signal": "NEUTRAL", "boost": 0.0, "active": False}
+
+        chg = self._spx_change_pct
+        # SPX thresholds: > 0.3% = strong move, > 0.1% = mild
+        signal = "NEUTRAL"
+        boost = 0.0
+        if chg > 0.3:
+            signal = "BULLISH"
+            boost = min(0.02, chg * 0.02)  # 1% SPX → 0.02 boost
+        elif chg > 0.1:
+            signal = "BULLISH"
+            boost = min(0.01, chg * 0.01)
+        elif chg < -0.3:
+            signal = "BEARISH"
+            boost = max(-0.02, chg * 0.02)
+        elif chg < -0.1:
+            signal = "BEARISH"
+            boost = max(-0.01, chg * 0.01)
+
+        return {
+            "spx_price": round(self._spx_price, 2),
+            "spx_change_pct": round(chg, 3),
+            "signal": signal,
+            "boost": round(boost, 4),
+            "active": active,
+        }
+
     async def _init_exchanges(self) -> None:
         """Mark exchanges as initialized (uses REST APIs, no ccxt needed)."""
         if self._exchanges_initialized:
             return
         self._exchanges_initialized = True
-        logger.info("Multi-exchange: CoinGecko + Bitstamp + Coinpaprika consensus active")
+        logger.info("Multi-exchange: CoinGecko + Bitstamp + Coinpaprika + Binance Futures consensus active")
 
     async def _fetch_multi_exchange_price(self, symbol: str) -> dict:
         """Fetch price from multiple public APIs. Returns consensus data."""
@@ -199,9 +559,17 @@ class BinanceFeed:
                 logger.debug(f"WS feed start failed: {e}")
                 self._ws_feed = None
         await self._init_exchanges()
-        await self._fetch_fear_greed()
-        tasks = [self._fetch_symbol(sym) for sym in symbols]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Fetch all data sources in parallel
+        extra_tasks = [
+            self._fetch_fear_greed(),
+            self._fetch_binance_spot_prices(symbols),
+            self._fetch_funding_oi(symbols),
+            self._fetch_liquidations(symbols),
+            self._fetch_spx(),
+            self.enhanced.refresh(symbols),  # multi-exchange, options, whale, social
+        ]
+        symbol_tasks = [self._fetch_symbol(sym) for sym in symbols]
+        await asyncio.gather(*symbol_tasks, *extra_tasks, return_exceptions=True)
 
     async def _fetch_symbol(self, symbol: str) -> None:
         pair = _SYMBOL_MAP.get(symbol)
@@ -1078,6 +1446,78 @@ class BinanceFeed:
             except Exception:
                 pass
         self._exchanges = []
+
+    def get_mtf_consensus(self, symbol: str) -> dict:
+        """Multi-Timeframe Consensus: 5m, 15m, 1h yönlerini karşılaştır.
+
+        Returns:
+            {
+                "aligned": bool,        # Tüm TF'ler aynı yönde mi
+                "direction": str,       # "UP" / "DOWN" / "MIXED"
+                "agreement": float,     # 0.0-1.0 (1=tam uyum)
+                "details": dict,        # her TF'nin change_pct'si
+                "boost": float,         # -0.02 to +0.02 edge boost
+            }
+        """
+        cached = self._cache.get(symbol, {})
+        intervals = cached.get("intervals", {})
+
+        tf_directions = {}
+        tf_changes = {}
+        noise_threshold = 0.10  # %0.10'dan küçük hareket = noise
+
+        for tf in ("5m", "15m", "1h"):
+            iv = intervals.get(tf, {})
+            chg = iv.get("change_pct", 0.0)
+            tf_changes[tf] = chg
+            if chg > noise_threshold:
+                tf_directions[tf] = "UP"
+            elif chg < -noise_threshold:
+                tf_directions[tf] = "DOWN"
+            else:
+                tf_directions[tf] = "FLAT"
+
+        directions = [d for d in tf_directions.values() if d != "FLAT"]
+        if not directions:
+            return {
+                "aligned": False, "direction": "MIXED",
+                "agreement": 0.0, "details": tf_changes, "boost": 0.0,
+            }
+
+        up_count = sum(1 for d in directions if d == "UP")
+        down_count = sum(1 for d in directions if d == "DOWN")
+        total = len(directions)
+
+        if up_count == total:
+            direction = "UP"
+            agreement = 1.0
+        elif down_count == total:
+            direction = "DOWN"
+            agreement = 1.0
+        else:
+            direction = "MIXED"
+            agreement = max(up_count, down_count) / total
+
+        aligned = agreement >= 1.0 and total >= 2
+
+        # Boost: tam uyum = +/-0.02, kısmi = 0
+        boost = 0.0
+        if aligned:
+            # Ağırlıklı ortalama: 1h %50, 15m %30, 5m %20
+            weighted_chg = (
+                tf_changes.get("1h", 0) * 0.50 +
+                tf_changes.get("15m", 0) * 0.30 +
+                tf_changes.get("5m", 0) * 0.20
+            )
+            boost = max(-0.02, min(0.02, weighted_chg * 0.01))
+
+        return {
+            "aligned": aligned,
+            "direction": direction,
+            "agreement": round(agreement, 2),
+            "details": tf_changes,
+            "boost": round(boost, 4),
+        }
 
     def has_data(self, symbol: str) -> bool:
         return bool(self._cache.get(symbol, {}).get("price"))

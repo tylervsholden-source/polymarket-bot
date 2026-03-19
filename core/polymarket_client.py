@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
 import os
+import time
+from pathlib import Path
 from typing import Any
 import httpx
 from loguru import logger
+
+# Immutable trade journal — append-only, never edited/deleted
+TRADE_JOURNAL_FILE = Path("data/trade_journal.jsonl")
 
 GAMMA_API = "https://gamma-api.polymarket.com"
 CLOB_HOST = "https://clob.polymarket.com"
@@ -248,7 +254,18 @@ class PolymarketClient:
             data_list = raw if isinstance(raw, list) else [raw]
             if not data_list:
                 return None
-            data = data_list[0]
+            # Match correct market by conditionId — Gamma API may return
+            # wrong market if conditionId param is ignored/unrecognized
+            data = None
+            for candidate in data_list:
+                cid = candidate.get("conditionId") or candidate.get("condition_id", "")
+                if cid == condition_id:
+                    data = candidate
+                    break
+            if data is None:
+                # No match — API returned unrelated market(s)
+                logger.debug(f"get_market: conditionId mismatch for {condition_id[:20]}...")
+                return None
             # Normalize
             data["best_ask"] = float(data.get("bestAsk") or data.get("best_ask") or 0)
             data["best_bid"] = float(data.get("bestBid") or data.get("best_bid") or 0)
@@ -263,6 +280,17 @@ class PolymarketClient:
     # Order Placement (CLOB API — imza gerekir)
     # ------------------------------------------------------------------ #
 
+    def _journal_trade(self, entry: dict) -> None:
+        """Append-only trade journal. NEVER loses a record, even on crash."""
+        entry["ts"] = time.time()
+        entry["iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        try:
+            TRADE_JOURNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(TRADE_JOURNAL_FILE, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logger.error(f"TRADE JOURNAL WRITE FAILED: {e} | entry={entry}")
+
     async def place_order(
         self,
         market_id: str,
@@ -270,38 +298,78 @@ class PolymarketClient:
         amount: float,
         price: float,
         token_id: str | None = None,
+        question: str = "",
     ) -> dict | None:
         """
         Polymarket CLOB'a limit emir gönderir.
         token_id: market'in YES (index 0) veya NO (index 1) token ID'si.
+
+        CRITICAL: Every order attempt is journaled to data/trade_journal.jsonl
+        BEFORE submission. This prevents silent money loss.
         """
+        # ── JOURNAL: Record intent BEFORE sending to CLOB ──
+        journal_entry = {
+            "action": "ORDER_ATTEMPT",
+            "market_id": market_id,
+            "outcome": outcome,
+            "amount": amount,
+            "price": price,
+            "token_id": (token_id or "")[:20],
+            "question": question[:80],
+            "is_live": self._clob is not None,
+        }
+
         if not self._clob:
+            journal_entry["result"] = "SIMULATED"
+            self._journal_trade(journal_entry)
             return self._simulate(market_id, outcome, amount, price)
 
         if not token_id:
             logger.error("token_id gerekli (clobTokenIds[0/1]).")
+            journal_entry["result"] = "REJECTED_NO_TOKEN_ID"
+            self._journal_trade(journal_entry)
             return None
+
+        # Journal the attempt BEFORE calling CLOB
+        journal_entry["result"] = "PENDING"
+        self._journal_trade(journal_entry)
 
         try:
             from py_clob_client.clob_types import OrderArgs, OrderType
             from py_clob_client.order_builder.constants import BUY
 
-            side = BUY  # Her zaman BUY — caller doğru token_id'yi geçer
+            side = BUY
 
-            # py_clob_client ROUNDING_CONFIG["0.01"] allows amount=4 decimals,
-            # but CLOB API requires maker_amount ≤ 2 decimals ($0.01 granularity).
-            # Patch: set amount=2 so the library's rounding cascade truncates correctly.
             from py_clob_client.order_builder.builder import ROUNDING_CONFIG
             from py_clob_client.clob_types import RoundConfig
-            ROUNDING_CONFIG["0.1"] = RoundConfig(price=1, size=2, amount=2)
-            ROUNDING_CONFIG["0.01"] = RoundConfig(price=2, size=2, amount=2)
-            ROUNDING_CONFIG["0.001"] = RoundConfig(price=3, size=2, amount=2)
+            # Patch ALL tick sizes — amount=4 prevents "invalid amounts" errors.
+            # Without this, py-clob-client defaults to amount=2 which truncates
+            # maker_amount and causes CLOB rejection (e.g. "should be 3.9912 but got 3.99").
+            for _ts, _pd in [("0.1", 1), ("0.01", 2), ("0.001", 3), ("0.0001", 4)]:
+                ROUNDING_CONFIG[_ts] = RoundConfig(price=_pd, size=2, amount=4)
 
-            size = amount / price
+            # GTC with slight price bump for fill priority.
+            # +0.01 instead of +0.02 — audit found the 0.02 overpay ate 25% of edge.
+            # Edge model accounts for 0.01 total cost. Must match.
+            import asyncio
+            import math
+
+            price = round(min(price + 0.01, 0.99), 2)
+
+            # Size (taker_amount) max 2 decimals per CLOB API.
+            # maker_amount (USDC) max 4 decimals.
+            size = math.floor(amount / price * 100) / 100
+
+            # CLOB requires notional (size * price) >= $1.00
+            while size * price < 1.0 and price > 0:
+                size = round(size + 0.01, 2)
+            maker_amount = math.floor(size * price * 10000) / 10000
+            if abs(maker_amount - amount) > 0.01:
+                logger.info(f"CLOB amount adjust: target=${amount} actual=${maker_amount:.4f} size={size:.4f}")
 
             logger.info(
-                f"CLOB order: price={price} size={size:.4f} "
-                f"amount={amount} (lib will round to 2dp)"
+                f"CLOB GTC order: price={price} size={size:.4f} "
+                f"amount={amount} notional=${size*price:.4f}"
             )
 
             order_args = OrderArgs(
@@ -311,28 +379,94 @@ class PolymarketClient:
                 side=side,
             )
             signed = self._clob.create_order(order_args)
-            response = self._clob.post_order(signed, OrderType.FOK)
+            response = self._clob.post_order(signed, OrderType.GTC)
 
             if not response or not isinstance(response, dict):
-                logger.error(f"FOK emir reddedildi (response={response})")
+                logger.error(f"GTC emir reddedildi (response={response})")
+                self._journal_trade({
+                    "action": "ORDER_RESULT", "market_id": market_id,
+                    "outcome": outcome, "amount": amount, "price": price,
+                    "result": "GTC_REJECTED", "response": str(response)[:200],
+                    "question": question[:80],
+                })
                 return None
 
             order_id = response.get("orderID") or response.get("id", "")
-            if not order_id:
-                logger.error("CLOB boş order_id döndü — emir kayıp olabilir, reddediliyor.")
-                return None
-            logger.success(f"Emir kabul edildi: {order_id}")
+            status = response.get("status", "UNKNOWN")
 
+            if not order_id:
+                logger.error("CLOB bos order_id dondu — emir kayip olabilir.")
+                self._journal_trade({
+                    "action": "ORDER_RESULT", "market_id": market_id,
+                    "outcome": outcome, "amount": amount, "price": price,
+                    "result": "EMPTY_ORDER_ID", "response": str(response)[:200],
+                    "question": question[:80],
+                })
+                return None
+
+            # GTC: emir hemen dolmayabilir — 30sn bekle, dolmamışsa iptal et
+            if status != "matched":
+                logger.info(f"GTC emir gönderildi ({order_id}), fill bekleniyor (max 30sn)...")
+                filled = False
+                for _wait in range(6):  # 6 × 5s = 30s
+                    await asyncio.sleep(5)
+                    try:
+                        order_info = self._clob.get_order(order_id)
+                        if order_info and isinstance(order_info, dict):
+                            cur_status = order_info.get("status", "")
+                            size_matched = float(order_info.get("size_matched", 0) or 0)
+                            logger.info(f"GTC poll: status={cur_status} matched={size_matched:.2f}/{size:.2f}")
+                            if cur_status == "matched" or size_matched >= size * 0.95:
+                                status = "matched"
+                                filled = True
+                                break
+                    except Exception as poll_err:
+                        logger.debug(f"GTC poll hatası: {poll_err}")
+
+                if not filled:
+                    # 30sn doldu, dolmadı — iptal et
+                    logger.warning(f"GTC emir 30sn içinde dolmadı — iptal ediliyor: {order_id}")
+                    try:
+                        self._clob.cancel(order_id)
+                        logger.info(f"GTC emir iptal edildi: {order_id}")
+                    except Exception as cancel_err:
+                        logger.error(f"GTC iptal hatası: {cancel_err}")
+                    self._journal_trade({
+                        "action": "ORDER_RESULT", "market_id": market_id,
+                        "outcome": outcome, "amount": amount, "price": price,
+                        "result": "GTC_TIMEOUT_CANCELLED", "order_id": order_id,
+                        "question": question[:80],
+                    })
+                    return None
+
+            logger.success(f"Emir dolduruldu: {order_id} status={status}")
+
+            # ── JOURNAL: Record successful order ──
+            self._journal_trade({
+                "action": "ORDER_RESULT", "market_id": market_id,
+                "outcome": outcome, "amount": amount, "price": price,
+                "result": "ACCEPTED", "order_id": order_id,
+                "status": status, "question": question[:80],
+            })
+
+            # Return actual cost (size may have been adjusted for min notional)
+            actual_amount = round(size * price, 4)
             return {
                 "order_id": order_id,
                 "market_id": market_id,
                 "outcome": outcome,
-                "amount": amount,
+                "amount": actual_amount,
                 "price": price,
-                "status": response.get("status", "LIVE"),
+                "status": status,
             }
         except Exception as e:
             logger.error(f"Emir verilemedi: {e}")
+            self._journal_trade({
+                "action": "ORDER_RESULT", "market_id": market_id,
+                "outcome": outcome, "amount": amount, "price": price,
+                "result": "EXCEPTION", "error": str(e)[:200],
+                "question": question[:80],
+            })
             return None
 
     def get_orderbook(self, token_id: str) -> dict | None:

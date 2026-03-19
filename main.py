@@ -34,6 +34,8 @@ def setup_logger():
     logger.remove()
     logger.add(sys.stderr, level="INFO", format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | {message}")
     logger.add("logs/bot.log", rotation="1 day", retention="7 days", level="DEBUG")
+    # data/bot_log.txt — dashboard ve debug için tek dosya (rotate yok, her restart sıfırlar)
+    logger.add("data/bot_log.txt", level="INFO", format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | {message}", mode="w")
 
 
 def main():

@@ -16,26 +16,24 @@ Max fee at price 0.50: 0.50*0.50*0.02 = 0.5%
 At extremes (0.10/0.90): 0.10*0.90*0.02 = 0.18%
 """
 
-SPREAD_COST = 0.003   # limit order spread cost (Stoikov adjusts entry)
-SLIPPAGE_EST = 0.002  # FOK limit order slippage (lower than market orders)
+SPREAD_COST = 0.005   # GTC (maker) orders → price bump +0.01 for fill priority
+SLIPPAGE_EST = 0.005  # $4 orders on thin books → conservative estimate
 
-# Polymarket taker fee rate — FOK orders are taker orders
-_TAKER_FEE_RATE = 0.02
+# Polymarket GTC orders are MAKER orders → fee is 0% on most markets
+# Only taker orders (FOK) pay 2% fee. We use GTC.
+_MAKER_FEE_RATE = 0.00  # maker fee = 0%
+_TAKER_FEE_RATE = 0.02  # kept for reference only
 
 
 def _dynamic_taker_fee(price: float) -> float:
     """
-    Polymarket actual taker fee: fee = price * (1-price) * fee_rate.
-    FOK orders are taker orders.
+    Polymarket fee for GTC (maker) orders = 0%.
+    Only FOK (taker) orders pay 2%. We use GTC exclusively.
 
-    Examples:
-      price=0.50 → 0.50*0.50*0.02 = 0.005 (0.5%)
-      price=0.30 → 0.30*0.70*0.02 = 0.0042 (0.42%)
-      price=0.10 → 0.10*0.90*0.02 = 0.0018 (0.18%)
+    Returns 0 for maker orders. Kept as function for future flexibility.
     """
-    p = max(0.01, min(0.99, price))
-    fee = p * (1.0 - p) * _TAKER_FEE_RATE
-    return int(fee * 1_000_000) / 1_000_000
+    # GTC = maker order → no fee
+    return 0.0
 
 
 class EdgeModel:

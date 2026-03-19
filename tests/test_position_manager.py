@@ -10,6 +10,7 @@ def tmp_data_dir(tmp_path, monkeypatch):
     """Her test için izole data dizini kullan."""
     import core.position_manager as pm_module
     monkeypatch.setattr(pm_module, "DATA_FILE", tmp_path / "positions.json")
+    monkeypatch.setattr(pm_module, "LOCK_FILE", tmp_path / "positions.lock")
     return tmp_path
 
 
@@ -53,6 +54,8 @@ def test_daily_stop_loss_not_triggered(pm):
 
 
 def test_daily_stop_loss_triggered(pm):
+    from datetime import datetime, timezone
+    pm.data["daily"]["date"] = str(datetime.now(timezone.utc).date())
     pm.data["daily"]["pnl"] = -160.0  # -%16
     assert pm.daily_loss_exceeded(0.15) is True
 

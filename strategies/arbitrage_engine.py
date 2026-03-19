@@ -27,6 +27,8 @@ from strategies.stoikov import StoikovExecutor
 from strategies.kelly_criterion import KellyCriterion
 from strategies.monte_carlo import MonteCarloSimulator, MonteCarloResult
 from strategies.ml_classifier import TradeClassifier
+from strategies.orderbook_analyzer import OrderbookAnalyzer
+from strategies.sum_monitor import SumMonitor
 from core.candlestick_analyzer import CandlestickAnalyzer as CA
 
 
@@ -170,11 +172,15 @@ def _detect_timeframe(question: str) -> str:
 
 
 class ArbitrageEngine:
-    def __init__(self, http_session=None, binance_feed=None, smart_trader_tracker=None):
+    def __init__(self, http_session=None, binance_feed=None, smart_trader_tracker=None,
+                 top_trader=None, kalshi_arb=None, clob_client=None):
         import httpx
         self.session = http_session if http_session is not None else httpx.AsyncClient(timeout=8)
         self.binance_feed = binance_feed           # BinanceFeed instance (enjekte edilir)
         self.smart_trader = smart_trader_tracker   # SmartTraderTracker instance
+        self.top_trader = top_trader               # TopTraderTracker instance
+        self.kalshi_arb = kalshi_arb               # KalshiArbTracker instance
+        self._clob_client = clob_client            # py-clob-client (for L2 orderbook)
 
         self.bayesian   = BayesianEstimator()
         self.edge_model = EdgeModel()
@@ -183,6 +189,8 @@ class ArbitrageEngine:
         self.kelly      = KellyCriterion()
         self.mc         = MonteCarloSimulator(n_simulations=1000)
         self.ml         = TradeClassifier()    # ML trade quality predictor
+        self.ob_analyzer = OrderbookAnalyzer()  # L2 orderbook depth
+        self.sum_monitor = SumMonitor()         # YES+NO sum arbitrage
 
         # Asymmetric edge thresholds (pattern analysis: NO=61% WR, YES=31% WR)
         # NO trades at edge 0.03-0.05 had 66.7% WR — lower threshold for NO
@@ -191,8 +199,8 @@ class ArbitrageEngine:
         self.min_edge_yes  = max(0.05, _env_edge * 0.5)  # YES: need real edge after 0.01 cost
         self.min_edge_no   = max(0.08, _env_edge * 0.8)  # NO: strict — historical 18% WR
         self.min_edge      = max(0.08, _env_edge)    # legacy fallback
-        # Toxic coin blacklist (HYPE=16.7% WR, BNB=0% WR — burn money)
-        self._coin_blacklist = set(os.getenv("COIN_BLACKLIST", "HYPE,BNB").split(","))
+        # Coin blacklist — empty (BNB/HYPE re-enabled: 100% WR in live trading)
+        self._coin_blacklist = set(os.getenv("COIN_BLACKLIST", "").split(",")) - {""}
         self._current_regime: dict = {"regime": "NEUTRAL", "strength": 0.0}
         # ── Regime decay guard (v8) ──────────────────────────────────────────
         # Bounce en çok regime strength HIZLA düştüğünde geliyor.
@@ -507,15 +515,259 @@ class ArbitrageEngine:
             bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.70  # NO: crush overconfidence
 
         # Smart money boost (reduced: 0.05 → 0.02, volume-gated)
-        if self.smart_trader is not None:
-            sm = self.smart_trader.get_signal(market.get("condition_id", ""))
-            if sm["total_traders"] > 0 and volume_ratio >= 1.0:
-                boost = sm["signal"] * 0.02  # was 0.05 — too aggressive
-                bayesian_prob = max(0.05, min(0.95, bayesian_prob + boost))
+        try:
+            if self.smart_trader is not None:
+                sm = self.smart_trader.get_signal(market.get("condition_id", ""))
+                if sm and sm.get("total_traders", 0) > 0 and volume_ratio >= 1.0:
+                    boost = sm.get("signal", 0) * 0.02  # was 0.05 — too aggressive
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + boost))
+                    logger.info(
+                        f"SmartMoney [{','.join(sm.get('buyers', [])[:3]) or 'none'}] "
+                        f"signal={sm.get('signal', 0):+.2f} boost={boost:+.3f} "
+                        f"prob: {bayes.probability:.3f}→{bayesian_prob:.3f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"SmartMoney signal error: {_e}")
+
+        # ── TOP TRADER COPY SIGNAL ────────────────────────────────────────
+        try:
+            if hasattr(self, 'top_trader') and self.top_trader is not None:
+                _tt_boost = self.top_trader.get_boost(market.get("condition_id", ""))
+                if _tt_boost and abs(_tt_boost) > 0.005:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _tt_boost))
+                    _tt_sig = self.top_trader.get_signal(market.get("condition_id", ""))
+                    if _tt_sig:
+                        logger.info(
+                            f"TOP_TRADER: {question[:35]} | dir={_tt_sig.direction} "
+                            f"conf={_tt_sig.confidence:.2f} boost={_tt_boost:+.3f} "
+                            f"YES_vol=${_tt_sig.total_yes_volume:.0f} NO_vol=${_tt_sig.total_no_volume:.0f}"
+                        )
+        except Exception as _e:
+            logger.debug(f"TopTrader signal error: {_e}")
+
+        # ── ORDERBOOK DEPTH ANALYSIS ──────────────────────────────────────
+        _ob_analysis = None
+        if hasattr(self, '_clob_client') and self._clob_client:
+            try:
+                _yes_tid = market.get("yes_token_id", "")
+                if _yes_tid:
+                    _raw_book = self._clob_client.get_order_book(_yes_tid)
+                    _ob_analysis = self.ob_analyzer.analyze(_raw_book)
+                    if _ob_analysis and _ob_analysis.tradeable:
+                        _ob_boost = self.ob_analyzer.get_signal_boost(_ob_analysis)
+                        if abs(_ob_boost) > 0.005:
+                            bayesian_prob = max(0.05, min(0.95, bayesian_prob + _ob_boost))
+                            logger.info(
+                                f"OB_DEPTH: {question[:35]} | spread={_ob_analysis.spread_pct:.1%} "
+                                f"imb={_ob_analysis.imbalance:+.2f} liq={_ob_analysis.liquidity_score:.2f} "
+                                f"boost={_ob_boost:+.3f} | walls: bid=${_ob_analysis.top_bid_wall:.0f} ask=${_ob_analysis.top_ask_wall:.0f}"
+                            )
+                    elif _ob_analysis and not _ob_analysis.tradeable:
+                        logger.info(
+                            f"OB_ILLIQUID: {question[:35]} | spread={_ob_analysis.spread_pct:.1%} "
+                            f"bid_depth=${_ob_analysis.bid_depth:.0f} ask_depth=${_ob_analysis.ask_depth:.0f}"
+                        )
+            except Exception as _e:
+                logger.debug(f"OB depth analysis error: {_e}")
+
+        # ── YES+NO SUM MONITOR ────────────────────────────────────────────
+        try:
+            _real_no = market.get("no_best_ask")
+            if _real_no and float(_real_no) > 0:
+                _sum_result = self.sum_monitor.analyze(
+                    yes_ask=yes_price,
+                    no_ask=float(_real_no),
+                    market_id=question[:40],
+                )
+                if not _sum_result.market_efficient:
+                    _sum_adj = self.sum_monitor.get_edge_adjustment(_sum_result)
+                    if abs(_sum_adj) > 0.005:
+                        bayesian_prob = max(0.05, min(0.95, bayesian_prob + _sum_adj))
+                        logger.info(
+                            f"SUM_MONITOR: {question[:35]} | YES+NO={_sum_result.total:.3f} "
+                            f"dev={_sum_result.deviation_pct:+.1f}% adj={_sum_adj:+.3f} "
+                            f"arb={'YES' if _sum_result.arbitrage_opportunity else 'NO'}"
+                        )
+        except Exception as _e:
+            logger.debug(f"SUM_MONITOR error: {_e}")
+
+        # ── KALSHI CROSS-ARB CHECK ────────────────────────────────────────
+        try:
+            if hasattr(self, 'kalshi_arb') and self.kalshi_arb is not None and sym:
+                _asset_name = next(
+                    (k for k, v in ASSET_SYMBOLS.items() if v == sym and len(k) > 3),
+                    sym.replace("USDT", "").lower()
+                )
+                _kalshi_adj = self.kalshi_arb.get_edge_adjustment(_asset_name, yes_price)
+                if abs(_kalshi_adj) > 0.005:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _kalshi_adj))
+                    logger.info(
+                        f"KALSHI_ARB: {question[:35]} | adj={_kalshi_adj:+.3f} "
+                        f"(Kalshi fiyat farki sinyal)"
+                    )
+        except Exception as _e:
+            logger.debug(f"KALSHI_ARB error: {_e}")
+
+        # ── MULTI-TIMEFRAME CONSENSUS ────────────────────────────────────────
+        _mtf_boost = 0.0
+        try:
+            if sym and self.binance_feed:
+                _mtf = self.binance_feed.get_mtf_consensus(sym)
+                if _mtf and _mtf.get("aligned") and _mtf.get("agreement", 0) >= 1.0:
+                    _mtf_boost = _mtf.get("boost", 0)
+                    if abs(_mtf_boost) > 0.003:
+                        bayesian_prob = max(0.05, min(0.95, bayesian_prob + _mtf_boost))
+                        _details = _mtf.get("details", {})
+                        logger.info(
+                            f"MTF_CONSENSUS: {question[:35]} | dir={_mtf.get('direction')} "
+                            f"agree={_mtf.get('agreement', 0):.0%} boost={_mtf_boost:+.4f} | "
+                            f"5m={_details.get('5m', 0):+.2f}% "
+                            f"15m={_details.get('15m', 0):+.2f}% "
+                            f"1h={_details.get('1h', 0):+.2f}%"
+                        )
+                elif _mtf and not _mtf.get("aligned") and _mtf.get("direction") == "MIXED":
+                    _dampen = 0.10
+                    bayesian_prob = bayesian_prob * (1 - _dampen) + 0.50 * _dampen
+                    logger.debug(
+                        f"MTF_MIXED: {question[:35]} | Timeframe'ler uyuşmuyor, "
+                        f"edge dampened %{_dampen*100:.0f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"MTF_CONSENSUS error: {_e}")
+
+        # ── CROSS-EXCHANGE LEAD-LAG ─────────────────────────────────────────
+        try:
+            if sym and self.binance_feed:
+                _xex = self.binance_feed.get_cross_exchange_signal(sym)
+                logger.debug(f"LEAD_LAG_RAW: {question[:30]} | sig={_xex.get('signal')} boost={_xex.get('boost', 0):+.4f}")
+                if _xex and _xex.get("signal") != "NEUTRAL" and abs(_xex.get("boost", 0)) > 0.003:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _xex["boost"]))
+                    logger.info(
+                        f"LEAD_LAG: {question[:35]} | Binance=${_xex.get('binance_price', 0):.2f} "
+                        f"Bitstamp=${_xex.get('bitstamp_price', 0):.2f} spread={_xex.get('spread_pct', 0):+.4f}% "
+                        f"→ {_xex['signal']} boost={_xex['boost']:+.4f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"LEAD_LAG error: {_e}")
+
+        # ── FUNDING RATE + OPEN INTEREST ─────────────────────────────────────
+        try:
+            if sym and self.binance_feed:
+                _fund = self.binance_feed.get_funding_signal(sym)
+                if _fund and _fund.get("signal") != "NEUTRAL" and abs(_fund.get("boost", 0)) > 0.003:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _fund["boost"]))
+                    logger.info(
+                        f"FUNDING: {question[:35]} | rate={_fund.get('funding_rate', 0):+.4f}% "
+                        f"OI_chg={_fund.get('oi_change_pct', 0):+.1f}% risk={_fund.get('risk', '?')} "
+                        f"→ {_fund['signal']} boost={_fund['boost']:+.4f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"FUNDING error: {_e}")
+
+        # ── LIQUIDATION CASCADE DETECTION ────────────────────────────────────
+        try:
+            if sym and self.binance_feed:
+                _liq = self.binance_feed.get_liquidation_signal(sym)
+                if _liq and _liq.get("net_signal") != "NEUTRAL" and abs(_liq.get("boost", 0)) > 0.002:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _liq["boost"]))
+                    logger.info(
+                        f"LIQUIDATION: {question[:35]} | long=${_liq.get('long_liq_usd', 0):.0f} "
+                        f"short=${_liq.get('short_liq_usd', 0):.0f} count={_liq.get('count', 0)} "
+                        f"→ {_liq['net_signal']} boost={_liq['boost']:+.4f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"LIQUIDATION error: {_e}")
+
+        # ── S&P 500 CORRELATION ──────────────────────────────────────────────
+        try:
+            if self.binance_feed:
+                _spx = self.binance_feed.get_spx_signal()
+                if _spx and _spx.get("active") and _spx.get("signal") != "NEUTRAL" and abs(_spx.get("boost", 0)) > 0.003:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spx["boost"]))
+                    logger.info(
+                        f"SPX_CORR: {question[:35]} | SPX=${_spx.get('spx_price', 0):.0f} "
+                        f"chg={_spx.get('spx_change_pct', 0):+.3f}% → {_spx['signal']} "
+                        f"boost={_spx['boost']:+.4f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"SPX_CORR error: {_e}")
+
+        # ── FEAR & GREED INDEX ───────────────────────────────────────────────
+        if self.binance_feed:
+            _fng = self.binance_feed.get_fear_greed()
+            _fng_val = _fng.get("fng_value", 50)
+            _fng_boost = 0.0
+            if _fng_val <= 25:
+                # Extreme fear → contrarian bullish (bounce likely)
+                _fng_boost = min(0.015, (25 - _fng_val) / 25 * 0.015)
+            elif _fng_val >= 75:
+                # Extreme greed → contrarian bearish (correction risk)
+                _fng_boost = max(-0.015, (_fng_val - 75) / -25 * 0.015)
+            if abs(_fng_boost) > 0.003:
+                bayesian_prob = max(0.05, min(0.95, bayesian_prob + _fng_boost))
                 logger.info(
-                    f"SmartMoney [{','.join(sm['buyers'][:3]) or 'none'}] "
-                    f"signal={sm['signal']:+.2f} boost={boost:+.3f} "
-                    f"prob: {bayes.probability:.3f}→{bayesian_prob:.3f}"
+                    f"FEAR_GREED_SIGNAL: {question[:35]} | FnG={_fng_val} "
+                    f"({_fng.get('fng_label', '?')}) boost={_fng_boost:+.4f}"
+                )
+
+        # ── ENHANCED SIGNALS (multi-exchange, options, whale, social) ───────
+        # IMPORTANT: Total enhanced boost capped at ±0.03 to prevent edge inflation.
+        # Each source contributes a small vote; combined they confirm or deny direction.
+        _enhanced_total_boost = 0.0
+        _ENHANCED_CAP = 0.03  # Max total impact from all enhanced signals
+        if self.binance_feed and hasattr(self.binance_feed, 'enhanced'):
+            _enh = self.binance_feed.enhanced
+            try:
+                _mex = _enh.get_multi_exchange_signal(sym) if sym else {}
+                if _mex.get("signal") != "NEUTRAL" and abs(_mex.get("boost", 0)) > 0.003:
+                    _enhanced_total_boost += _mex["boost"]
+                    logger.info(
+                        f"MULTI_EX: {question[:35]} | orderflow={_mex.get('orderflow', 0):+.3f} "
+                        f"spread={_mex.get('spread_pct', 0):.3f}% → {_mex['signal']} "
+                        f"boost={_mex['boost']:+.4f}"
+                    )
+            except Exception as _e:
+                logger.debug(f"MULTI_EX error: {_e}")
+
+            try:
+                _opt = _enh.get_options_signal(sym) if sym else {}
+                if _opt.get("signal") != "NEUTRAL" and abs(_opt.get("boost", 0)) > 0.003:
+                    _enhanced_total_boost += _opt["boost"]
+                    logger.info(
+                        f"OPTIONS: {question[:35]} | PCR={_opt.get('pcr', 0):.2f} "
+                        f"IV={_opt.get('iv', 0):.0f}% → {_opt['signal']} "
+                        f"boost={_opt['boost']:+.4f}"
+                    )
+            except Exception as _e:
+                logger.debug(f"OPTIONS error: {_e}")
+
+            try:
+                _whale = _enh.get_whale_signal(sym) if sym else {}
+                if _whale.get("active"):
+                    # Whale = small confirmation boost (not multiplicative)
+                    _enhanced_total_boost += 0.005
+                    logger.info(f"WHALE: {question[:35]} | active=True +0.005")
+            except Exception as _e:
+                logger.debug(f"WHALE error: {_e}")
+
+            try:
+                _soc = _enh.get_social_signal(sym) if sym else {}
+                if _soc.get("signal") != "NEUTRAL" and abs(_soc.get("boost", 0)) > 0.003:
+                    _enhanced_total_boost += _soc["boost"]
+                    logger.info(
+                        f"SOCIAL: {question[:35]} | score={_soc.get('score', 0):.0f} "
+                        f"→ {_soc['signal']} boost={_soc['boost']:+.4f}"
+                    )
+            except Exception as _e:
+                logger.debug(f"SOCIAL error: {_e}")
+
+            # Apply capped total boost
+            _capped_boost = max(-_ENHANCED_CAP, min(_ENHANCED_CAP, _enhanced_total_boost))
+            if abs(_capped_boost) > 0.002:
+                bayesian_prob = max(0.05, min(0.95, bayesian_prob + _capped_boost))
+                logger.info(
+                    f"ENHANCED_TOTAL: {question[:35]} | raw={_enhanced_total_boost:+.4f} "
+                    f"capped={_capped_boost:+.4f} → prob={bayesian_prob:.3f}"
                 )
 
         # ── Yön kararı: YES mi NO mu? (FORENSIC DIAGNOSTICS) ────────────────
@@ -742,12 +994,14 @@ class ArbitrageEngine:
             _bounce_faded = ((consecutive_bearish >= 2 and consecutive_bullish == 0)
                              or _pattern_bearish)
 
-            # YES activation: bullish candle patterns override Bayesian bias
+            # YES activation: bullish candle patterns can activate YES direction
+            # but edge must be realistic (based on Bayesian prob, not payout)
             if _bounce_active or _pattern_bullish:
-                _bounce_yes_edge = (1.0 - yes_price) - 0.10  # conservative
-                # Boost edge for strong patterns
+                # Use Bayesian-based edge + pattern bonus (not payout formula)
+                _bounce_yes_edge = max(yes_edge, bayesian_prob - yes_price)
+                # Pattern bonus: strong pattern adds small edge boost
                 if _pattern_score >= 0.6:
-                    _bounce_yes_edge += 0.05  # strong pattern bonus
+                    _bounce_yes_edge += 0.02  # strong pattern bonus (was 0.05)
                 if (_bounce_yes_edge > 0.05
                         and yes_price <= _YES_MAX_PRICE
                         and yes_price >= _YES_MIN_PRICE
@@ -1007,11 +1261,22 @@ class ArbitrageEngine:
         # Net edge: cost düşüldükten sonra pozitif olmalı — EV-negatif trade açmayız
         edge = max(net_trade_edge, single_edge)
 
+        # ── COIN-SPECIFIC EDGE PENALTY ───────────────────────────────────
+        # Data: Solana 57% WR (worst), Bitcoin 65% (mediocre).
+        # Higher min_edge = fewer but better trades on weak coins.
+        _coin_edge_addon = 0.0
+        _asset_name = _detect_asset(question) or ""
+        if "SOL" in _asset_name.upper() or "Solana" in question:
+            _coin_edge_addon = 0.03  # SOL: 57% WR → need +3% more edge
+        elif "BTC" in _asset_name.upper() or "Bitcoin" in question:
+            _coin_edge_addon = 0.01  # BTC: 65% WR → slight penalty
+
         # Asymmetric min edge: YES needs 0.05+, NO needs 0.07+
         # OPT-5: Adaptive — regime addon ONLY for COUNTER-regime trades
         # Regime yönündeki trade'ler penalize edilmemeli (BULLISH'te YES, BEARISH'te NO)
         _regime_str = self._current_regime.get("strength", 0.0)
         _base_edge = self.min_edge_yes if direction == "YES" else self.min_edge_no
+        _base_edge += _coin_edge_addon  # apply coin penalty
         _follows_regime = (
             (direction == "YES" and _regime_name_for_edge == "BULLISH") or
             (direction == "NO" and _regime_name_for_edge == "BEARISH")
@@ -1088,6 +1353,34 @@ class ArbitrageEngine:
             except Exception:
                 pass
 
+        # ── CAUTIOUS HOUR FILTER ──────────────────────────────────────────
+        # Data: 9AM ET = 36% WR (-$12), 4PM ET = 38% WR (-$23), 6AM = 33%.
+        # Market open/close volatility = noisy. Don't block — require stronger edge.
+        # 1.5x min edge + half Kelly = only high-conviction trades survive.
+        try:
+            from zoneinfo import ZoneInfo
+            _now_et_h = datetime.now(ZoneInfo("America/New_York"))
+            _hour_et_int = _now_et_h.hour
+            _CAUTIOUS_HOURS = {9, 16, 6}  # 9AM, 4PM, 6AM ET
+            if _hour_et_int in _CAUTIOUS_HOURS:
+                _cautious_min = edge * 0  # reset — use 1.5x effective_min_edge as floor
+                _cautious_min = effective_min_edge * 1.50
+                if edge < _cautious_min:
+                    logger.info(
+                        f"CAUTIOUS_HOUR: {question[:40]} edge={edge:.3f} < {_cautious_min:.3f} — "
+                        f"{_now_et_h.strftime('%I%p')} ET needs stronger conviction"
+                    )
+                    return None
+                # Edge passed — but still half Kelly for risk control
+                _ch_original = size
+                size = size * 0.50
+                logger.info(
+                    f"CAUTIOUS_HOUR: {question[:40]} PASS edge={edge:.3f} — "
+                    f"half Kelly ${_ch_original:.2f}->${size:.2f} ({_now_et_h.strftime('%I%p')} ET)"
+                )
+        except Exception:
+            pass
+
         # Stoikov giriş fiyatı
         time_remaining = self._time_remaining_fraction(market, timeframe)
         time_left_sec = self._time_left_seconds(market)
@@ -1146,6 +1439,25 @@ class ArbitrageEngine:
             logger.info(f"ML_CAUTION: {question[:40]} ml={ml_score:+.3f} → ${original_ml:.2f}→${size:.2f}")
         elif ml_score > 0.5:
             logger.info(f"ML_BOOST: {question[:40]} ml={ml_score:+.3f} (high confidence)")
+
+        # ── GOLDEN HOUR BOOST ────────────────────────────────────────────
+        # Data: 5-8PM ET (1-4AM TR) = 73-100% WR, +$138 profit.
+        # These hours have highest edge — boost Kelly by 1.3x (capped at max_bet).
+        # Also 11AM ET = 74% WR, 3PM ET = 70% WR → 1.15x mild boost.
+        try:
+            _gh_hour = _hour_et  # already computed above (crude UTC→ET)
+            _GOLDEN_HOURS = {17, 18, 19}      # 5PM, 6PM, 7PM ET → 1.3x
+            _GOOD_HOURS = {11, 15, 3, 4}      # 11AM, 3PM ET + 3AM, 4AM ET (TR night) → 1.15x
+            if _gh_hour in _GOLDEN_HOURS:
+                _gh_original = size
+                size = size * 1.30
+                logger.info(f"GOLDEN_HOUR: {question[:40]} {_gh_hour}:00 ET → ${_gh_original:.2f}→${size:.2f} (×1.30)")
+            elif _gh_hour in _GOOD_HOURS:
+                _gh_original = size
+                size = size * 1.15
+                logger.info(f"GOOD_HOUR: {question[:40]} {_gh_hour}:00 ET → ${_gh_original:.2f}→${size:.2f} (×1.15)")
+        except Exception:
+            pass
 
         reasoning = (
             f"[{data_source}] {direction} Bayesian={bayesian_prob:.3f} vs YES={yes_price:.3f} | "

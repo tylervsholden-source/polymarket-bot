@@ -30,5 +30,5 @@ def test_max_position_cap(kelly):
 
 
 def test_should_enter(kelly):
-    assert kelly.should_enter(edge=0.06) is True
-    assert kelly.should_enter(edge=0.04) is False
+    assert kelly.should_enter(edge=0.10) is True
+    assert kelly.should_enter(edge=0.06) is False

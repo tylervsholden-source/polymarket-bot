@@ -64,12 +64,134 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json_data(json.dumps(_read_control()).encode())
         elif self.path.startswith("/api/gate"):
             self._send_gate_status()
+        elif self.path.startswith("/api/signals"):
+            self._send_signals()
         elif self.path.startswith("/api/pending"):
             self._send_pending_orders()
         elif self.path.startswith("/api/chamber/"):
             self._send_chamber(self.path)
         else:
             self.send_error(404)
+
+    def _send_signals(self):
+        """Signal intelligence data for dashboard."""
+        try:
+            pos_file = os.path.join(BASE_DIR, "data", "positions.json")
+            pos_data = {}
+            try:
+                with open(pos_file) as f:
+                    pos_data = json.load(f)
+            except Exception:
+                pass
+
+            # Win/loss streak from closed trades
+            closed = pos_data.get("closed", [])
+            win_streak = 0
+            loss_streak = 0
+            for t in reversed(closed[-20:]):
+                r = t.get("result", "")
+                if r == "WIN":
+                    if loss_streak == 0:
+                        win_streak += 1
+                    else:
+                        break
+                elif r == "LOSS":
+                    if win_streak == 0:
+                        loss_streak += 1
+                    else:
+                        break
+                elif r in ("WIN", "LOSS"):
+                    break
+
+            # Read status.json for regime/crypto info
+            status = {}
+            try:
+                with open(STATUS_FILE) as f:
+                    status = json.load(f)
+            except Exception:
+                pass
+
+            # Kelly multiplier: 1.0 + win_streak*0.05 or 1.0 - loss_streak*0.15
+            if win_streak > 0:
+                kelly_mult = min(1.30, 1.0 + win_streak * 0.05)
+            elif loss_streak > 0:
+                kelly_mult = max(0.40, 1.0 - loss_streak * 0.15)
+            else:
+                kelly_mult = 1.0
+
+            # Fear & Greed — read from latest log or cache
+            fng_value = 50
+            fng_label = "Neutral"
+            try:
+                import urllib.request
+                req = urllib.request.Request("https://api.alternative.me/fng/",
+                                            headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    fng_data = json.loads(resp.read())
+                    fng_value = int(fng_data["data"][0]["value"])
+                    fng_label = fng_data["data"][0]["value_classification"]
+            except Exception:
+                pass
+
+            # SPX — quick fetch
+            spx_price = 0.0
+            spx_change = 0.0
+            spx_signal = "CLOSED"
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=5m&range=1d",
+                    headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    chart = json.loads(resp.read())
+                    meta = chart["chart"]["result"][0]["meta"]
+                    spx_price = meta.get("regularMarketPrice", 0)
+                    prev = meta.get("chartPreviousClose", spx_price)
+                    if prev > 0:
+                        spx_change = ((spx_price - prev) / prev) * 100
+                    if abs(spx_change) > 0.3:
+                        spx_signal = "BULLISH" if spx_change > 0 else "BEARISH"
+                    elif abs(spx_change) > 0.1:
+                        spx_signal = "MILD_BULL" if spx_change > 0 else "MILD_BEAR"
+                    else:
+                        spx_signal = "NEUTRAL"
+            except Exception:
+                pass
+
+            # Regime — parse from bot log cache or status
+            regime = "NEUTRAL"
+            regime_str = 0.0
+            try:
+                # Read last regime from logs/bot.log
+                import re
+                log_file = os.path.join(BASE_DIR, "logs", "bot.log")
+                with open(log_file, "rb") as f:
+                    f.seek(0, 2)
+                    size = f.tell()
+                    f.seek(max(0, size - 8000))
+                    tail = f.read().decode("utf-8", errors="ignore")
+                match = re.findall(r"REGIME:\s+(\w+)\s+\(str=([\d.]+)\)", tail)
+                if match:
+                    regime, regime_str = match[-1][0], float(match[-1][1])
+            except Exception:
+                pass
+
+            result = {
+                "regime": regime,
+                "regime_strength": regime_str,
+                "kelly_mult": round(kelly_mult, 2),
+                "win_streak": win_streak,
+                "loss_streak": loss_streak,
+                "circuit_breaker": loss_streak >= 7,
+                "fear_greed": fng_value,
+                "fear_greed_label": fng_label,
+                "spx_price": round(spx_price, 2),
+                "spx_change": round(spx_change, 3),
+                "spx_signal": spx_signal,
+            }
+            self._send_json_data(json.dumps(result).encode())
+        except Exception as exc:
+            self._send_json_data(json.dumps({"error": str(exc)}).encode())
 
     def _send_pending_orders(self):
         from core.approval_queue import get_pending, get_all

@@ -63,13 +63,13 @@ class EntryWindowPolicy:
     def __post_init__(self):
         if self.windows_5m is None:
             self.windows_5m = EntryWindowConfig(
-                entry_before_start_sec=120,
-                entry_after_start_sec=180,
+                entry_before_start_sec=45,
+                entry_after_start_sec=240,
             )
         if self.windows_15m is None:
             self.windows_15m = EntryWindowConfig(
                 entry_before_start_sec=180,
-                entry_after_start_sec=420,
+                entry_after_start_sec=600,
             )
 
     def get_window(self, horizon_minutes: int) -> Optional[EntryWindowConfig]:

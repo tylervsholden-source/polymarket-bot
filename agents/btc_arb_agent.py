@@ -223,6 +223,7 @@ class BtcArbAgent:
                     amount=self.arb_size,
                     price=market_price,
                     token_id=token_id,
+                    question=market.get("question", ""),
                 )
 
                 if order:
