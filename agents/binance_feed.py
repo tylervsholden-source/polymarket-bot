@@ -24,6 +24,21 @@ try:
 except ImportError:
     _TA_AVAILABLE = False
 
+# ccxt for multi-exchange price consensus
+try:
+    import ccxt.async_support as ccxt_async
+    _CCXT_AVAILABLE = True
+except ImportError:
+    _CCXT_AVAILABLE = False
+
+# GARCH volatility forecasting
+try:
+    from arch import arch_model
+    import numpy as np
+    _GARCH_AVAILABLE = True
+except ImportError:
+    _GARCH_AVAILABLE = False
+
 BITSTAMP_BASE = "https://www.bitstamp.net/api/v2"
 
 # Binance sembol → Bitstamp pair
@@ -52,15 +67,139 @@ class BinanceFeed:
     """Bitstamp tabanlı çoklu zaman dilimi veri besleyici.
     Dış API arayüzü değişmedi — BinanceFeed adı korunuyor."""
 
+    # ccxt exchange symbols mapping
+    _CCXT_SYMBOLS: dict[str, str] = {
+        "BTCUSDT": "BTC/USDT", "ETHUSDT": "ETH/USDT", "SOLUSDT": "SOL/USDT",
+        "XRPUSDT": "XRP/USDT", "DOGEUSDT": "DOGE/USDT", "BNBUSDT": "BNB/USDT",
+    }
+
     def __init__(self, session=None):
         import httpx
         self.session = httpx.AsyncClient(timeout=10)
         self._cache: dict[str, dict] = {}   # symbol → {price, ob_imbalance, intervals}
+        self._exchanges: list = []           # ccxt exchange instances
+        self._exchanges_initialized = False
+        # Real-time WebSocket feed (optional, started on first refresh)
+        self._ws_feed = None
+        self._ws_started = False
+        # Fear & Greed Index (cached, refreshed every 5 min)
+        self._fng_value: int = 50           # 0=extreme fear, 100=extreme greed
+        self._fng_label: str = "Neutral"
+        self._fng_last_fetch: float = 0.0
+
+    # CoinGecko coin ID mapping
+    _COINGECKO_IDS: dict[str, str] = {
+        "BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "SOLUSDT": "solana",
+        "XRPUSDT": "ripple", "DOGEUSDT": "dogecoin", "BNBUSDT": "binancecoin",
+    }
+
+    async def _fetch_fear_greed(self) -> None:
+        """Fetch Fear & Greed Index (cached 5 min)."""
+        import time as _time
+        now = _time.time()
+        if now - self._fng_last_fetch < 300:  # 5 min cache
+            return
+        try:
+            resp = await self.session.get(
+                "https://api.alternative.me/fng/",
+                params={"limit": "1"},
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [{}])[0]
+                self._fng_value = int(data.get("value", 50))
+                self._fng_label = data.get("value_classification", "Neutral")
+                self._fng_last_fetch = now
+                logger.info(f"FEAR_GREED: {self._fng_value} ({self._fng_label})")
+        except Exception as e:
+            logger.debug(f"Fear & Greed fetch failed: {e}")
+
+    def get_fear_greed(self) -> dict:
+        """Return current Fear & Greed Index data."""
+        return {
+            "fng_value": self._fng_value,
+            "fng_label": self._fng_label,
+            "fng_signal": (self._fng_value - 50) / 50.0,  # -1 (extreme fear) to +1 (extreme greed)
+        }
+
+    async def _init_exchanges(self) -> None:
+        """Mark exchanges as initialized (uses REST APIs, no ccxt needed)."""
+        if self._exchanges_initialized:
+            return
+        self._exchanges_initialized = True
+        logger.info("Multi-exchange: CoinGecko + Bitstamp + Coinpaprika consensus active")
+
+    async def _fetch_multi_exchange_price(self, symbol: str) -> dict:
+        """Fetch price from multiple public APIs. Returns consensus data."""
+        coin_id = self._COINGECKO_IDS.get(symbol)
+        if not coin_id:
+            return {}
+
+        prices = []
+        exchange_prices = {}
+
+        # Source 1: CoinGecko (aggregated from 700+ exchanges)
+        try:
+            resp = await self.session.get(
+                f"https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": coin_id, "vs_currencies": "usd"},
+            )
+            if resp.status_code == 200:
+                p = resp.json().get(coin_id, {}).get("usd")
+                if p:
+                    prices.append(float(p))
+                    exchange_prices["coingecko"] = float(p)
+        except Exception:
+            pass
+
+        # Source 2: Coinpaprika (independent aggregator)
+        _paprika_map = {
+            "bitcoin": "btc-bitcoin", "ethereum": "eth-ethereum", "solana": "sol-solana",
+            "ripple": "xrp-xrp", "dogecoin": "doge-dogecoin", "binancecoin": "bnb-binance-coin",
+        }
+        paprika_id = _paprika_map.get(coin_id)
+        if paprika_id:
+            try:
+                resp = await self.session.get(
+                    f"https://api.coinpaprika.com/v1/tickers/{paprika_id}",
+                )
+                if resp.status_code == 200:
+                    p = resp.json().get("quotes", {}).get("USD", {}).get("price")
+                    if p:
+                        prices.append(float(p))
+                        exchange_prices["coinpaprika"] = float(p)
+            except Exception:
+                pass
+
+        if not prices:
+            return {}
+
+        prices.sort()
+        median = prices[len(prices) // 2]
+        spread = (max(prices) - min(prices)) / median * 100 if median > 0 else 0.0
+
+        return {
+            "consensus_price": median,
+            "exchange_prices": exchange_prices,
+            "exchange_spread_pct": round(spread, 4),
+            "exchange_count": len(prices),
+        }
 
     async def refresh(self, symbols: set[str]) -> None:
         """Verilen semboller için tüm verileri paralel çek."""
         if not symbols:
             return
+        # Start WS feed on first refresh (background thread)
+        if not self._ws_started:
+            self._ws_started = True
+            try:
+                from agents.ws_feed import RealtimeFeed
+                self._ws_feed = RealtimeFeed()
+                self._ws_feed.start(symbols)
+            except Exception as e:
+                logger.debug(f"WS feed start failed: {e}")
+                self._ws_feed = None
+        await self._init_exchanges()
+        await self._fetch_fear_greed()
         tasks = [self._fetch_symbol(sym) for sym in symbols]
         await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -73,11 +212,14 @@ class BinanceFeed:
             kline_tasks = {iv: self._fetch_klines(pair, iv) for iv in _STEPS}
             kline_results = await asyncio.gather(*kline_tasks.values(), return_exceptions=True)
 
-            price_task, ob_task = await asyncio.gather(
+            price_task, ob_task, multi_ex = await asyncio.gather(
                 self._fetch_price(pair),
                 self._fetch_ob(pair),
+                self._fetch_multi_exchange_price(symbol),
                 return_exceptions=True,
             )
+            if isinstance(multi_ex, Exception):
+                multi_ex = {}
 
             intervals: dict[str, dict] = {}
             raw_klines: dict[str, list] = {}
@@ -86,23 +228,37 @@ class BinanceFeed:
                     intervals[iv] = self._process_klines(result)
                     raw_klines[iv] = result  # Store for multi-TF candle analysis
 
+            bitstamp_price = price_task if isinstance(price_task, float) else 0.0
+            # Use consensus price if available, fallback to Bitstamp
+            consensus = multi_ex.get("consensus_price", 0.0) if isinstance(multi_ex, dict) else 0.0
+            # Priority: WS real-time (< 5s) > consensus > Bitstamp REST
+            ws_price = 0.0
+            if self._ws_feed:
+                _wp = self._ws_feed.get_price(symbol)
+                if _wp and self._ws_feed.get_age_seconds(symbol) < 5.0:
+                    ws_price = _wp
+            final_price = ws_price if ws_price > 0 else (consensus if consensus > 0 else bitstamp_price)
+
             self._cache[symbol] = {
-                "price": price_task if isinstance(price_task, float) else 0.0,
+                "price": final_price,
+                "bitstamp_price": bitstamp_price,
                 "ob_imbalance": ob_task if isinstance(ob_task, float) else 0.0,
                 "intervals": intervals,
                 "raw_klines": raw_klines,
+                "multi_exchange": multi_ex if isinstance(multi_ex, dict) else {},
             }
 
             if intervals:
                 sig_1h = intervals.get("1h", {})
-                price_val = price_task if isinstance(price_task, float) else 0.0
                 ob_val = ob_task if isinstance(ob_task, float) else 0.0
+                mx = self._cache[symbol].get("multi_exchange", {})
+                ex_info = f"ex={mx.get('exchange_count', 0)} spread={mx.get('exchange_spread_pct', 0):.3f}%" if mx else "ex=bitstamp_only"
                 logger.debug(
-                    f"CryptoFeed {symbol}: ${price_val:.4f} | "
+                    f"CryptoFeed {symbol}: ${final_price:.4f} | "
                     f"1h chg={sig_1h.get('change_pct', 0):+.2f}% "
                     f"RSI={sig_1h.get('rsi', 50):.0f} "
                     f"vol={sig_1h.get('volume_ratio', 1):.1f}x "
-                    f"OB={ob_val:+.2f}"
+                    f"OB={ob_val:+.2f} | {ex_info}"
                 )
         except Exception as e:
             logger.debug(f"CryptoFeed._fetch_symbol {symbol}: {e}")
@@ -288,6 +444,8 @@ class BinanceFeed:
             "pre_bounce_streak": pre_bounce_streak,
             # ── NEW: ta library indicators ──
             **self._calc_ta_indicators(highs, lows, closes, volumes),
+            # ── GARCH volatility forecast ──
+            **self._calc_garch(closes),
         }
 
         # ── COMPOSITE TECHNICAL SCORE ──────────────────────────────────────
@@ -296,6 +454,31 @@ class BinanceFeed:
         result["tech_score"] = self._calc_composite_score(result)
 
         return result
+
+    def _calc_garch(self, closes: list[float]) -> dict:
+        """GARCH(1,1) volatility forecast. Predicts if vol is expanding or contracting."""
+        out = {"garch_forecast": 0.0, "vol_expanding": False}
+        if not _GARCH_AVAILABLE or len(closes) < 30:
+            return out
+        try:
+            # Log returns in basis points
+            returns = np.diff(np.log(np.array(closes, dtype=float))) * 10000
+            if len(returns) < 20 or np.std(returns) < 0.01:
+                return out
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model = arch_model(returns, vol="Garch", p=1, q=1, rescale=False)
+                res = model.fit(disp="off", show_warning=False)
+                # Forecast 1 step ahead
+                forecast = res.forecast(horizon=1)
+                fwd_var = forecast.variance.values[-1, 0]
+                current_var = res.conditional_volatility.iloc[-1] ** 2
+                out["garch_forecast"] = round(float(fwd_var ** 0.5), 4)
+                out["vol_expanding"] = bool(fwd_var > current_var * 1.1)  # 10%+ increase
+        except Exception:
+            pass
+        return out
 
     def _calc_ta_indicators(self, highs: list[float], lows: list[float],
                             closes: list[float], volumes: list[float]) -> dict:
@@ -449,6 +632,12 @@ class BinanceFeed:
         pattern_score = CandlestickAnalyzer.pattern_score(data.get("patterns", []))
         if abs(pattern_score) > 0.1:
             signals.append(("candle_patterns", pattern_score, 0.10))
+
+        # ── SENTIMENT (Fear & Greed) ──
+        # Extreme fear (< 20) = contrarian bullish, extreme greed (> 80) = contrarian bearish
+        fng_signal = (self._fng_value - 50) / 50.0  # -1 to +1
+        if abs(fng_signal) > 0.4:
+            signals.append(("fear_greed", fng_signal, 0.05))
 
         # ── AGGREGATE ──
         if not signals:
@@ -758,6 +947,16 @@ class BinanceFeed:
             "cmf": iv_data.get("cmf", 0.0),
             # Composite technical score
             "tech_score": iv_data.get("tech_score", 0.0),
+            # Multi-exchange consensus
+            "consensus_price": cached.get("multi_exchange", {}).get("consensus_price", 0.0),
+            "exchange_spread_pct": cached.get("multi_exchange", {}).get("exchange_spread_pct", 0.0),
+            "exchange_count": cached.get("multi_exchange", {}).get("exchange_count", 0),
+            # Fear & Greed Index
+            "fng_value": self._fng_value,
+            "fng_signal": (self._fng_value - 50) / 50.0,
+            # GARCH volatility
+            "garch_forecast": iv_data.get("garch_forecast", 0.0),
+            "vol_expanding": iv_data.get("vol_expanding", False),
         }
 
     def get_candle_analysis(self, symbol: str) -> dict:
@@ -870,6 +1069,15 @@ class BinanceFeed:
             "eth_5m_pct": eth_5m_pct,
             "strength": float(f"{strength:.3f}"),
         }
+
+    async def close(self) -> None:
+        """Cleanup ccxt exchange connections."""
+        for ex in self._exchanges:
+            try:
+                await ex.close()
+            except Exception:
+                pass
+        self._exchanges = []
 
     def has_data(self, symbol: str) -> bool:
         return bool(self._cache.get(symbol, {}).get("price"))

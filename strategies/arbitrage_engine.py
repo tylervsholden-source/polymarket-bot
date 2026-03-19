@@ -26,6 +26,7 @@ from strategies.spread_model import SpreadModel
 from strategies.stoikov import StoikovExecutor
 from strategies.kelly_criterion import KellyCriterion
 from strategies.monte_carlo import MonteCarloSimulator, MonteCarloResult
+from strategies.ml_classifier import TradeClassifier
 from core.candlestick_analyzer import CandlestickAnalyzer as CA
 
 
@@ -181,6 +182,7 @@ class ArbitrageEngine:
         self.stoikov    = StoikovExecutor(gamma=0.15)
         self.kelly      = KellyCriterion()
         self.mc         = MonteCarloSimulator(n_simulations=1000)
+        self.ml         = TradeClassifier()    # ML trade quality predictor
 
         # Asymmetric edge thresholds (pattern analysis: NO=61% WR, YES=31% WR)
         # NO trades at edge 0.03-0.05 had 66.7% WR — lower threshold for NO
@@ -1125,6 +1127,26 @@ class ArbitrageEngine:
             logger.debug(f"KELLY_REJECT: {question[:40]} {direction} edge={edge:.4f} size=${size:.2f} cap=${capital:.2f}")
             return None
 
+        # ── ML QUALITY SCORE ──────────────────────────────────────────────
+        _asset_short = _detect_asset(question) or ""
+        _asset_short = _asset_short.replace("USDT", "")
+        _now_utc = datetime.now(timezone.utc)
+        _hour_et = (_now_utc.hour - 4) % 24  # crude UTC→ET
+        _minute_et = _now_utc.minute
+        ml_score = self.ml.predict({
+            "asset": _asset_short, "direction": direction,
+            "entry_price": trade_price, "edge": edge,
+            "hour_et": _hour_et, "minute_et": _minute_et,
+            "window_minutes": {"5m": 5, "15m": 15, "1h": 60}.get(timeframe, 15),
+        })
+        # ML gate: strong LOSS prediction → reduce size by 50%
+        if ml_score < -0.5:
+            original_ml = size
+            size = size * 0.5
+            logger.info(f"ML_CAUTION: {question[:40]} ml={ml_score:+.3f} → ${original_ml:.2f}→${size:.2f}")
+        elif ml_score > 0.5:
+            logger.info(f"ML_BOOST: {question[:40]} ml={ml_score:+.3f} (high confidence)")
+
         reasoning = (
             f"[{data_source}] {direction} Bayesian={bayesian_prob:.3f} vs YES={yes_price:.3f} | "
             f"Edge={edge:.3f} | chg={change_pct:+.2f}% RSI={rsi:.0f} "
@@ -1134,7 +1156,7 @@ class ArbitrageEngine:
         logger.info(
             f"ARB [{signal_type}/{timeframe}]: {question[:50]} | "
             f"{direction}@{trade_price:.3f} P={bayesian_prob:.3f} Edge={edge:.3f} ${size:.2f} "
-            f"tech={tech_score:+.2f} adx={adx:.0f}"
+            f"tech={tech_score:+.2f} adx={adx:.0f} ml={ml_score:+.3f}"
         )
 
         return TradeSignal(
