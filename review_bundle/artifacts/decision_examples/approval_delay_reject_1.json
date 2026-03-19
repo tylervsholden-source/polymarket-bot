@@ -1,0 +1,27 @@
+{
+  "type": "TIMING_REJECT",
+  "reject_reason": "APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW",
+  "market_title": "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET",
+  "horizon": "5m",
+  "asset": "BTCUSDT",
+  "market_start_utc": "2026-03-16T23:10:00+00:00",
+  "initial_check_utc": "2026-03-16T23:11:10+00:00",
+  "initial_check_seconds_to_window_close": 20.0,
+  "initial_check_status": "PASS",
+  "approval_received_utc": "2026-03-16T23:12:50+00:00",
+  "approval_delay_seconds": 100.0,
+  "recheck_utc": "2026-03-16T23:12:50+00:00",
+  "window_opens_at": "2026-03-16T23:09:15+00:00",
+  "window_closes_at": "2026-03-16T23:11:30+00:00",
+  "seconds_past_window_close_at_recheck": 80.0,
+  "entry_window_policy": {
+    "horizon": "5m",
+    "entry_before_start_sec": 45,
+    "entry_after_start_sec": 90
+  },
+  "entry_window_status": "FAIL",
+  "is_recheck_after_approval": true,
+  "live_gate_passed": false,
+  "direction": "NONE",
+  "note": "Signal passed initial entry window check at 23:11:10 (20s before window close). Operator approval took 100s to arrive at 23:12:50, which is 80s past window_closes=23:11:30. Re-check on live gate with is_recheck_after_approval=True returns APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW instead of TOO_LATE_FOR_ENTRY_WINDOW. Order is blocked; approval state transitions to EXECUTION_BLOCKED."
+}

@@ -1,5 +1,9 @@
-# Secrets
+# Secrets — NEVER commit these
 .env
+.env.*
+*.pem
+*.key
+credentials*.json
 
 # Python
 __pycache__/
@@ -8,15 +12,24 @@ __pycache__/
 .pytest_cache/
 venv/
 .venv/
+*.egg-info/
 
-# Runtime data (regenerated at runtime — not source)
+# Runtime data (regenerated at runtime)
 data/positions.json
 data/status.json
 data/control.json
 data/readiness_verdict.json
 data/readiness_verdict.json.tmp
+data/bot_log.txt
+data/*.lock
+data/sim_*.txt
+data/sim_*.json
 logs/
 *.log
+
+# Trade journals (contains PII/financial data)
+data/shadow_journal_*.jsonl
+data/trade_journal.jsonl
 
 # Generated / temp files
 dump.txt
@@ -25,3 +38,11 @@ full_run_tests.txt
 pytest_results.txt
 run_tests_results.txt
 project_snapshot.zip
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store

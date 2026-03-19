@@ -1,0 +1,36 @@
+=== BOTU NASIL ÇALIŞTIRDIK — INC-2026-03-15-001 ===
+
+1. BAŞLATMA KOMUTU:
+   python main.py
+   (veya: python main.py --dashboard)
+
+2. ÇALIŞMA ORTAMI:
+   - Windows 11, Git Bash terminal
+   - Python 3.12, .venv
+   - Tek terminal penceresi
+
+3. KRİTİK BULGU: İKİ BOT INSTANCE'I AYNI ANDA ÇALIŞIYORDU!
+   Log kanıtı:
+   22:23:38 → Döngü #4 (Instance B, max_positions=1, emir vermiyor)
+   22:24:37 → Döngü #2 (Instance A, 10000 market tarıyor, EMİR VERİYOR)
+   22:24:38 → Döngü #5 (Instance B)
+   22:25:40 → Döngü #3 (Instance A)
+   
+   Döngü numaraları farklı → iki ayrı Orchestrator nesnesi.
+   
+   Instance A: Yeni çalıştırıldı, market_id cooldown'u BOŞ.
+               max_positions henüz dolmamış (açılıp hemen kapandığı için).
+               Live trading TRUE (control.json).
+   
+   Instance B: Eski çalışan, max_positions=1 zaten dolu,
+               "Max pozisyon limitinde (1/1)" ile her döngü skip ediyor.
+
+4. DASHBOARD:
+   - Port 8080
+   - Approval mekanizması olay sırasında YOKTU
+   - Sadece izleme paneliydi, kontrol değildi
+   - Dashboard UI çalışıyordu ama emir onay sistemi sonradan eklendi
+
+5. SCREEN/TMUX/DOCKER:
+   - Yok, düz terminal
+   - PID lock mekanizması olay sırasında YOKTU (sonradan eklendi)

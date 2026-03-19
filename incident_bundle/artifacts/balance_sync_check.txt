@@ -1,0 +1,22 @@
+BALANCE SYNC CHECK — 2026-03-15 21:51
+======================================
+
+GERÇEK CLOB USDC BAKİYE (cüzdan üstü)
+  get_real_balance() : $148.44
+
+INTERNAL CAPITAL STATE (data/positions.json)
+  positions.json["capital"] : $0.0663   ← UYUMSUZ
+
+CHAMBER SUMMARY (operator_layer API)
+  equity.cash_available : $0.0663       ← positions.json'dan geliyor
+  equity.total_equity   : $0.0663
+  equity.initial_capital: $3.59
+
+SONUÇ: KIRMIZI BAYRAK
+  Gerçek bakiye ile sistem içi sermaye uyuşmuyor.
+  Sebep: orchestrator çalışmıyor, _sync_real_balance() hiç koşmadı.
+  Düzeltme: Bot başlatılınca CLOB balance okunur ve positions.json güncellenir.
+  VEYA: positions.json["capital"] manuel olarak 148.44 olarak güncellenmeli.
+
+NOT: Allowance $0 idi, script çalışırken otomatik approve edildi. Tekrar kontrol
+  lazım olmayabilir ama bot başlarken de _ensure_allowance çalışacak.

@@ -1,0 +1,14 @@
+{
+  "description": "Deterministic replay: same policy, same inputs \u2192 same decision",
+  "profile": "live",
+  "original_record_id": "9f58de8c-78d8-4a7f-a956-48398d7aeb98",
+  "original_decision": "EXECUTE_YES",
+  "original_rejection_reason": null,
+  "original_gross_ev": 0.38,
+  "original_execution_adjusted_ev": 0.356,
+  "replayed_decision": "EXECUTE_YES",
+  "replayed_rejection_reason": null,
+  "replayed_gross_ev": 0.38,
+  "replayed_execution_adjusted_ev": 0.356,
+  "deterministic": true
+}

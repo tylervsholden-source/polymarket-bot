@@ -1,0 +1,102 @@
+{
+  "_note": "SYNTHETIC",
+  "generated_utc": "2026-03-15T20:00:00+00:00",
+  "date_label": "2026-03-15",
+  "total_records": 60,
+  "live_metrics": {
+    "policy_profile": "live",
+    "total_evaluated": 60,
+    "execute_count": 17,
+    "reject_count": 43,
+    "execution_rate": 0.283,
+    "mean_ev": 0.038,
+    "p25_ev": 0.031,
+    "p75_ev": 0.047,
+    "suspicious_underround_rate": 0.0,
+    "stale_pricing_rate": 0.05,
+    "partial_fill_rejection_rate": 0.0,
+    "rejection_rates": {
+      "LOW_EDGE": 0.558,
+      "STALE_PRICING": 0.116,
+      "LOW_CALIBRATION_CONFIDENCE": 0.14,
+      "LOW_PROB_SUM": 0.093,
+      "LOW_LIQUIDITY": 0.093
+    }
+  },
+  "strict_metrics": {
+    "policy_profile": "paper_strict",
+    "total_evaluated": 60,
+    "execute_count": 14,
+    "reject_count": 46,
+    "execution_rate": 0.233
+  },
+  "loose_metrics": {
+    "policy_profile": "paper_loose",
+    "total_evaluated": 60,
+    "execute_count": 28,
+    "reject_count": 32,
+    "execution_rate": 0.467
+  },
+  "readiness": {
+    "_note": "SYNTHETIC \u2014 current state: insufficient evidence (shadow running ~1 day)",
+    "generated_utc": "2026-03-15T20:00:00+00:00",
+    "verdict": "INSUFFICIENT_EVIDENCE",
+    "evidence_sufficient": false,
+    "verdict_reason": "Insufficient shadow evidence: Need 100 evaluated decisions; have 60. Need 5.0 observation days; have 1.0.",
+    "blockers": [],
+    "fails": [],
+    "warns": [],
+    "checks": [],
+    "evidence_result": {
+      "live_like_evaluated": 60,
+      "live_like_executes": 17,
+      "live_like_rejects": 43,
+      "observation_days": 1.0,
+      "gaps": [
+        {
+          "dimension": "live_like_evaluated",
+          "required": 100,
+          "actual": 60,
+          "message": "Need 100 evaluated decisions; have 60."
+        },
+        {
+          "dimension": "observation_days",
+          "required": 5.0,
+          "actual": 1.0,
+          "message": "Need 5.0 calendar days; have 1.0."
+        }
+      ]
+    },
+    "pilot_constraints": {
+      "max_open_positions": 1,
+      "pilot_asset": "BTC",
+      "pilot_horizon_minutes": 15,
+      "max_nominal_usdc": 10.0,
+      "daily_max_loss_usdc": 5.0,
+      "single_loss_kill_usdc": 3.0,
+      "mandatory_review_hours": 24,
+      "pilot_evaluation_days": 3
+    }
+  },
+  "would_trade": [
+    {
+      "asset": "BTC",
+      "market_id": "0xabc123",
+      "decision": "EXECUTE_YES",
+      "executable_ev": 0.038,
+      "fill_fraction": 1.0,
+      "intended_size_usdc": 20.0,
+      "passed_paper_strict": true,
+      "passed_paper_loose": true
+    }
+  ],
+  "loose_only": [],
+  "journal_integrity_stats": {
+    "total_lines": 60,
+    "parsed_ok": 60,
+    "bad_json_count": 0,
+    "bad_line_fraction": 0.0,
+    "files_checked": 1
+  },
+  "regime_summary": "No regime instability detected."
+}

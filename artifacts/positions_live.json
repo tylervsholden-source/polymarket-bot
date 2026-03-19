@@ -1,0 +1,54 @@
+{
+  "capital": 0.066316,
+  "positions": {},
+  "closed": [
+    {
+      "order_id": "0xcf5ce20cd5bbb31bbcfcaec996351b76e3ecbe6c",
+      "question": "Solana Up or Down - March 14, 12:30PM-12:45PM ET",
+      "outcome": "YES",
+      "amount": 0.0021,
+      "entry_price": 0.5,
+      "status": "MATCHED",
+      "close_price": 0.5,
+      "pnl": 0.0,
+      "payout": 0.0,
+      "result": "NEUTRAL"
+    },
+    {
+      "order_id": "0xcf5ce20cd5bbb31bbcfcaec996351b76e3ecbe6c",
+      "question": "Solana Up or Down - March 14, 12:30PM-12:45PM ET",
+      "outcome": "UP",
+      "amount": 0.0021,
+      "entry_price": 0.5,
+      "status": "MATCHED",
+      "end_date_iso": "",
+      "current_price": 0.5,
+      "current_value": 0.0,
+      "unrealized_pnl": 0.0,
+      "close_price": 0.5,
+      "pnl": 0.0,
+      "payout": 0.0,
+      "result": "NEUTRAL"
+    },
+    {
+      "order_id": "0xcf5ce20cd5bbb31bbcfcaec996351b76e3ecbe6c",
+      "question": "Solana Up or Down - March 14, 12:30PM-12:45PM ET",
+      "outcome": "UP",
+      "amount": 0.0021,
+      "entry_price": 0.5,
+      "status": "MATCHED",
+      "end_date_iso": "",
+      "current_price": 0.5,
+      "current_value": 0.0,
+      "unrealized_pnl": 0.0,
+      "close_price": 0.5,
+      "pnl": 0.0,
+      "payout": 0.0,
+      "result": "NEUTRAL"
+    }
+  ],
+  "daily": {
+    "date": "2026-03-15",
+    "pnl": 0.0
+  }
+}

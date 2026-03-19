@@ -1,0 +1,120 @@
+[32m2026-03-15 23:40:21.274[0m | [34m[1mDEBUG   [0m | [36mstrategies.kelly_criterion[0m:[36mposition_size[0m:[36m42[0m - [34m[1mKelly: p=0.60 b=1.00 f=0.100 \u2192 $7.00[0m
+[32m2026-03-15 23:40:21.275[0m | [34m[1mDEBUG   [0m | [36mstrategies.kelly_criterion[0m:[36mposition_size[0m:[36m42[0m - [34m[1mKelly: p=1.40 b=1.00 f=0.900 \u2192 $7.00[0m
+[32m2026-03-15 23:40:22.888[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_init_clob[0m:[36m35[0m - [1mCLOB client baþlatýldý (gerçek mod).[0m
+[32m2026-03-15 23:40:22.956[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m61[0m - [1mUSDC bakiye: $137.0560 | Allowance: $0.0000[0m
+[32m2026-03-15 23:40:22.957[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m63[0m - [1mUSDC allowance yetersiz, guncelleniyor...[0m
+[32m2026-03-15 23:40:23.082[0m | [32m[1mSUCCESS [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m65[0m - [32m[1mUSDC allowance guncellendi.[0m
+[32m2026-03-15 23:40:25.149[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36mget_active_markets[0m:[36m236[0m - [1mToplam çekilen: 10000 | Gelecekteki: 7156[0m
+[32m2026-03-15 23:40:25.629[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_init_clob[0m:[36m35[0m - [1mCLOB client baþlatýldý (gerçek mod).[0m
+[32m2026-03-15 23:40:25.699[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m61[0m - [1mUSDC bakiye: $137.0560 | Allowance: $0.0000[0m
+[32m2026-03-15 23:40:25.699[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m63[0m - [1mUSDC allowance yetersiz, guncelleniyor...[0m
+[32m2026-03-15 23:40:25.802[0m | [32m[1mSUCCESS [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m65[0m - [32m[1mUSDC allowance guncellendi.[0m
+[32m2026-03-15 23:40:27.677[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36mget_active_markets[0m:[36m236[0m - [1mToplam çekilen: 10000 | Gelecekteki: 7156[0m
+[32m2026-03-15 23:40:28.468[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_init_clob[0m:[36m35[0m - [1mCLOB client baþlatýldý (gerçek mod).[0m
+[32m2026-03-15 23:40:28.555[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m61[0m - [1mUSDC bakiye: $137.0560 | Allowance: $0.0000[0m
+[32m2026-03-15 23:40:28.555[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m63[0m - [1mUSDC allowance yetersiz, guncelleniyor...[0m
+[32m2026-03-15 23:40:28.717[0m | [32m[1mSUCCESS [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m65[0m - [32m[1mUSDC allowance guncellendi.[0m
+[32m2026-03-15 23:40:28.719[0m | [1mINFO    [0m | [36magents.orchestrator[0m:[36m__init__[0m:[36m69[0m - [1mOrchestrator baþlatýldý — Arbitrage Engine (6 model) aktif.[0m
+[32m2026-03-15 23:40:29.782[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_init_clob[0m:[36m35[0m - [1mCLOB client baþlatýldý (gerçek mod).[0m
+[32m2026-03-15 23:40:29.867[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m61[0m - [1mUSDC bakiye: $137.0560 | Allowance: $0.0000[0m
+[32m2026-03-15 23:40:29.867[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m63[0m - [1mUSDC allowance yetersiz, guncelleniyor...[0m
+[32m2026-03-15 23:40:29.999[0m | [32m[1mSUCCESS [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m65[0m - [32m[1mUSDC allowance guncellendi.[0m
+[32m2026-03-15 23:40:33.294[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36mget_active_markets[0m:[36m236[0m - [1mToplam çekilen: 10000 | Gelecekteki: 7156[0m
+[32m2026-03-15 23:40:34.440[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_init_clob[0m:[36m35[0m - [1mCLOB client baþlatýldý (gerçek mod).[0m
+[32m2026-03-15 23:40:34.509[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m61[0m - [1mUSDC bakiye: $137.0560 | Allowance: $0.0000[0m
+[32m2026-03-15 23:40:34.510[0m | [1mINFO    [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m63[0m - [1mUSDC allowance yetersiz, guncelleniyor...[0m
+[32m2026-03-15 23:40:34.610[0m | [32m[1mSUCCESS [0m | [36mcore.polymarket_client[0m:[36m_ensure_allowance[0m:[36m65[0m - [32m[1mUSDC allowance guncellendi.[0m
+[32m2026-03-15 23:40:34.613[0m | [1mINFO    [0m | [36magents.orchestrator[0m:[36m__init__[0m:[36m69[0m - [1mOrchestrator baþlatýldý — Arbitrage Engine (6 model) aktif.[0m
+[32m2026-03-15 23:40:34.656[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] DOGEUSDT: leader=0.700 \u0394+0.200[0m
+[32m2026-03-15 23:40:34.656[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] XRPUSDT: leader=0.490 \u0394-0.010[0m
+[32m2026-03-15 23:40:34.657[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] HYPEUSDT: leader=0.740 \u0394+0.240[0m
+[32m2026-03-15 23:40:34.657[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] ETHUSDT: leader=0.450 \u0394-0.050[0m
+[32m2026-03-15 23:40:34.657[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] BTCUSDT: leader=0.510 \u0394+0.010[0m
+[32m2026-03-15 23:40:34.657[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] SOLUSDT: leader=0.490 \u0394-0.010[0m
+[32m2026-03-15 23:40:34.657[0m | [34m[1mDEBUG   [0m | [36mstrategies.arbitrage_engine[0m:[36m_build_intramarket_fallback[0m:[36m143[0m - [34m[1m[Fallback] BNBUSDT: leader=0.700 \u0394+0.200[0m
+
+=== TEST 1: Import kontrolü ===
+  [OK] PolymarketClient import: 
+  [OK] PositionManager import: 
+  [OK] Orchestrator import: 
+  [OK] ArbitrageEngine import: 
+  [OK] Tüm 6 model import: 
+
+=== TEST 2: Konfigürasyon ===
+  [OK] LIVE_TRADING_ENABLED set: true
+  [OK] CRYPTO_UPDOWN_ONLY=true: true
+  [OK] MAX_HOURS_TO_CLOSE=1.0: 1.0
+  [OK] MOONSHOT_ENABLED=false (kapalý): false
+  [OK] control.json okundu: {'live_trading': False, 'simulation_running': False, 'min_bet': 10}
+  [OK] control.json geçerli format: {'live_trading': False, 'simulation_running': False, 'min_bet': 10}
+  [OK] positions.json okundu: capital=138.056, açýk pos=0
+
+=== TEST 3: Bayesian Model ===
+  [OK] Nötr sinyal -> prob ~ 0.50: prior=0.50 -> prob=0.5
+  [OK] Bullish sinyal -> prob > 0.50: spot=+0.5%, OB=+0.3 -> prob=0.7262
+  [OK] Bearish sinyal -> prob < 0.50: spot=-0.5%, OB=-0.3 -> prob=0.2738
+  [OK] Prob sýnýr testi [0.05, 0.95]: prob=0.8455
+
+=== TEST 4: Edge Model ===
+  [OK] Single-market arb tespiti (0.48+0.47=0.95): edge=0.0130
+  [OK] No arb (0.55+0.47=1.02): edge=-0.0570
+  [OK] Cross-market edge pozitif: edge=0.1130
+  [OK] has_edge(0.05) True: 
+  [OK] has_edge(0.03) False: 
+
+=== TEST 5: Spread Model ===
+  [OK] Normal spread -> dusuk z-score (<2.0): z=0.22
+  [OK] Aþýrý sapma -> yüksek z-score: z=42.12
+
+=== TEST 6: Stoikov Model ===
+  [OK] Sýfýr inventory -> r ~ mid: r=0.5
+  [OK] Yüksek inventory -> r < mid: r=0.4625
+  [OK] Sýnýr testi [0.01, 0.99]: r=0.01
+
+=== TEST 7: Kelly Criterion ===
+  [OK] Pozitif edge -> size > 0: $7.00
+  [OK] Sýfýr edge -> size = 0: $0.00
+  [OK] Max cap %20 ($20 on $100): $7.00
+
+=== TEST 8: Monte Carlo ===
+  [OK] Monte Carlo çalýþtý: WR=57.3% | E[r]=-38.7%
+  [OK] Win rate hesaplandý: 0.573
+  [OK] Max drawdown hesaplandý: 0.411
+
+=== TEST 9: Market Fetch (async) ===
+  [OK] Toplam market > 0: 7156 market
+  [OK] Crypto up/down market > 0: 2650 market
+  [OK] 1 saatlik adaylar > 0: 101 market
+     -> h=0.08h | ask=0.700 | Dogecoin Up or Down - March 15, 4:40PM-4:45PM ET
+     -> h=0.08h | ask=0.490 | XRP Up or Down - March 15, 4:40PM-4:45PM ET
+     -> h=0.08h | ask=1.000 | XRP Up or Down - March 15, 4:30PM-4:45PM ET
+  [OK] Kötü market türleri filtrelendi: temiz
+
+=== TEST 10: Orchestrator Pre-filter ===
+  [OK] Pre-filter çalýþtý: 107 aday
+  [OK] Adaylar crypto up/down: hepsi crypto up/down
+  [OK] Tüm adaylar fiyat aralýðýnda [0.05-0.95]: 
+
+=== TEST 11: ArbitrageEngine Sinyaller ===
+  [OK] Engine çalýþtý: 0 sinyal
+  [XX] Sinyal üretildi: 0 sinyal — market bulunamadý veya edge yok
+
+=== TEST 12: Güvenlik Kontrolleri ===
+  [OK] control.json okunabilir: {'live_trading': False, 'simulation_running': False, 'min_bet': 10}
+  [OK] positions.json okunabilir: capital=$138.056, açýk=0
+  [OK] LIVE_TRADING_ENABLED kontrolü: true
+
+============================================================
+TEST ÖZETI
+============================================================
+  Toplam: 44 test | Geçti: 43 | Baþarýsýz: 1
+
+BAÞARISIZ TESTLER:
+Traceback (most recent call last):
+  File "C:\Users\lcladm\.antigravity\Polymarket\run_tests.py", line 388, in <module>
+    print(f"  \u2717 {name}: {detail}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\encodings\cp1254.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2717' in position 2: character maps to <undefined>

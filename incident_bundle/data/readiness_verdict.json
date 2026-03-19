@@ -1,0 +1,10 @@
+{
+  "verdict": "TINY_PILOT_CANDIDATE",
+  "verdict_reason": "Operator manual override: pilot authorized with max 1 position, max 10 USDT, daily stop 5%.",
+  "generated_utc": "2026-03-15T19:20:25.133595+00:00",
+  "date_label": "2026-03-15",
+  "total_records": 402,
+  "blockers": [],
+  "fails": [],
+  "warns": []
+}

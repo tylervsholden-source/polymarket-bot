@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Architect Chamber — Operator Dashboard</title>
+<style>
+  :root {
+    --bg:       #0d0f14;
+    --bg2:      #151820;
+    --bg3:      #1c2030;
+    --border:   #2a2f3d;
+    --text:     #d0d4e0;
+    --muted:    #6a7080;
+    --accent:   #4a9eff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --orange:   #db6d28;
+    --purple:   #bc8cff;
+    --font:     'Consolas', 'Monaco', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.5; }
+
+  /* Layout */
+  .top-bar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .top-bar .logo { color: var(--accent); font-size: 14px; font-weight: bold; letter-spacing: 1px; white-space: nowrap; }
+  .top-bar .env-badge { padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+  .env-live        { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid var(--red); }
+  .env-simulation  { background: rgba(74,158,255,0.1); color: var(--accent); border: 1px solid var(--accent); }
+  .env-stopped     { background: rgba(106,112,128,0.2); color: var(--muted); border: 1px solid var(--muted); }
+  .status-pill { display: flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 3px; font-size: 11px; }
+  .pill-green  { background: rgba(63,185,80,0.1);  color: var(--green);  border: 1px solid var(--green); }
+  .pill-red    { background: rgba(248,81,73,0.1);  color: var(--red);    border: 1px solid var(--red); }
+  .pill-yellow { background: rgba(210,153,34,0.1); color: var(--yellow); border: 1px solid var(--yellow); }
+  .pill-blue   { background: rgba(74,158,255,0.1); color: var(--accent); border: 1px solid var(--accent); }
+  .pill-muted  { background: rgba(106,112,128,0.1); color: var(--muted); border: 1px solid var(--muted); }
+  .spacer { flex: 1; }
+  .last-updated { color: var(--muted); font-size: 11px; }
+
+  /* Nav tabs */
+  .nav-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg2); padding: 0 16px; }
+  .nav-tab { padding: 8px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-size: 12px; transition: all .15s; }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main content */
+  .main { padding: 16px; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 12px; }
+  .panel-header { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .panel-header .title { color: var(--text); font-size: 13px; text-transform: none; letter-spacing: 0; }
+  .panel-body { padding: 12px 14px; }
+
+  /* Grid */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  /* Stats cards */
+  .stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 12px; }
+  .stat-label { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .stat-value { font-size: 20px; font-weight: bold; }
+  .stat-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .val-green  { color: var(--green); }
+  .val-red    { color: var(--red); }
+  .val-yellow { color: var(--yellow); }
+  .val-muted  { color: var(--muted); }
+  .val-accent { color: var(--accent); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; }
+  th { color: var(--muted); font-size: 11px; text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); font-weight: normal; text-transform: uppercase; letter-spacing: .3px; }
+  td { padding: 6px 8px; border-bottom: 1px solid rgba(42,47,61,.5); font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* Decision badges */
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+  .badge-exec-yes { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+  .badge-exec-no  { background: rgba(188,140,255,.15); color: var(--purple); border: 1px solid rgba(188,140,255,.3); }
+  .badge-reject   { background: rgba(248,81,73,.1);  color: var(--red);    border: 1px solid rgba(248,81,73,.2); }
+  .badge-warn     { background: rgba(210,153,34,.15); color: var(--yellow); border: 1px solid rgba(210,153,34,.3); }
+  .badge-ok       { background: rgba(63,185,80,.1);  color: var(--green);  border: 1px solid rgba(63,185,80,.2); }
+  .badge-blocker  { background: rgba(248,81,73,.2);  color: var(--red);    border: 1px solid var(--red); }
+  .badge-fail     { background: rgba(219,109,40,.2); color: var(--orange); border: 1px solid var(--orange); }
+
+  /* Readiness verdict */
+  .verdict-box { text-align: center; padding: 20px; border-radius: 4px; }
+  .verdict-TINY_PILOT_CANDIDATE { background: rgba(63,185,80,.1);  border: 2px solid var(--green); }
+  .verdict-CONDITIONAL_REVIEW   { background: rgba(210,153,34,.1); border: 2px solid var(--yellow); }
+  .verdict-NO_GO                { background: rgba(248,81,73,.1);  border: 2px solid var(--red); }
+  .verdict-INSUFFICIENT_EVIDENCE{ background: rgba(74,158,255,.1); border: 2px solid var(--accent); }
+  .verdict-NOT_REVIEWED         { background: rgba(106,112,128,.1); border: 2px solid var(--muted); }
+  .verdict-label { font-size: 22px; font-weight: bold; margin-bottom: 6px; }
+  .verdict-reason { font-size: 12px; color: var(--muted); }
+
+  /* Alert items */
+  .alert-item { padding: 8px 10px; border-radius: 3px; margin-bottom: 6px; font-size: 12px; border-left: 3px solid; }
+  .alert-WARNING  { background: rgba(210,153,34,.1); border-color: var(--yellow); }
+  .alert-CRITICAL { background: rgba(248,81,73,.15); border-color: var(--red); }
+  .alert-INFO     { background: rgba(74,158,255,.1); border-color: var(--accent); }
+
+  /* Drilldown */
+  .chain-step { margin-bottom: 12px; }
+  .chain-step-header { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .kv-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .kv-key { color: var(--muted); }
+  .kv-val { color: var(--text); }
+
+  /* Search / filter */
+  .filter-bar { display: flex; gap: 8px; padding: 8px 14px; background: var(--bg3); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .filter-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 3px; font-family: var(--font); font-size: 12px; }
+  .filter-input:focus { outline: none; border-color: var(--accent); }
+  select.filter-input option { background: var(--bg); }
+
+  /* Hidden */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Scrollable table container */
+  .tbl-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  .tbl-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+  .tbl-wrap::-webkit-scrollbar-track { background: var(--bg3); }
+  .tbl-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Evidence bar */
+  .ev-bar-wrap { background: var(--bg3); border-radius: 3px; height: 8px; overflow: hidden; }
+  .ev-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+
+  /* No data */
+  .no-data { color: var(--muted); font-size: 12px; padding: 20px; text-align: center; }
+
+  /* Profile comparison divergence highlight */
+  .div-loose-only  { color: var(--yellow); }
+  .div-partial     { color: var(--orange); }
+  .div-agree       { color: var(--muted); }
+
+  /* Clickable row */
+  .clickable { cursor: pointer; }
+  .clickable:hover td { background: rgba(74,158,255,.05) !important; }
+
+  /* Modal overlay for drilldown */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; justify-content: center; align-items: flex-start; padding-top: 60px; }
+  .modal-overlay.open { display: flex; }
+  .modal-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; width: 680px; max-height: 80vh; overflow-y: auto; padding: 20px; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-close { cursor: pointer; color: var(--muted); font-size: 18px; padding: 2px 6px; }
+  .modal-close:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- Top Status Bar -->
+<div class="top-bar">
+  <span class="logo">ARCHITECT CHAMBER</span>
+  <span class="env-badge" id="env-badge">...</span>
+  <span class="status-pill pill-muted" id="readiness-pill">...</span>
+  <span class="status-pill pill-muted" id="journal-pill">...</span>
+  <span class="status-pill pill-muted" id="blocker-pill">...</span>
+  <div class="spacer"></div>
+  <span class="status-pill pill-muted" id="records-pill">...</span>
+  <span class="last-updated" id="last-updated">–</span>
+</div>
+
+<!-- Nav Tabs -->
+<div class="nav-tabs">
+  <div class="nav-tab active" onclick="showTab('overview')">Overview</div>
+  <div class="nav-tab" onclick="showTab('decisions')">Decisions</div>
+  <div class="nav-tab" onclick="showTab('positions')">Positions</div>
+  <div class="nav-tab" onclick="showTab('trades')">Closed Trades</div>
+  <div class="nav-tab" onclick="showTab('profiles')">Profile Comparison</div>
+  <div class="nav-tab" onclick="showTab('health')">Health</div>
+  <div class="nav-tab" onclick="showTab('readiness')">Readiness</div>
+</div>
+
+<div class="main">
+
+  <!-- ═══════════════════════════════════════════════════════ OVERVIEW -->
+  <div class="tab-content active" id="tab-overview">
+
+    <!-- Equity row -->
+    <div class="grid-4" style="margin-bottom:12px" id="equity-cards">
+      <div class="stat-card"><div class="stat-label">Total Equity</div><div class="stat-value val-accent" id="eq-total">–</div><div class="stat-sub" id="eq-sub">–</div></div>
+      <div class="stat-card"><div class="stat-label">Cash Available</div><div class="stat-value" id="eq-cash">–</div><div class="stat-sub" id="eq-committed">Committed: –</div></div>
+      <div class="stat-card"><div class="stat-label">Unrealized PnL</div><div class="stat-value" id="eq-unrealized">–</div><div class="stat-sub" id="eq-positions">– positions</div></div>
+      <div class="stat-card"><div class="stat-label">Realized PnL (Day)</div><div class="stat-value" id="eq-day-pnl">–</div><div class="stat-sub" id="eq-total-pnl">Total: –</div></div>
+    </div>
+
+    <!-- Shadow stats row -->
+    <div class="grid-4" style="margin-bottom:12px" id="shadow-cards">
+      <div class="stat-card"><div class="stat-label">Shadow Records</div><div class="stat-value val-accent" id="sh-total">–</div><div class="stat-sub">Total in journal</div></div>
+      <div class="stat-card"><div class="stat-label">Journal Files</div><div class="stat-value" id="sh-files">–</div><div class="stat-sub">Daily rotation</div></div>
+      <div class="stat-card"><div class="stat-label">Observation Days</div><div class="stat-value" id="sh-days">–</div><div class="stat-sub">Since first record</div></div>
+      <div class="stat-card"><div class="stat-label">Cycles Run</div><div class="stat-value" id="sh-cycles">–</div><div class="stat-sub" id="sh-last">Last: –</div></div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Recent decisions preview -->
+      <div class="panel">
+        <div class="panel-header"><span class="title">Recent Decisions</span><span style="margin-left:auto;cursor:pointer;color:var(--accent)" onclick="showTab('decisions')">all →</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Asset</th><th>Decision</th><th>Profile</th><th>EV</th></tr></thead>
+            <tbody id="ov-decisions-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Readiness summary -->
+      <div class="panel">
+        <div class="panel-header"><span class="title">Readiness Summary</span><span style="margin-left:auto;cursor:pointer;color:var(--accent)" onclick="showTab('readiness')">detail →</span></div>
+        <div class="panel-body">
+          <div class="verdict-box verdict-NOT_REVIEWED" id="ov-verdict-box">
+            <div class="verdict-label" id="ov-verdict-label">–</div>
+            <div class="verdict-reason" id="ov-verdict-reason">–</div>
+          </div>
+          <div style="margin-top:12px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="color:var(--muted);font-size:11px">Evidence sufficiency</span>
+              <span style="font-size:11px" id="ov-ev-count">–</span>
+            </div>
+            <div class="ev-bar-wrap"><div class="ev-bar-fill" id="ov-ev-bar" style="width:0%;background:var(--accent)"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--muted)">
+              <span>0</span><span>Needed: 100</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Health alerts inline -->
+    <div class="panel">
+      <div class="panel-header"><span class="title">Active Alerts</span><span style="margin-left:auto;cursor:pointer;color:var(--accent)" onclick="showTab('health')">all →</span></div>
+      <div class="panel-body" id="ov-alerts">
+        <div class="no-data">No alerts — system clean.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ DECISIONS -->
+  <div class="tab-content" id="tab-decisions">
+    <div class="panel">
+      <div class="panel-header"><span class="title">Decision Feed</span><span style="margin-left:auto;color:var(--muted);font-size:11px" id="dec-count-label">–</span></div>
+      <div class="filter-bar">
+        <select class="filter-input" id="dec-filter-profile" onchange="filterDecisions()">
+          <option value="">All Profiles</option>
+          <option value="live">live</option>
+          <option value="paper_strict">paper_strict</option>
+          <option value="paper_loose">paper_loose</option>
+        </select>
+        <select class="filter-input" id="dec-filter-decision" onchange="filterDecisions()">
+          <option value="">All Decisions</option>
+          <option value="EXECUTE">Execute</option>
+          <option value="REJECT">Reject</option>
+        </select>
+        <select class="filter-input" id="dec-filter-asset" onchange="filterDecisions()">
+          <option value="">All Assets</option>
+        </select>
+        <input class="filter-input" id="dec-filter-market" placeholder="Market ID..." oninput="filterDecisions()" style="width:200px"/>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Asset</th><th>Hrz</th><th>Decision</th>
+            <th>Profile</th><th>Cal Quality</th><th>EV</th><th>Rej Reason</th><th>Age(s)</th><th>Chain</th>
+          </tr></thead>
+          <tbody id="decisions-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ POSITIONS -->
+  <div class="tab-content" id="tab-positions">
+    <div class="grid-2" style="margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Open Positions</div><div class="stat-value val-accent" id="pos-count">–</div></div>
+      <div class="stat-card"><div class="stat-label">Total Unrealized PnL</div><div class="stat-value" id="pos-upnl">–</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="title">Open Positions</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Market</th><th>Outcome</th><th>Size</th><th>Entry</th>
+            <th>Current Mark</th><th>Unrealized PnL</th><th>Status</th><th>Risk</th>
+          </tr></thead>
+          <tbody id="positions-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ TRADES -->
+  <div class="tab-content" id="tab-trades">
+    <div class="grid-4" style="margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value" id="tr-count">–</div></div>
+      <div class="stat-card"><div class="stat-label">Wins</div><div class="stat-value val-green" id="tr-wins">–</div></div>
+      <div class="stat-card"><div class="stat-label">Losses</div><div class="stat-value val-red" id="tr-losses">–</div></div>
+      <div class="stat-card"><div class="stat-label">Total Realized PnL</div><div class="stat-value" id="tr-pnl">–</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="title">Closed Trade Blotter</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Market</th><th>Outcome</th><th>Size</th><th>Entry</th>
+            <th>Close</th><th>Realized PnL</th><th>PnL %</th><th>Result</th>
+          </tr></thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ PROFILES -->
+  <div class="tab-content" id="tab-profiles">
+    <!-- Per-profile stats -->
+    <div id="profile-stat-cards" style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap"></div>
+
+    <div class="grid-2">
+      <!-- Divergence table -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="title">Divergent Decisions</span>
+          <span style="margin-left:auto;color:var(--muted);font-size:11px" id="prof-div-count">–</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Asset</th><th>Live</th><th>Strict</th><th>Loose</th><th>Type</th></tr></thead>
+            <tbody id="divergence-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Summary stats -->
+      <div class="panel">
+        <div class="panel-header"><span class="title">Cross-Profile Summary</span></div>
+        <div class="panel-body" id="cross-profile-summary">
+          <div class="no-data">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ HEALTH -->
+  <div class="tab-content" id="tab-health">
+    <div class="grid-4" style="margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Journal</div><div class="stat-value" id="h-journal">–</div><div class="stat-sub" id="h-journal-lines">–</div></div>
+      <div class="stat-card"><div class="stat-label">Suspicious Underround</div><div class="stat-value" id="h-underround">–</div><div class="stat-sub">of recent decisions</div></div>
+      <div class="stat-card"><div class="stat-label">Stale Pricing</div><div class="stat-value" id="h-stale">–</div><div class="stat-sub">> 60s snapshot age</div></div>
+      <div class="stat-card"><div class="stat-label">Partial Fill Rate</div><div class="stat-value" id="h-partial">–</div><div class="stat-sub">of execute decisions</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="title">All Alerts</span></div>
+      <div class="panel-body" id="health-alerts-body">
+        <div class="no-data">No alerts.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="title">Cycle Status</span></div>
+      <div class="panel-body" id="cycle-status-body">
+        <div class="no-data">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ READINESS -->
+  <div class="tab-content" id="tab-readiness">
+    <div class="grid-2" style="margin-bottom:12px">
+      <div>
+        <div class="verdict-box verdict-NOT_REVIEWED" id="rd-verdict-box" style="margin-bottom:12px">
+          <div class="verdict-label" id="rd-verdict-label">–</div>
+          <div class="verdict-reason" id="rd-verdict-reason">–</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)" id="rd-reviewed-at">–</div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="title">Evidence Sufficiency</span></div>
+          <div class="panel-body" id="rd-evidence-body">
+            <div class="no-data">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:12px">
+          <div class="panel-header"><span class="title">Checks</span></div>
+          <div class="tbl-wrap" style="max-height:240px">
+            <table>
+              <thead><tr><th>Check</th><th>Level</th><th>Value</th><th>Message</th></tr></thead>
+              <tbody id="rd-checks-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="title">Pilot Constraints (if GO)</span></div>
+          <div class="panel-body" id="rd-pilot-body">
+            <div class="no-data">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-profile summaries -->
+    <div class="grid-3" id="rd-profile-summaries"></div>
+
+    <!-- Evidence gaps -->
+    <div class="panel" id="rd-gaps-panel" style="display:none">
+      <div class="panel-header"><span class="title">Evidence Gaps</span></div>
+      <div class="panel-body" id="rd-gaps-body"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Decision Chain Modal -->
+<div class="modal-overlay" id="chain-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span style="color:var(--accent);font-size:13px">Decision Chain — Oversight Audit</span>
+      <span class="modal-close" onclick="closeChainModal()">✕</span>
+    </div>
+    <div id="chain-body"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const BASE = '/api/chamber';
+let _summary = null;
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+
+function fmt(v, decimals=4) {
+  if (v === null || v === undefined) return '–';
+  return parseFloat(v).toFixed(decimals);
+}
+function fmtUSDC(v) {
+  if (v === null || v === undefined) return '–';
+  return '$' + parseFloat(v).toFixed(4);
+}
+function fmtPct(v) {
+  if (v === null || v === undefined) return '–';
+  return (parseFloat(v)*100).toFixed(1) + '%';
+}
+function timeAgo(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso.replace('Z','') + 'Z');
+  const s = Math.floor((Date.now() - d)/1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function shortTime(iso) {
+  if (!iso) return '–';
+  return iso.replace('T',' ').slice(0,19).replace('Z','');
+}
+function colorPnl(v) {
+  if (v === null || v === undefined) return 'val-muted';
+  return parseFloat(v) >= 0 ? 'val-green' : 'val-red';
+}
+function decisionBadge(d) {
+  if (!d) return '–';
+  if (d === 'EXECUTE_YES')    return `<span class="badge badge-exec-yes">EXEC YES</span>`;
+  if (d === 'EXECUTE_NO')     return `<span class="badge badge-exec-no">EXEC NO</span>`;
+  if (d === 'REJECT')         return `<span class="badge badge-reject">REJECT</span>`;
+  if (d.startsWith('EXECUTE')) return `<span class="badge badge-exec-yes">${d}</span>`;
+  return `<span class="badge badge-reject">${d}</span>`;
+}
+function levelBadge(l) {
+  if (!l) return '';
+  const cls = {OK:'badge-ok', WARN:'badge-warn', FAIL:'badge-fail', BLOCKER:'badge-blocker'}[l] || 'badge-muted';
+  return `<span class="badge ${cls}">${l}</span>`;
+}
+function resultBadge(r) {
+  if (r === 'WIN')  return `<span class="badge badge-exec-yes">WIN</span>`;
+  if (r === 'LOSS') return `<span class="badge badge-reject">LOSS</span>`;
+  return `<span class="badge badge-warn">NEUTRAL</span>`;
+}
+function calBadge(q) {
+  const cls = {good:'val-green', moderate:'val-accent', weak:'val-yellow', unknown:'val-muted'}[q] || 'val-muted';
+  return `<span class="${cls}">${q||'–'}</span>`;
+}
+
+// ── Tab navigation ─────────────────────────────────────────────────────────
+
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(el => {
+    if (el.textContent.toLowerCase().startsWith(name === 'profiles' ? 'profile' : name === 'readiness' ? 'read' : name === 'overview' ? 'over' : name)) {
+      el.classList.add('active');
+    }
+  });
+  if (_summary) renderAll(_summary);
+}
+
+// ── Fetch & render cycle ────────────────────────────────────────────────────
+
+function fetchSummary() {
+  fetch(BASE + '/summary')
+    .then(r => r.json())
+    .then(data => {
+      _summary = data;
+      renderAll(data);
+    })
+    .catch(err => {
+      document.getElementById('last-updated').textContent = 'Error: ' + err.message;
+    });
+}
+
+function renderAll(data) {
+  renderTopBar(data);
+  renderOverview(data);
+  renderDecisions(data);
+  renderPositions(data);
+  renderTrades(data);
+  renderProfiles(data);
+  renderHealth(data);
+  renderReadiness(data);
+}
+
+// ── Top bar ────────────────────────────────────────────────────────────────
+
+function renderTopBar(data) {
+  const env = data.environment || 'stopped';
+  const envEl = document.getElementById('env-badge');
+  envEl.textContent = env.toUpperCase();
+  envEl.className = 'env-badge env-' + env;
+
+  // Readiness pill
+  const rd = data.readiness || {};
+  const rmap = {
+    TINY_PILOT_CANDIDATE: ['GO — PILOT CANDIDATE', 'pill-green'],
+    CONDITIONAL_REVIEW:   ['CONDITIONAL REVIEW',   'pill-yellow'],
+    NO_GO:                ['NO-GO',                'pill-red'],
+    INSUFFICIENT_EVIDENCE:['EVIDENCE NEEDED',      'pill-blue'],
+    NOT_REVIEWED:         ['NOT REVIEWED',         'pill-muted'],
+  };
+  const [rtxt, rcls] = rmap[rd.status] || ['UNKNOWN', 'pill-muted'];
+  const rPill = document.getElementById('readiness-pill');
+  rPill.textContent = rtxt;
+  rPill.className = 'status-pill ' + rcls;
+
+  // Journal pill
+  const h = data.health || {};
+  const jPill = document.getElementById('journal-pill');
+  if (h.journal_healthy === false) {
+    jPill.textContent = '⚠ JOURNAL WARN';
+    jPill.className = 'status-pill pill-yellow';
+  } else if (h.journal_total_lines > 0) {
+    jPill.textContent = `JOURNAL OK (${h.journal_total_lines}L)`;
+    jPill.className = 'status-pill pill-green';
+  } else {
+    jPill.textContent = 'NO JOURNAL';
+    jPill.className = 'status-pill pill-muted';
+  }
+
+  // Blocker pill
+  const bPill = document.getElementById('blocker-pill');
+  const blockerCount = (rd.blocker_count || 0) + (rd.fail_count || 0);
+  if (blockerCount > 0) {
+    bPill.textContent = `${blockerCount} BLOCKER${blockerCount > 1 ? 'S' : ''}`;
+    bPill.className = 'status-pill pill-red';
+  } else if (rd.warn_count > 0) {
+    bPill.textContent = `${rd.warn_count} WARN`;
+    bPill.className = 'status-pill pill-yellow';
+  } else {
+    bPill.textContent = 'CLEAN';
+    bPill.className = 'status-pill pill-green';
+  }
+
+  // Records pill
+  document.getElementById('records-pill').textContent = `${data.total_shadow_records || 0} shadow records`;
+
+  // Last updated
+  document.getElementById('last-updated').textContent = 'Updated: ' + timeAgo(data.generated_utc);
+}
+
+// ── Overview ────────────────────────────────────────────────────────────────
+
+function renderOverview(data) {
+  const eq = data.equity || {};
+  const cls = v => parseFloat(v) >= 0 ? 'val-green' : 'val-red';
+
+  document.getElementById('eq-total').textContent = fmtUSDC(eq.total_equity);
+  document.getElementById('eq-total').className = 'stat-value val-accent';
+  document.getElementById('eq-sub').textContent = eq.initial_capital ? `Initial: ${fmtUSDC(eq.initial_capital)}` : '';
+  document.getElementById('eq-cash').textContent = fmtUSDC(eq.cash_available);
+  document.getElementById('eq-committed').textContent = `Committed: ${fmtUSDC(eq.capital_committed)}`;
+  const upnl = document.getElementById('eq-unrealized');
+  upnl.textContent = fmtUSDC(eq.unrealized_pnl);
+  upnl.className = 'stat-value ' + (eq.unrealized_pnl >= 0 ? 'val-green' : 'val-red');
+  document.getElementById('eq-positions').textContent = `${eq.active_positions_count || 0} positions`;
+  const dpnl = document.getElementById('eq-day-pnl');
+  dpnl.textContent = fmtUSDC(eq.realized_pnl_day);
+  dpnl.className = 'stat-value ' + colorPnl(eq.realized_pnl_day);
+  document.getElementById('eq-total-pnl').textContent = `Total: ${fmtUSDC(eq.realized_pnl_total)}`;
+
+  document.getElementById('sh-total').textContent = data.total_shadow_records || 0;
+  document.getElementById('sh-files').textContent = data.journal_files_found || 0;
+  const rd = data.readiness || {};
+  document.getElementById('sh-days').textContent = (rd.observation_days || 0).toFixed(1);
+  const h = data.health || {};
+  document.getElementById('sh-cycles').textContent = h.cycles_completed || '–';
+  document.getElementById('sh-last').textContent = h.last_cycle_at ? 'Last: ' + timeAgo(h.last_cycle_at) : 'Last: –';
+
+  // Recent decisions
+  const decs = (data.recent_decisions || []).slice(0, 10);
+  const tbody = document.getElementById('ov-decisions-body');
+  tbody.innerHTML = decs.map(d => `
+    <tr class="clickable" onclick="openChain('${d.record_id}')">
+      <td>${timeAgo(d.timestamp_utc)}</td>
+      <td>${d.asset}/${d.horizon_minutes}m</td>
+      <td>${decisionBadge(d.final_decision)}</td>
+      <td style="color:var(--muted)">${d.policy_profile}</td>
+      <td>${d.execution_adjusted_ev !== null ? fmt(d.execution_adjusted_ev) : '–'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="no-data">No decisions recorded yet.</td></tr>';
+
+  // Verdict box
+  const vbox = document.getElementById('ov-verdict-box');
+  const vstatus = rd.status || 'NOT_REVIEWED';
+  vbox.className = 'verdict-box verdict-' + vstatus;
+  document.getElementById('ov-verdict-label').textContent = vstatus.replace(/_/g,' ');
+  document.getElementById('ov-verdict-reason').textContent = rd.verdict_reason || '';
+
+  // Evidence bar
+  const n = rd.live_like_evaluated || 0;
+  const pct = Math.min(100, (n / 100) * 100);
+  document.getElementById('ov-ev-count').textContent = `${n} / 100`;
+  document.getElementById('ov-ev-bar').style.width = pct + '%';
+  document.getElementById('ov-ev-bar').style.background = pct >= 100 ? 'var(--green)' : 'var(--accent)';
+
+  // Alerts
+  const allAlerts = [
+    ...(h.drift_alerts || []),
+    ...(h.pricing_sanity_alerts || []),
+    ...(h.policy_divergence_alerts || []),
+  ];
+  const alertsEl = document.getElementById('ov-alerts');
+  if (allAlerts.length === 0) {
+    alertsEl.innerHTML = '<div class="no-data">No alerts — system clean.</div>';
+  } else {
+    alertsEl.innerHTML = allAlerts.map(a =>
+      `<div class="alert-item alert-${a.level}"><b>${a.level}</b> [${a.category}] ${a.message}</div>`
+    ).join('');
+  }
+}
+
+// ── Decisions tab ──────────────────────────────────────────────────────────
+
+let _allDecisions = [];
+let _assetSet = new Set();
+
+function renderDecisions(data) {
+  _allDecisions = data.recent_decisions || [];
+  document.getElementById('dec-count-label').textContent = `${_allDecisions.length} of ${data.total_shadow_records || 0} total`;
+
+  // Populate asset filter
+  _allDecisions.forEach(d => _assetSet.add(d.asset));
+  const assetSel = document.getElementById('dec-filter-asset');
+  const existingAssets = [...assetSel.options].map(o => o.value);
+  [..._assetSet].forEach(a => {
+    if (!existingAssets.includes(a)) {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a;
+      assetSel.appendChild(opt);
+    }
+  });
+
+  filterDecisions();
+}
+
+function filterDecisions() {
+  const profile  = document.getElementById('dec-filter-profile').value;
+  const decision = document.getElementById('dec-filter-decision').value;
+  const asset    = document.getElementById('dec-filter-asset').value;
+  const market   = document.getElementById('dec-filter-market').value.toLowerCase();
+
+  let filtered = _allDecisions.filter(d => {
+    if (profile  && d.policy_profile !== profile) return false;
+    if (decision && !d.final_decision.includes(decision)) return false;
+    if (asset    && d.asset !== asset) return false;
+    if (market   && !d.market_id.toLowerCase().includes(market)) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('decisions-body');
+  tbody.innerHTML = filtered.map(d => `
+    <tr class="clickable" onclick="openChain('${d.record_id}')">
+      <td title="${shortTime(d.timestamp_utc)}">${timeAgo(d.timestamp_utc)}</td>
+      <td>${d.asset}</td>
+      <td>${d.horizon_minutes}m</td>
+      <td>${decisionBadge(d.final_decision)}</td>
+      <td style="color:var(--muted)">${d.policy_profile}</td>
+      <td>${calBadge(d.calibration_quality)}</td>
+      <td class="${d.execution_adjusted_ev >= 0 ? 'val-green' : 'val-red'}">${fmt(d.execution_adjusted_ev)}</td>
+      <td style="color:var(--muted);font-size:11px">${d.rejection_reason || '–'}</td>
+      <td style="color:var(--muted)">${fmt(d.snapshot_age_seconds,1)}</td>
+      <td><span style="color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openChain('${d.record_id}')">⛓</span></td>
+    </tr>
+  `).join('') || '<tr><td colspan="10" class="no-data">No decisions match filters.</td></tr>';
+}
+
+// ── Positions tab ──────────────────────────────────────────────────────────
+
+function renderPositions(data) {
+  const positions = data.open_positions || [];
+  document.getElementById('pos-count').textContent = positions.length;
+  const totalUpnl = positions.reduce((s, p) => s + (p.unrealized_pnl || 0), 0);
+  const upnlEl = document.getElementById('pos-upnl');
+  upnlEl.textContent = fmtUSDC(totalUpnl);
+  upnlEl.className = 'stat-value ' + colorPnl(totalUpnl);
+
+  const tbody = document.getElementById('positions-body');
+  tbody.innerHTML = positions.map(p => `
+    <tr>
+      <td title="${p.market_id}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${p.question || p.market_id}</td>
+      <td><span class="badge ${p.outcome === 'YES' || p.outcome === 'UP' ? 'badge-exec-yes' : 'badge-exec-no'}">${p.outcome}</span></td>
+      <td>${fmtUSDC(p.amount)}</td>
+      <td>${fmt(p.entry_price)}</td>
+      <td>${p.current_mark !== null && p.current_mark !== undefined ? fmt(p.current_mark) : '–'}</td>
+      <td class="${colorPnl(p.unrealized_pnl)}">${fmtUSDC(p.unrealized_pnl)}</td>
+      <td style="color:var(--muted)">${p.status}</td>
+      <td>${p.risk_flags && p.risk_flags.length ? p.risk_flags.map(f => `<span class="badge badge-fail">${f}</span>`).join(' ') : '–'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" class="no-data">No open positions.</td></tr>';
+}
+
+// ── Closed trades tab ──────────────────────────────────────────────────────
+
+function renderTrades(data) {
+  const trades = data.closed_trades || [];
+  document.getElementById('tr-count').textContent = trades.length;
+  const wins   = trades.filter(t => t.result === 'WIN').length;
+  const losses = trades.filter(t => t.result === 'LOSS').length;
+  const totalPnl = trades.reduce((s, t) => s + (t.realized_pnl || 0), 0);
+  document.getElementById('tr-wins').textContent = wins;
+  document.getElementById('tr-losses').textContent = losses;
+  const pnlEl = document.getElementById('tr-pnl');
+  pnlEl.textContent = fmtUSDC(totalPnl);
+  pnlEl.className = 'stat-value ' + colorPnl(totalPnl);
+
+  const tbody = document.getElementById('trades-body');
+  tbody.innerHTML = trades.map(t => `
+    <tr>
+      <td title="${t.trade_id}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.question || t.trade_id}</td>
+      <td>${t.outcome}</td>
+      <td>${fmtUSDC(t.amount)}</td>
+      <td>${fmt(t.entry_price)}</td>
+      <td>${fmt(t.close_price)}</td>
+      <td class="${colorPnl(t.realized_pnl)}">${fmtUSDC(t.realized_pnl)}</td>
+      <td class="${colorPnl(t.pnl_pct)}">${t.pnl_pct !== null ? fmtPct(t.pnl_pct/100) : '–'}</td>
+      <td>${resultBadge(t.result)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" class="no-data">No closed trades yet.</td></tr>';
+}
+
+// ── Profiles tab ────────────────────────────────────────────────────────────
+
+function renderProfiles(data) {
+  const cmp = data.profile_comparison || {};
+  const pp = cmp.per_profile || {};
+  const profiles = ['live', 'paper_strict', 'paper_loose'];
+  const colors = {live: 'var(--red)', paper_strict: 'var(--yellow)', paper_loose: 'var(--accent)'};
+
+  // Stat cards
+  const cardsEl = document.getElementById('profile-stat-cards');
+  cardsEl.innerHTML = profiles.filter(p => pp[p]).map(p => {
+    const s = pp[p];
+    return `<div class="stat-card" style="flex:1;min-width:180px;border-top:3px solid ${colors[p]}">
+      <div class="stat-label">${p}</div>
+      <div class="stat-value" style="color:${colors[p]}">${(s.exec_rate*100).toFixed(1)}%</div>
+      <div class="stat-sub">exec rate | ${s.total} total | ${s.execute} exec | ${s.reject} rej</div>
+    </div>`;
+  }).join('') || '<div class="no-data">No profile data yet.</div>';
+
+  // Cross-profile summary
+  const crossEl = document.getElementById('cross-profile-summary');
+  const looseOnly = cmp.loose_only_count || 0;
+  const strictNotLive = cmp.strict_not_live_count || 0;
+  crossEl.innerHTML = `
+    <div class="kv-row"><span class="kv-key">Total records</span><span class="kv-val">${cmp.total_records || 0}</span></div>
+    <div class="kv-row"><span class="kv-key">Profiles found</span><span class="kv-val">${(cmp.profiles_found || []).join(', ') || '–'}</span></div>
+    <div class="kv-row"><span class="kv-key">Divergent decisions</span><span class="kv-val">${(cmp.divergent_rows || []).length}</span></div>
+    <div class="kv-row">
+      <span class="kv-key">Loose-only executes</span>
+      <span class="kv-val ${looseOnly > 5 ? 'val-yellow' : ''}">${looseOnly}</span>
+    </div>
+    <div class="kv-row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+      <span class="kv-key" style="font-size:11px;color:var(--muted)">
+        "Loose-only" = paper_loose executes but live rejects.<br>
+        These should NOT be used to justify going live.
+      </span>
+    </div>
+  `;
+
+  // Divergence table
+  document.getElementById('prof-div-count').textContent = `${(cmp.divergent_rows||[]).length} divergent`;
+  const tbody = document.getElementById('divergence-body');
+  tbody.innerHTML = (cmp.divergent_rows || []).map(r => {
+    const dtype = r.divergence_type;
+    const cls = dtype === 'LOOSE_ONLY' ? 'div-loose-only' : dtype === 'PARTIAL' ? 'div-partial' : 'div-agree';
+    return `<tr>
+      <td title="${shortTime(r.timestamp_utc)}">${timeAgo(r.timestamp_utc)}</td>
+      <td>${r.asset}</td>
+      <td>${r.live_decision ? decisionBadge(r.live_decision) : '<span class="val-muted">–</span>'}</td>
+      <td>${r.strict_decision ? decisionBadge(r.strict_decision) : '<span class="val-muted">–</span>'}</td>
+      <td>${r.loose_decision ? decisionBadge(r.loose_decision) : '<span class="val-muted">–</span>'}</td>
+      <td class="${cls}">${dtype}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="no-data">No divergent decisions found.</td></tr>';
+}
+
+// ── Health tab ─────────────────────────────────────────────────────────────
+
+function renderHealth(data) {
+  const h = data.health || {};
+
+  const jEl = document.getElementById('h-journal');
+  jEl.textContent = h.journal_healthy ? 'HEALTHY' : 'WARN';
+  jEl.className = 'stat-value ' + (h.journal_healthy ? 'val-green' : 'val-yellow');
+  document.getElementById('h-journal-lines').textContent = h.journal_total_lines !== null ? `${h.journal_total_lines} lines` : 'No journal yet';
+
+  const pct = v => v !== null && v !== undefined ? fmtPct(v) : '–';
+  const uEl = document.getElementById('h-underround');
+  uEl.textContent = pct(h.suspicious_underround_rate);
+  uEl.className = 'stat-value ' + (h.suspicious_underround_rate > 0.2 ? 'val-yellow' : 'val-green');
+  const sEl = document.getElementById('h-stale');
+  sEl.textContent = pct(h.stale_pricing_rate);
+  sEl.className = 'stat-value ' + (h.stale_pricing_rate > 0.15 ? 'val-yellow' : 'val-green');
+  const pfEl = document.getElementById('h-partial');
+  pfEl.textContent = pct(h.partial_fill_rate);
+  pfEl.className = 'stat-value ' + (h.partial_fill_rate > 0.3 ? 'val-yellow' : 'val-green');
+
+  const allAlerts = [
+    ...(h.drift_alerts || []),
+    ...(h.pricing_sanity_alerts || []),
+    ...(h.policy_divergence_alerts || []),
+  ];
+  const alertsEl = document.getElementById('health-alerts-body');
+  if (allAlerts.length === 0) {
+    alertsEl.innerHTML = '<div class="no-data">No alerts.</div>';
+  } else {
+    alertsEl.innerHTML = allAlerts.map(a =>
+      `<div class="alert-item alert-${a.level}">
+        <b>${a.level}</b> [${a.category}] ${a.message}
+        ${a.metric_value !== null && a.metric_value !== undefined ? `<br><span style="color:var(--muted);font-size:11px">value: ${fmt(a.metric_value,3)} / threshold: ${fmt(a.threshold,3)}</span>` : ''}
+      </div>`
+    ).join('');
+  }
+
+  // Cycle status
+  const cycleEl = document.getElementById('cycle-status-body');
+  cycleEl.innerHTML = `
+    <div class="kv-row"><span class="kv-key">Running</span><span class="kv-val ${h.cycle_running ? 'val-green' : 'val-muted'}">${h.cycle_running ? 'YES' : 'NO'}</span></div>
+    <div class="kv-row"><span class="kv-key">Last cycle</span><span class="kv-val">${h.last_cycle_at ? timeAgo(h.last_cycle_at) : '–'}</span></div>
+    <div class="kv-row"><span class="kv-key">Cycles completed</span><span class="kv-val">${h.cycles_completed ?? '–'}</span></div>
+    <div class="kv-row"><span class="kv-key">Blockers active</span><span class="kv-val ${h.blocker_active ? 'val-red' : 'val-green'}">${h.blocker_active ? h.blocker_reasons.join(', ') : 'none'}</span></div>
+    <div class="kv-row"><span class="kv-key">Journal integrity</span><span class="kv-val ${h.journal_healthy ? 'val-green' : 'val-yellow'}">${h.journal_healthy ? 'OK' : 'WARN'} (${h.journal_bad_line_fraction !== null ? fmtPct(h.journal_bad_line_fraction) : '–'} bad lines)</span></div>
+  `;
+}
+
+// ── Readiness tab ──────────────────────────────────────────────────────────
+
+function renderReadiness(data) {
+  const rd = data.readiness || {};
+  const vstatus = rd.status || 'NOT_REVIEWED';
+
+  const vbox = document.getElementById('rd-verdict-box');
+  vbox.className = 'verdict-box verdict-' + vstatus;
+  document.getElementById('rd-verdict-label').textContent = vstatus.replace(/_/g,' ');
+  document.getElementById('rd-verdict-reason').textContent = rd.verdict_reason || '';
+  document.getElementById('rd-reviewed-at').textContent = rd.last_reviewed_at ? 'Last reviewed: ' + timeAgo(rd.last_reviewed_at) : 'Not yet reviewed';
+
+  // Evidence
+  const evEl = document.getElementById('rd-evidence-body');
+  evEl.innerHTML = `
+    <div class="kv-row"><span class="kv-key">Live-like evaluated</span>
+      <span class="kv-val ${(rd.live_like_evaluated||0)>=100?'val-green':'val-yellow'}">${rd.live_like_evaluated||0} / 100</span></div>
+    <div class="kv-row"><span class="kv-key">Live-like executes</span>
+      <span class="kv-val ${(rd.live_like_executes||0)>=20?'val-green':'val-yellow'}">${rd.live_like_executes||0} / 20</span></div>
+    <div class="kv-row"><span class="kv-key">Live-like rejects</span>
+      <span class="kv-val ${(rd.live_like_rejects||0)>=20?'val-green':'val-yellow'}">${rd.live_like_rejects||0} / 20</span></div>
+    <div class="kv-row"><span class="kv-key">Observation days</span>
+      <span class="kv-val ${(rd.observation_days||0)>=5?'val-green':'val-yellow'}">${(rd.observation_days||0).toFixed(2)} / 5.0</span></div>
+    <div class="kv-row"><span class="kv-key">Evidence sufficient</span>
+      <span class="kv-val ${rd.evidence_sufficient?'val-green':'val-red'}">${rd.evidence_sufficient?'YES':'NO'}</span></div>
+  `;
+
+  // Checks table
+  const checks = rd.checks || [];
+  document.getElementById('rd-checks-body').innerHTML = checks.map(c =>
+    `<tr>
+      <td>${c.name}</td>
+      <td>${levelBadge(c.level)}</td>
+      <td>${c.metric_value !== null && c.metric_value !== undefined ? fmt(c.metric_value) : '–'}</td>
+      <td style="color:var(--muted);font-size:11px">${c.message}</td>
+    </tr>`
+  ).join('') || '<tr><td colspan="4" class="no-data">No checks run yet.</td></tr>';
+
+  // Pilot constraints
+  const pcEl = document.getElementById('rd-pilot-body');
+  pcEl.innerHTML = `
+    <div class="kv-row"><span class="kv-key">Asset</span><span class="kv-val">${rd.pilot_asset}</span></div>
+    <div class="kv-row"><span class="kv-key">Horizon</span><span class="kv-val">${rd.pilot_horizon_min}m</span></div>
+    <div class="kv-row"><span class="kv-key">Max positions</span><span class="kv-val">${rd.pilot_max_positions}</span></div>
+    <div class="kv-row"><span class="kv-key">Max size</span><span class="kv-val">${fmtUSDC(rd.pilot_max_usdc)}</span></div>
+    <div class="kv-row"><span class="kv-key">Daily loss kill</span><span class="kv-val">${fmtUSDC(rd.pilot_daily_loss_usdc)}</span></div>
+    <div class="kv-row"><span class="kv-key">Per-trade kill</span><span class="kv-val">${fmtUSDC(rd.pilot_kill_usdc)}</span></div>
+    <div style="margin-top:8px;color:var(--muted);font-size:11px">GO verdict authorizes a 3-day, single-asset, $10 max pilot only.</div>
+  `;
+
+  // Per-profile summaries
+  const profSumEl = document.getElementById('rd-profile-summaries');
+  const pColors = {live:'var(--red)', paper_strict:'var(--yellow)', paper_loose:'var(--accent)'};
+  const sumPanels = ['live_summary','strict_summary','loose_summary'].map(key => {
+    const s = rd[key];
+    const pname = key.replace('_summary','').replace('_',' ');
+    const color = pColors[pname.replace(' ','_')] || 'var(--accent)';
+    if (!s) return `<div class="panel"><div class="panel-header" style="border-top:3px solid ${color}"><span class="title">${pname}</span></div><div class="panel-body"><div class="no-data">No data</div></div></div>`;
+    const topRej = (s.top_rejection_reasons || []).slice(0,3).map(([r,n]) => `${r}: ${n}`).join(' | ');
+    return `<div class="panel">
+      <div class="panel-header" style="border-top:3px solid ${color}"><span class="title">${pname}</span></div>
+      <div class="panel-body">
+        <div class="kv-row"><span class="kv-key">Evaluated</span><span class="kv-val">${s.total_evaluated}</span></div>
+        <div class="kv-row"><span class="kv-key">Exec rate</span><span class="kv-val">${fmtPct(s.execution_rate)}</span></div>
+        <div class="kv-row"><span class="kv-key">Mean EV</span><span class="kv-val ${colorPnl(s.mean_ev)}">${s.mean_ev !== null ? fmt(s.mean_ev) : '–'}</span></div>
+        <div class="kv-row" style="margin-top:6px"><span class="kv-key" style="font-size:11px">Top rejections</span></div>
+        <div style="color:var(--muted);font-size:11px;margin-top:2px">${topRej || 'None'}</div>
+      </div>
+    </div>`;
+  });
+  profSumEl.innerHTML = sumPanels.join('');
+
+  // Gaps
+  const gaps = rd.evidence_gaps || [];
+  const gapsPanel = document.getElementById('rd-gaps-panel');
+  const gapsBody = document.getElementById('rd-gaps-body');
+  if (gaps.length > 0) {
+    gapsPanel.style.display = '';
+    gapsBody.innerHTML = gaps.map(g =>
+      `<div class="alert-item alert-WARNING">${g}</div>`
+    ).join('');
+  } else {
+    gapsPanel.style.display = 'none';
+  }
+}
+
+// ── Decision chain drilldown ───────────────────────────────────────────────
+
+function openChain(recordId) {
+  const modal = document.getElementById('chain-modal');
+  const body = document.getElementById('chain-body');
+  body.innerHTML = '<div style="color:var(--muted);padding:20px">Loading...</div>';
+  modal.classList.add('open');
+
+  fetch(`${BASE}/decision/${recordId}`)
+    .then(r => r.json())
+    .then(chain => {
+      if (chain.error) {
+        body.innerHTML = `<div style="color:var(--red)">${chain.error}</div>`;
+        return;
+      }
+      body.innerHTML = renderChain(chain);
+    })
+    .catch(err => {
+      body.innerHTML = `<div style="color:var(--red)">Fetch error: ${err.message}</div>`;
+    });
+}
+
+function closeChainModal() {
+  document.getElementById('chain-modal').classList.remove('open');
+}
+
+document.getElementById('chain-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeChainModal();
+});
+
+function renderChain(c) {
+  const row = (k, v, cls) => `<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val ${cls||''}">${v}</span></div>`;
+
+  const b = c.bridge_step || {};
+  const cal = c.calibration_step || {};
+  const p = c.pricing_step || {};
+  const ev = c.ev_step || {};
+  const pol = c.policy_step || {};
+
+  return `
+    <div style="color:var(--muted);font-size:11px;margin-bottom:12px">
+      Record: ${c.record_id || '–'}<br>
+      Market: ${c.market_id || '–'}<br>
+      Asset: ${c.asset || '–'} | ${shortTime(c.timestamp_utc)}<br>
+      Replay available: <span class="${c.replay_available ? 'val-green' : 'val-muted'}">${c.replay_available ? 'YES' : 'NO'}</span>
+    </div>
+
+    <div class="chain-step">
+      <div class="chain-step-header">Step 1 — Bridge Mapping</div>
+      ${row('Intent side', `<span class="badge ${b.intent_side==='YES'?'badge-exec-yes':'badge-exec-no'}">${b.intent_side||'–'}</span>`)}
+      ${row('Effective YES prob', fmt(b.effective_yes_prob))}
+      ${row('Effective NO prob', fmt(b.effective_no_prob))}
+      ${row('Context', b.mapping_context || '–')}
+    </div>
+
+    <div class="chain-step">
+      <div class="chain-step-header">Step 2 — Calibration</div>
+      ${row('Method', cal.method || '–')}
+      ${row('Quality', `<span class="${{good:'val-green',moderate:'val-accent',weak:'val-yellow',unknown:'val-muted'}[cal.quality]||'val-muted'}">${cal.quality||'–'}</span>`)}
+      ${row('Calibrated UP prob', fmt(cal.calibrated_up_prob))}
+      ${row('Calibrated DOWN prob', fmt(cal.calibrated_down_prob))}
+      ${row('Brier score', cal.brier_score !== null ? fmt(cal.brier_score) : '–')}
+      ${row('ECE', cal.ece !== null ? fmt(cal.ece) : '–')}
+    </div>
+
+    <div class="chain-step">
+      <div class="chain-step-header">Step 3 — Market Pricing Sanity</div>
+      ${row('Ask YES', fmt(p.ask_yes))}
+      ${row('Bid YES', fmt(p.bid_yes))}
+      ${row('Ask NO', fmt(p.ask_no))}
+      ${row('Bid NO', fmt(p.bid_no))}
+      ${row('Snapshot age', fmt(p.snapshot_age_seconds, 1) + 's', p.snapshot_age_seconds > 60 ? 'val-yellow' : '')}
+      ${row('Sanity notes', p.sanity_notes || '<span class="val-green">clean</span>')}
+    </div>
+
+    <div class="chain-step">
+      <div class="chain-step-header">Step 4 — EV / Edge Computation</div>
+      ${row('Gross EV', ev.gross_ev !== null ? fmt(ev.gross_ev) : '–')}
+      ${row('Net EV after fee', ev.net_ev_after_fee !== null ? fmt(ev.net_ev_after_fee) : '–')}
+      ${row('Execution-adjusted EV', ev.execution_adjusted_ev !== null ? `<span class="${parseFloat(ev.execution_adjusted_ev||0)>=0?'val-green':'val-red'}">${fmt(ev.execution_adjusted_ev)}</span>` : '–')}
+      ${row('Required threshold', ev.required_threshold !== null ? fmt(ev.required_threshold) : '–')}
+      ${row('Fill fraction', ev.fill_fraction !== null ? fmtPct(ev.fill_fraction) : '–')}
+    </div>
+
+    <div class="chain-step">
+      <div class="chain-step-header">Step 5 — Policy Gate</div>
+      ${row('Profile', pol.profile || '–')}
+      ${row('Passes final gate', `<span class="${pol.passes_final_gate?'val-green':'val-red'}">${pol.passes_final_gate?'YES':'NO'}</span>`)}
+      ${row('Final decision', decisionBadge(pol.final_decision))}
+      ${row('Rejection reason', pol.rejection_reason ? `<span style="color:var(--red)">${pol.rejection_reason}</span>` : '<span class="val-green">—</span>')}
+    </div>
+  `;
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+fetchSummary();
+setInterval(fetchSummary, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+Test Run Notes
+==============
+Date:           2026-03-16T12:00:00+00:00
+Command:        python -m pytest -v --tb=short --no-header
+Working dir:    project root
+Python:         3.14.3
+Exit code:      0
+
+Sprint Coverage: 8 new test files (entry window + NO-side diagnostics sprint)
+Total new tests: 181
+
+──────────────────────────────────────────────────────────────────────────────
+FILE BREAKDOWN
+──────────────────────────────────────────────────────────────────────────────
+
+1. tests/test_no_side_diagnostics.py — 26 tests
+   What it tests:
+   - SideDiagnostics.to_dict() roundtrip (default values, populated values,
+     title truncation to 60 chars, edge rounding to 6 decimal places)
+   - NoPriceSource classification: no_best_ask present → REAL_BOOK;
+     no_best_ask absent → SYNTHETIC; no_book_fetched flag matches presence;
+     no_token_id_present flag correctness
+   - no_best_ask=0.99 → NO_SIDE_UNTRADABLE classification (health check)
+   - no_best_ask=0.90 → NO_SIDE_BOOK_SUSPICIOUS classification
+   - No favorable edge with no_ask=0.45 → NO_EDGE_DOMINATES
+   - YES edge dominates when yes_edge > no_edge
+   - Both edges negative → BOTH_EDGES_NEGATIVE, no signal returned
+   - Diagnostics stored in _last_diagnostics for EVERY candidate market,
+     including rejected ones
+   - get_last_diagnostics() returns a copy; mutations do not affect internal state
+   - _last_diagnostics cleared at start of each analyze() cycle
+   - Edge arithmetic: yes_edge = bayesian_prob - yes_ask;
+     no_edge = no_prob - no_ask (real book); no_edge uses synthetic complement
+   - NO_REAL_BOOK_MISSING fires when source is SYNTHETIC and no_edge > yes_edge
+   Key behavioral assertions:
+   - A rejected market with no signal still appears in _last_diagnostics
+   - selected_direction == "NONE" when no trade fires
+   - direction_reason is set for every evaluated market
+
+2. tests/test_no_side_execution_path.py — 11 tests
+   What it tests:
+   - direction=YES → TradeSignal.token_id == yes_token_id (not no_token_id)
+   - direction=NO (favorable conditions) → TradeSignal.token_id == no_token_id
+   - NO direction requires REAL_BOOK source AND no_side_health == "OK"
+   - no_best_ask=0.99 → UNTRADABLE; signal is None (NO not selected)
+   - no_best_ask=0.91 → SUSPICIOUS; signal is None (NO not selected)
+   - no_best_ask missing (None key) → SYNTHETIC; NO must not be selected
+   - no_best_ask=None explicit → SYNTHETIC; signal is None
+   - TradeSignal.direction matches side_diagnostics.selected_direction for YES
+   - TradeSignal.direction matches side_diagnostics.selected_direction for NO
+   - Both edges negative → signal=None, diag.selected_direction="NONE"
+   - Regression guard: NO direction never accidentally uses yes_token_id
+   Key behavioral assertions:
+   - Yes/No token routing is correct at all code paths
+   - REAL_BOOK + health=OK is the strict gating condition for NO execution
+
+3. tests/test_shadow_live_side_consistency.py — 38 tests
+   What it tests:
+   - Live path and shadow path apply identical NO-pricing logic
+   - Real NO book present (0.45): both paths → REAL_BOOK, same numeric value
+   - No NO book (None key): live → SYNTHETIC (book not fetched),
+     shadow → SYNTHETIC; sources agree
+   - no_best_ask=0.99: both paths → REAL_BOOK / UNTRADABLE (live health check)
+   - no_best_ask=0 (zero falsy): both paths fall through to synthetic;
+     live → MISSING (book was fetched), shadow → SYNTHETIC
+   - mapping_context string format: no_src, no_ask, ew, dir_reason in correct order
+   - String inputs ("0", "0.45") coerced correctly in both paths
+   - Shadow synthetic price prefers bid_yes over ask_yes when bid > 0
+   Key behavioral assertions:
+   - Live and shadow never disagree on whether a book is REAL vs synthetic
+     for the same market data
+   - mapping_context always contains no_src field for audit trail
+
+4. tests/test_entry_window_policy.py — 17 tests
+   What it tests:
+   - parse_market_start_time for 5m and 15m questions
+   - START_TIME_MISSING when question has no time range
+   - 5m within window passes (10s before start)
+   - 5m too early rejects (2min before start)
+   - 5m too late rejects (3min after start)
+   - 15m within window passes (30s before start)
+   - 15m too early rejects (2min before start)
+   - 15m too late rejects (4min after start)
+   - ENTRY_WINDOW_UNAVAILABLE for unsupported horizon (30m)
+   - Custom policy overrides: tighter window (10s/20s) rejects where default passes
+   - Window bounds computed correctly (5m: opens 45s before, closes 90s after)
+   - Window bounds computed correctly (15m: opens 60s before, closes 180s after)
+   - seconds_to_start populated in result
+   - APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW via is_recheck_after_approval=True
+   - DEFAULT_ENTRY_WINDOW_POLICY has correct values (45/90 for 5m, 60/180 for 15m)
+   Key behavioral assertions:
+   - Window boundary is inclusive at both edges
+   - Recheck flag changes rejection enum without changing pass/fail outcome
+
+5. tests/test_entry_window_live_gate.py — 21 tests
+   What it tests:
+   - No market_question → entry_window check skipped (passes, reason="Kontrol atlandı")
+   - No entry_window_policy (None) → entry_window check skipped
+   - Within window at market start → entry_window passes, full gate passes
+   - Within window 30s before start → entry_window passes
+   - Within window 60s after start → entry_window passes
+   - Too early (120s before start) → entry_window fails, live gate blocked
+   - Too early: rejection enum value appears in check reason string
+   - Too late (200s after start) → entry_window fails, live gate blocked
+   - Too late: rejection enum value appears in check reason string
+   - Check named "entry_window" present in result.checks list
+   - Total checks count is always 11 (no entry_window args, within window, too early)
+   - result.blockers contains TOO_EARLY_FOR_ENTRY_WINDOW value
+   - result.blockers contains TOO_LATE_FOR_ENTRY_WINDOW value
+   - Recheck after approval + too late → APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW in reason
+   - Recheck after approval + too early → APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW in reason
+   - Boundary edge cases: exactly at window open passes, exactly at close passes,
+     1s before open fails, 1s after close fails
+   Key behavioral assertions:
+   - Entry window is check #9 of exactly 11; count never changes
+   - Rejection enum values propagate through to result.blockers for observability
+
+6. tests/test_5m_15m_timing_windows.py — 18 tests
+   What it tests:
+   - parse_market_start_time correct for 5m and 15m questions
+   - compute_horizon_minutes returns 5 for 5m, 15 for 15m
+   - 5m: 44s before start passes; 46s before start fails (TOO_EARLY)
+   - 5m: 89s after start passes; 91s after start fails (TOO_LATE)
+   - 15m: 59s before start passes; 61s before start fails (TOO_EARLY)
+   - 15m: 179s after start passes; 181s after start fails (TOO_LATE)
+   - Custom policy (30s/60s for 5m): pass at 29s, fail at 31s; pass at 59s, fail at 61s
+   - EntryWindowResult window_opens_at and window_closes_at metadata for 5m and 15m
+   - Horizon > 20m → ENTRY_WINDOW_UNAVAILABLE
+   - Default policy values match spec: 45/90 for 5m, 60/180 for 15m
+   Key behavioral assertions:
+   - Off-by-one boundary behavior is verified at ±1 second for all four edges
+   - Custom policy is fully independent of defaults with no shared state
+
+7. tests/test_approval_delay_recheck.py — 23 tests
+   What it tests:
+   - Normal check after window closes → TOO_LATE (not APPROVAL_DELAY)
+   - Recheck after approval delay, past window → APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW
+   - Normal check before window opens → TOO_EARLY (not APPROVAL_DELAY)
+   - Recheck after approval, still before window → APPROVAL_DELAY (edge case)
+   - Recheck within window → passes (is_recheck_after_approval=True does not block)
+   - Realistic scenario: initial check passes 20s before window close;
+     approval takes 100s; recheck at +100s → APPROVAL_DELAY
+   - Approval at 1s before close still passes
+   - Approval at 1s after close rejected with APPROVAL_DELAY
+   - reason string is non-empty on rejection
+   - live_gate: is_recheck_after_approval=True passes through to entry_window_guard
+   - Recheck within window: entry_window check passes in live gate
+   - Recheck past window: entry_window blocked with APPROVAL_DELAY in live gate
+   - Normal check past window: entry_window blocked with TOO_LATE in live gate
+   - Omitting is_recheck_after_approval defaults to False (TOO_LATE, not APPROVAL_DELAY)
+   Key behavioral assertions:
+   - The recheck flag changes only the rejection enum, not whether it passes/fails
+   - Operator can distinguish "window missed at submit time" from "approval took too long"
+
+8. tests/test_market_start_time_parsing.py — 27 tests
+   What it tests:
+   - parse_market_start_time: valid 5m and 15m windows, AM time, noon PM edge case,
+     midnight AM edge case, missing date → None, missing time → None,
+     malformed question → None, all months (January/June/December),
+     single-digit vs two-digit day, em-dash separator
+   - parse_market_times: valid 5m (start and end), valid 15m, AM round-trip,
+     bad input → (None, None), missing date → (None, None), em-dash separator
+   - compute_horizon_minutes: 5m, 15m, AM 5m, unparseable → None,
+     missing time → None, empty string → None, em-dash variant
+   Key behavioral assertions:
+   - ET = UTC-4 offset applied consistently (7:10PM ET → 23:10 UTC)
+   - 12-hour AM/PM edge cases (12:00PM=noon, 12:00AM=midnight) handled correctly
+   - em-dash (U+2013) accepted as range separator alongside ASCII hyphen
+
+──────────────────────────────────────────────────────────────────────────────
+SUMMARY
+──────────────────────────────────────────────────────────────────────────────
+
+New test files:     8
+New test count:   181
+  test_no_side_diagnostics.py        26
+  test_no_side_execution_path.py     11
+  test_shadow_live_side_consistency.py  38
+  test_entry_window_policy.py        17
+  test_entry_window_live_gate.py     21
+  test_5m_15m_timing_windows.py      18
+  test_approval_delay_recheck.py     23
+  test_market_start_time_parsing.py  27
+
+Coverage themes:
+  1. NO-side execution path correctness and token routing
+  2. Forensic diagnostics stored for every market evaluated (not just trades)
+  3. Shadow/live path consistency for NO-price derivation
+  4. Entry window guard: start-time-based, not end-time-based
+  5. 5m vs 15m policy differences enforced at the second boundary
+  6. Approval delay pushes signal past window → APPROVAL_DELAY_PUSHED_OUT_OF_WINDOW
+  7. Market title parsing: AM/PM, 12h edge cases, em-dash, month names
+
+All 181 tests pass. No skips in new files.

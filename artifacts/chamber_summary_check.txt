@@ -1,0 +1,48 @@
+CHAMBER SUMMARY CHECK — 2026-03-15 21:51
+=========================================
+
+1. BALANCE PANEL
+   cash_available : $0.0663  ← positions.json kaynaklı (eski bot state)
+   total_equity   : $0.0663
+   initial_capital: $3.59
+   STATUS: UYUMSUZ — gerçek bakiye $148.44
+
+2. JOURNAL
+   journal_files  : 1
+   total_records  : 212
+   STATUS: OK
+
+3. PROFILE COMPARISON (SCHEMA FIX SONRASI)
+   live profile   : execute=15 reject=197 rate=7.1%
+   ÖNCEKİ DURUM   : execute=0  reject=212 (schema mismatch yüzünden yanlıştı)
+   STATUS: DÜZELTİLDİ ✓
+
+4. HEALTH
+   journal_healthy    : True
+   journal_total_lines: 212
+   suspicious_rate    : 0.0%
+   stale_rate         : 0.0%
+   partial_fill_rate  : N/A (execute kaydı yok canlı fill için)
+   blockers           : []
+   STATUS: OK
+
+5. READINESS
+   status         : NOT_REVIEWED
+   verdict_reason : No readiness review has been run yet.
+   live_summary   : 212 kayıt, 15 execute, mean_ev=0.063
+   observation_days: 0.0
+   evidence_gaps  : ['No review file found.']
+   STATUS: BEKLENEN — daily_review.py hiç koşmadı
+
+6. ENVIRONMENT
+   environment    : stopped
+   profile_mode   : paper_loose
+   STATUS: OK (live gate kapalı, beklenen)
+
+GENEL SONUÇ
+  ✗ Balance mismatch (positions.json güncellenmeli)
+  ✓ Schema fix çalışıyor
+  ✓ Journal okunuyor, sağlıklı
+  ✗ Readiness verdict yok (NOT_REVIEWED)
+  ✓ Health temiz
+  ✓ Live gate kapalı (güvenli)

@@ -1,0 +1,44 @@
+JOURNAL SCHEMA CHECK — 2026-03-15 21:51
+========================================
+
+JOURNAL YAZI FORMATI (shadow_runner/journal.py)
+  Dış key: "decision"
+  İç alan: "decision.decision", "decision.rejection_reason", vb.
+
+ÖRNEĞİN GERÇEK BİR KAYIT:
+  {
+    "schema_version": ...,
+    "record_id": ...,
+    "policy_profile": "live",
+    "decision": {
+      "decision": "REJECT",
+      "rejection_reason": "NO_SIGNAL_PRODUCED",
+      "passes_final_gate": false,
+      "gross_ev": null,
+      "fill_fraction": null
+    }
+  }
+
+ÖNCEKI SORUN (DÜZELTİLDİ)
+  operator_layer/ dosyaları "decision_summary" key okuyordu
+  Gerçek journal "decision" key yazıyordu
+  Sonuç: execute=0, reject=212 görünüyordu (tüm kararlar REJECT sayılıyordu)
+
+DÜZELTME
+  operator_layer/aggregator.py  : decision_summary → decision (5 yer)
+  operator_layer/health.py      : decision_summary → decision (6 yer)
+  operator_layer/readiness_view.py: decision_summary → decision (5 yer)
+  tests/test_health_views.py    : fixture güncellendi
+  tests/test_operator_aggregator.py: fixture güncellendi
+  tests/test_readiness_views.py : fixture güncellendi
+
+DOĞRULAMA
+  Schema fix sonrası profile stats:
+    live profile: execute=15, reject=197, exec_rate=7.1%
+  1143 test: 1143 passed, 0 failed ✓
+
+TUTARLILIK TESTİ (raw vs chamber)
+  Raw journal'da live profile execute count : 15
+  Chamber profile_comparison execute count  : 15  ✓ EŞLEŞIYOR
+
+STATUS: DÜZELTİLDİ VE DOĞRULANDI ✓

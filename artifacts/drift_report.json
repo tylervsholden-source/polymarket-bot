@@ -1,0 +1,30 @@
+{
+  "_note": "SYNTHETIC",
+  "generated_utc": "2026-03-15T20:00:00+00:00",
+  "baseline_window_size": 30,
+  "current_window_size": 30,
+  "profiles_checked": [
+    "live",
+    "paper_strict",
+    "paper_loose"
+  ],
+  "rejection_rate_delta": {
+    "live": 0.017,
+    "paper_strict": 0.008,
+    "paper_loose": -0.01
+  },
+  "ev_mean_delta": {
+    "live": -0.002
+  },
+  "divergence": [
+    {
+      "profile_a": "live",
+      "profile_b": "paper_loose",
+      "total_shared": 30,
+      "agreement_count": 22,
+      "divergence_rate": 0.267
+    }
+  ],
+  "alerts": [],
+  "drift_detected": false
+}

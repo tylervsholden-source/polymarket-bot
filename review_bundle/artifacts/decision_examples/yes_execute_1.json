@@ -1,0 +1,23 @@
+{
+  "type": "YES_EXECUTE",
+  "market_title": "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET",
+  "horizon": "5m",
+  "asset": "BTCUSDT",
+  "bayesian_prob": 0.62,
+  "yes_best_ask": 0.55,
+  "yes_best_bid": 0.53,
+  "yes_edge": 0.07,
+  "no_best_ask": 0.99,
+  "no_best_bid": 0.01,
+  "no_edge": -0.61,
+  "no_price_source": "REAL_BOOK",
+  "no_side_health": "UNTRADABLE",
+  "direction": "YES",
+  "direction_reason": "YES_EDGE_DOMINATES",
+  "token_id_used": "yes_token_id",
+  "entry_price": 0.548,
+  "size_usd": 12.50,
+  "entry_window_status": "PASS",
+  "live_gate_passed": true,
+  "note": "Typical case: YES edge positive at 0.07, NO book untradable at 0.99 (real book present but effectively dead). YES_EDGE_DOMINATES fires because yes_edge >= no_edge and yes_edge > 0."
+}

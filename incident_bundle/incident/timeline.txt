@@ -1,0 +1,115 @@
+INCIDENT TIMELINE — 2026-03-15
+All timestamps UTC unless noted. Local = UTC+3 (Türkiye).
+======================================================================
+
+PRE-INCIDENT (EARLIER SESSION)
+----------------------------------------------------------------------
+~16:48 UTC  Shadow journal starts recording. Bot ran earlier.
+19:20:25 UTC  daily_review.py ran → readiness_verdict.json written.
+              Verdict: TINY_PILOT_CANDIDATE (manually overridden by operator
+              from INSUFFICIENT_EVIDENCE to authorize pilot).
+              READINESS_MAX_AGE_HOURS=26 → file valid until ~21:20 next day.
+
+INCIDENT DAY — SESSION RESTART
+----------------------------------------------------------------------
+21:58:42 UTC  BOT INSTANCE A started (python main.py).
+              "Bot canlı modda başlatılıyor..."
+              LIVE_TRADING_ENABLED=true in .env, live_trading=true in control.json.
+              readiness_verdict.json EXISTS with TINY_PILOT_CANDIDATE.
+              → _is_live_trading() should have returned TRUE.
+              BUT: Log shows "readiness_verdict.json bulunamadı" warnings.
+              ANOMALY: File existed from 19:20, yet bot at 21:58 reports NOT FOUND.
+              Possible explanation: Bot A started with a working directory where the
+              absolute path resolution in _readiness_clears_live() pointed elsewhere.
+
+21:58-22:22 UTC  Bot A runs in SIM mode (readiness gate blocking).
+              Multiple "[SIM]" trades logged. No real orders placed by Bot A.
+
+22:20:34 UTC  BOT INSTANCE B started (python main.py — second terminal/process).
+              Web dashboard started on port 8080.
+              Synced $148.4395 USDC from Polymarket.
+              Polymarket positions API returned old Solana position →
+              "Polymarket'tan 1 açık pozisyon senkronize edildi."
+              → positions.json["positions"] now has 1 entry.
+              Cycle #1: "Max pozisyon limitinde (1/1)." → BLOCKED.
+
+22:21:38 UTC  Bot B Cycle #2: BLOCKED ("Max pozisyon limitinde 1/1").
+22:22:38 UTC  Bot B Cycle #3: BLOCKED ("Max pozisyon limitinde 1/1").
+
+INCIDENT TRIGGER
+----------------------------------------------------------------------
+22:23:30 UTC  BOT INSTANCE C started (python main.py — third process).
+              CLOB client initialized. Balance synced: $148.4395.
+              NOTE: No "Polymarket'tan X açık pozisyon senkronize edildi" message.
+              → positions.json["positions"] was EMPTY for this instance.
+              (Either the file was cleared between 22:22 and 22:23, or
+               the sync ran but returned no matching positions.)
+              _is_live_trading() → TRUE:
+                LIVE_TRADING_ENABLED=true ✓
+                control.json live_trading=true ✓
+                readiness_verdict.json TINY_PILOT_CANDIDATE ✓ (3h old, max 26h)
+              open_count=0 < max_open_positions=1 → NOT blocked.
+
+FIRST REAL ORDER
+22:23:36 UTC  ORDER #1 PLACED (REAL):
+              Market: "Ethereum Up or Down - March 15, 3PM ET"
+              Direction: YES
+              Amount: $10.39 @ 0.855
+              Order ID: 0x988f3df0c0ad5cd3a8c7b3d41211c1bffbbab9a5459b108db2898ea1fd790e37
+              Immediately closed: market price=0.855, PnL=$0.00, Result=NEUTRAL.
+              [RE-ENTRY LOOP BEGINS: closed in same cycle, next cycle picks same market]
+
+22:24:40 UTC  ORDER #2 PLACED (REAL — re-entry loop):
+              Market: "Ethereum Up or Down - March 15, 3PM ET" (SAME MARKET)
+              Direction: YES
+              Amount: $10.39 @ 0.855
+              Order ID: 0x747735f5d7fb2c55a5280ecbfcc62dcf432a01ca8822cdab19f4069bbe0fe6e8
+              Immediately closed: PnL=$0.00, Result=NEUTRAL.
+
+22:25:45 UTC  ORDER #3 PLACED (REAL):
+              Market: "Solana Up or Down - March 15, 3:30PM-3:45PM ET"
+              Direction: YES
+              Amount: $10.39 @ 0.49
+              Order ID: 0xc63ac4edba761e2ec38ea9a4b15dedf64ea4d2bb04b4bff4f5a885b9901394b0
+              Immediately closed: PnL=$0.00, Result=NEUTRAL.
+
+22:26:50 UTC  ORDER #4 PLACED (REAL — EXPIRED MARKET):
+              Market: "Dogecoin Up or Down - March 15, 12:00PM-4:00PM ET"
+              This market ENDED at 4:00PM ET = 21:00 UTC. Bot placed order 97 minutes LATE.
+              Amount: $10.39 @ 0.30
+              Order ID: 0xb48ac04a18dcd8ad5deb338cbdfe52bc83d82a92d8be0752fc599107863f54ba
+              Immediately closed.
+
+22:27:54 UTC  ORDER #5 PLACED (REAL — EXPIRED MARKET, RE-ENTRY LOOP):
+              Market: "Dogecoin Up or Down - March 15, 12:00PM-4:00PM ET" (SAME)
+              Amount: $10.39 @ 0.30
+              Order ID: 0xac527e0aeac022969279e61ea740f3f56b877eb9142366db1b836f33caca2ff8
+
+22:29:00 UTC  ORDER #6 PLACED (REAL — EXPIRED MARKET, RE-ENTRY LOOP):
+              Market: "Dogecoin Up or Down - March 15, 12:00PM-4:00PM ET" (SAME)
+              Amount: $10.39 @ 0.30
+              Order ID: 0x837caaedbd31f780023eb694586a9cb697798b01ef67cc21e7e488e8b0221de2
+
+22:30:06 UTC  ORDER #7 PLACED (REAL — EXPIRED MARKET, RE-ENTRY LOOP):
+              Market: "Dogecoin Up or Down - March 15, 12:00PM-4:00PM ET" (SAME)
+              Amount: $10.39 @ 0.30
+              Order ID: 0xfdbfcc218ff9efccea5cb1cb2954df20d0bbdc7b7caa82f0bee48dddd9193982
+
+22:30:38 UTC  Bot B Cycle #11: still "Max pozisyon limitinde (1/1)". Still running.
+
+MITIGATION
+----------------------------------------------------------------------
+~22:44 UTC    Operator (user) noticed incident. Investigation began.
+22:4x UTC     control.json live_trading set to false (by Claude Code / operator).
+              All further cycles will be SIM-only.
+
+FINANCIAL IMPACT
+----------------------------------------------------------------------
+7 real orders × $10.39 = $72.73 USDC committed.
+Starting capital: $148.44
+positions.json capital now: $138.056 (difference: ~$10.38)
+NOTE: Most orders were placed on already-expired or near-resolution markets.
+      Actual fund loss TBD — depends on Polymarket resolution results.
+
+======================================================================
+END OF TIMELINE

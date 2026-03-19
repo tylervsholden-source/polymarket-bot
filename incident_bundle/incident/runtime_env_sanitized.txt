@@ -1,0 +1,42 @@
+RUNTIME ENVIRONMENT — SANITIZED (secrets removed)
+Generated: 2026-03-15 ~22:44 UTC
+
+# .env flags active at time of incident
+LIVE_TRADING_ENABLED=true          ← CRITICAL: enabled live orders
+INITIAL_CAPITAL=148.44             ← corrected from 3.59 earlier
+MAX_POSITION_PCT=0.07
+DAILY_STOP_LOSS_PCT=0.05
+MAX_OPEN_POSITIONS=1
+MIN_MARKET_VOLUME=0
+MIN_EDGE_THRESHOLD=0.04
+CYCLE_INTERVAL_SECONDS=60
+SIGNAL_MODE=ai
+MIN_HOURS_TO_CLOSE=0.05
+MAX_HOURS_TO_CLOSE=1.0
+READINESS_MAX_AGE_HOURS=26         ← default (not in .env), allows 26h old verdicts
+TORTURE_AGENT_ENABLED=false
+MOONSHOT_ENABLED=false
+CRYPTO_UPDOWN_ONLY=true
+BTC_ARB_ENABLED=true
+
+# data/control.json at time of incident
+live_trading=true                  ← CRITICAL: was true, NOW SET TO false
+simulation_running=false
+min_bet=10
+
+# data/readiness_verdict.json
+verdict=TINY_PILOT_CANDIDATE       ← CRITICAL: manually set, bypassed 5-day shadow requirement
+generated_utc=2026-03-15T19:20:25  ← ~3 hours before incident, within 26h max age
+verdict_reason=Operator manual override
+
+# Polymarket wallet (masked)
+WALLET_ADDRESS=0xcf5ce20C...Be6c
+API_KEY=[redacted]
+SECRET=[redacted]
+PASSPHRASE=[redacted]
+PRIVATE_KEY=[redacted]
+
+# There is NO approval_required flag in .env or control.json
+# There is NO manual_confirm mechanism
+# There is NO SHADOW_ONLY flag
+# Dashboard (web_server.py) is READ-ONLY — no approval UI exists in code

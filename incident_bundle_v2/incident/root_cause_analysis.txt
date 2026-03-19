@@ -1,0 +1,96 @@
+=== ROOT CAUSE ANALYSIS — INC-2026-03-15-001 ===
+
+OLAY: 7 yetkisiz emir, $72.73 nominal, $10.39 gerçek kayıp
+TARİH: 2026-03-15, 22:23-22:31 UTC+3
+CLOB BAKİYE: $148.44 → $138.056
+
+═══════════════════════════════════════════════════
+KÖKSEL NEDENLER (5 tanesi, önem sırasıyla)
+═══════════════════════════════════════════════════
+
+1. ÇİFT INSTANCE (EN KRİTİK)
+   ─────────────────────────────
+   İki ayrı bot süreci aynı anda çalıştı.
+   - Instance A: Yeni, cooldown sıfır, 10000 market tarıyor
+   - Instance B: Eski, max_positions=1, skip ediyor
+   
+   KANIT: Log'da iç içe geçmiş döngü numaraları
+   22:23:38 Döngü #4 / 22:24:37 Döngü #2 (farklı sequence)
+   
+   PID lock mekanizması YOKTU.
+   
+   DÜZELTME: main.py'ye PID dosyası lock eklendi ✓
+
+2. APPROVAL MEKANİZMASI YOKTU
+   ─────────────────────────────
+   orchestrator.py doğrudan place_order() çağırıyordu.
+   Sinyal → Emir arasında HİÇBİR insan onayı yoktu.
+   
+   DÜZELTME: approval_queue.py eklendi ✓
+   Artık: Sinyal → pending_orders.json → Dashboard onay → Execute
+
+3. AYNI MARKET'E TEKRAR TEKRAR EMİR (RE-ENTRY LOOP)
+   ────────────────────────────────────────────────────
+   Bot aynı döngüde:
+   a) ETH market'e emir verdi
+   b) update_positions ile hemen kapattı (market expired algıladı)
+   c) Sonraki döngüde aynı market'e tekrar emir verdi
+   
+   Neden: Pozisyon açılıp aynı saniyede kapatılınca,
+   max_positions limiti hiç dolmuyordu.
+   Cooldown mekanizması yoktu.
+   
+   DÜZELTME: 
+   - Per-market cooldown (data/market_cooldowns.json) ✓
+   - _session_closed_markets set'i ✓
+   - Rate limiter (MAX_ORDERS_PER_HOUR=3) ✓
+
+4. EXPIRED MARKET FİLTRESİ EKSİKTİ
+   ──────────────────────────────────
+   _hours_to_close() expired market'ler için None dönüyordu.
+   _pre_filter sadece `h is None`'ı kontrol ediyordu.
+   
+   Sonuç: Expired market'ler (negatif saat) filtreyi geçti.
+   
+   DÜZELTME:
+   - _hours_to_close() artık negatif döner ✓
+   - _pre_filter `h <= 0` kontrolü eklendi ✓
+   - _evaluate_market `time_remaining <= 0 → return None` ✓
+
+5. READINESS GATE BYPASS
+   ──────────────────────
+   readiness_verdict.json "TINY_PILOT_CANDIDATE" idi.
+   "max 1 position, max 10 USDT" kuralı orchestrator'a wired DEĞİLDİ.
+   Verdict yazıldı ama enforce edilmedi.
+   
+   DÜZELTME: READINESS_MAX_AGE_HOURS=12'ye düşürüldü ✓
+
+═══════════════════════════════════════════════════
+OLAY AKIŞI (EXECUTION PATH)
+═══════════════════════════════════════════════════
+
+1. orchestrator._cycle() çağrıldı
+2. _pre_filter → expired market'ler geçti (h=None sorunu)
+3. arbitrage_engine._evaluate_market → edge > 0.04 buldu (düşük threshold)
+4. _cycle sinyali aldı, `_is_live_trading()` → True (control.json)
+5. Direkt `place_order()` çağrıldı (approval yok)
+6. Emir CLOB'a gitti
+7. update_positions hemen çalıştı → pozisyon kapandı (expired market)
+8. Sonraki döngüde aynı market tekrar aday oldu (cooldown yok)
+9. Döngü tekrarlandı: 7 emir, 7 dakikada
+
+═══════════════════════════════════════════════════
+YAPILAN DÜZELTMELERİN DURUM TABLOSU
+═══════════════════════════════════════════════════
+
+[✓] PID lock file (main.py)
+[✓] Approval queue (core/approval_queue.py)
+[✓] Dashboard onay UI (web/index.html)
+[✓] Per-market cooldown (data/market_cooldowns.json)
+[✓] Rate limiter (MAX_ORDERS_PER_HOUR)
+[✓] Expired market 3-katmanlı filtre
+[✓] LIVE_TRADING_ENABLED=false default
+[✓] READINESS_MAX_AGE_HOURS=12
+[✓] 2 LIVE ETH emri CLOB'dan iptal edildi
+[✓] positions.json PnL verileri CLOB ile reconcile edildi
+[✓] Dashboard stale data fix (positions.json'dan okuma)

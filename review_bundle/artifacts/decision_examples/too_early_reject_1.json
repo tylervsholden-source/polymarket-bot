@@ -1,0 +1,22 @@
+{
+  "type": "TIMING_REJECT",
+  "reject_reason": "TOO_EARLY_FOR_ENTRY_WINDOW",
+  "market_title": "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET",
+  "horizon": "5m",
+  "asset": "BTCUSDT",
+  "market_start_utc": "2026-03-16T23:10:00+00:00",
+  "now_utc": "2026-03-16T23:07:50+00:00",
+  "seconds_to_start": 130.0,
+  "window_opens_at": "2026-03-16T23:09:15+00:00",
+  "window_closes_at": "2026-03-16T23:11:30+00:00",
+  "entry_window_policy": {
+    "horizon": "5m",
+    "entry_before_start_sec": 45,
+    "entry_after_start_sec": 90
+  },
+  "seconds_before_window_opens": 85.0,
+  "entry_window_status": "FAIL",
+  "live_gate_passed": false,
+  "direction": "NONE",
+  "note": "Signal fired 2m10s before market start, which is 85s before the window opens (window opens 45s before start). Live gate check #9 (entry_window) rejects with TOO_EARLY_FOR_ENTRY_WINDOW. Orchestrator does not enqueue to approval queue — signal is discarded."
+}

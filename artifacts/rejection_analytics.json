@@ -1,0 +1,31 @@
+{
+  "_note": "SYNTHETIC",
+  "generated_utc": "2026-03-15T20:00:00+00:00",
+  "profile": "live",
+  "total_evaluated": 60,
+  "total_rejected": 43,
+  "rejection_rate": 0.717,
+  "reason_breakdown": {
+    "LOW_EDGE": {
+      "count": 24,
+      "pct": 55.8
+    },
+    "LOW_CALIBRATION_CONFIDENCE": {
+      "count": 6,
+      "pct": 14.0
+    },
+    "STALE_PRICING": {
+      "count": 5,
+      "pct": 11.6
+    },
+    "LOW_PROB_SUM": {
+      "count": 4,
+      "pct": 9.3
+    },
+    "LOW_LIQUIDITY": {
+      "count": 4,
+      "pct": 9.3
+    }
+  },
+  "interpretation": "LOW_EDGE dominates at 55.8% \u2014 market prices are close to model estimates. Normal for a tight live policy."
+}

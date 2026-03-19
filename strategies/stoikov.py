@@ -75,5 +75,8 @@ class StoikovExecutor:
         """
         mid = (ask_price + bid_price) / 2.0
         r = self.reservation_price(mid, inventory, volatility, time_remaining)
+        # Agresif giriş: ask'a %80 yakın (mid yerine) — dolma oranını artır
+        aggressive_r = mid + (ask_price - mid) * 0.80
+        r = max(r, aggressive_r)
         # Clamp to within the spread — don't cross the ask
         return round(min(ask_price, max(bid_price, r)), 4)

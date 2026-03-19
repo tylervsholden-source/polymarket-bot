@@ -1,0 +1,14 @@
+{
+  "_note": "SYNTHETIC \u2014 represents initial 100 USDT state before first trade",
+  "timestamp_utc": "2026-03-15T20:00:00+00:00",
+  "total_capital_usdc": 100.0,
+  "cash_available_usdc": 100.0,
+  "capital_committed_usdc": 0.0,
+  "unrealized_pnl_usdc": 0.0,
+  "realized_pnl_day_usdc": 0.0,
+  "realized_pnl_total_usdc": 0.0,
+  "total_equity_usdc": 100.0,
+  "active_positions_count": 0,
+  "daily_stop_loss_threshold_usdc": 15.0,
+  "blocked_reason": null
+}

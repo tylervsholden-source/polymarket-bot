@@ -1,0 +1,162 @@
+[
+  {
+    "market_title": "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": true,
+    "blocking_checks": [],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=47.3s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "All 11 checks passed. YES edge 0.112, real book NO side confirmed. Order submitted."
+  },
+  {
+    "market_title": "Ethereum Up or Down - March 16, 7:15PM-7:30PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": true,
+    "blocking_checks": [],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=62.1s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "NO",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "All 11 checks passed. NO edge 0.138, real book present. NO-side order submitted."
+  },
+  {
+    "market_title": "Solana Up or Down - March 16, 7:20PM-7:25PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": true,
+    "blocking_checks": [],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=38.7s within [10, 120] window"
+    },
+    "no_side_status": "SUSPICIOUS",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "All 11 checks passed. YES-side trade only; NO-side synthetic price flagged but not blocking for YES direction."
+  },
+  {
+    "market_title": "Solana Up or Down - March 16, 8:10PM-8:25PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": true,
+    "blocking_checks": [],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=83.5s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "All 11 checks passed. 15m horizon, YES edge 0.124, healthy order book. Order submitted."
+  },
+  {
+    "market_title": "Bitcoin Up or Down - March 16, 8:15PM-8:20PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": true,
+    "blocking_checks": [],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=66.0s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "All 11 checks passed. YES edge 0.048 borderline but above min_edge=0.04 threshold. Order submitted."
+  },
+  {
+    "market_title": "DOGE Up or Down - March 16, 8:05PM-8:10PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": false,
+    "blocking_checks": ["entry_window"],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": false,
+      "reason": "time_to_start=4.1s below minimum 10s — TOO_EARLY, order book may not be populated"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "Blocked at live gate: entry window check failed (too early). Decision logged as REJECT/TOO_EARLY."
+  },
+  {
+    "market_title": "Ethereum Up or Down - March 16, 8:05PM-8:10PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": false,
+    "blocking_checks": ["entry_window"],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": false,
+      "reason": "time_to_start=-12.7s negative — TOO_LATE, market window already started"
+    },
+    "no_side_status": "OK",
+    "direction": "NO",
+    "capital_check_passed": true,
+    "rate_limit_passed": true,
+    "notes": "Blocked at live gate: entry window check failed (too late). Cycle lag caused late evaluation. Decision logged as REJECT/TOO_LATE."
+  },
+  {
+    "market_title": "XRP Up or Down - March 16, 8:20PM-8:25PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": false,
+    "blocking_checks": ["rate_limit"],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=52.3s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": true,
+    "rate_limit_passed": false,
+    "notes": "Blocked at live gate: rate limit exceeded — 3 orders submitted within last 60s, cooldown active. Will retry next cycle if window still valid."
+  },
+  {
+    "market_title": "BNB Up or Down - March 16, 8:25PM-8:30PM ET",
+    "reached_live_gate": true,
+    "live_gate_passed": false,
+    "blocking_checks": ["capital"],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": true,
+      "reason": "time_to_start=77.8s within [10, 120] window"
+    },
+    "no_side_status": "OK",
+    "direction": "YES",
+    "capital_check_passed": false,
+    "rate_limit_passed": true,
+    "notes": "Blocked at live gate: available_capital=$3.21 below min_bet=$5.00. 5 open positions consuming most of portfolio. Decision deferred."
+  },
+  {
+    "market_title": "BNB Up or Down - March 16, 7:45PM-7:50PM ET",
+    "reached_live_gate": false,
+    "live_gate_passed": false,
+    "blocking_checks": ["no_side_untradable"],
+    "entry_window_check": {
+      "name": "entry_window",
+      "passed": false,
+      "reason": "never evaluated — ArbitrageEngine returned None before live gate"
+    },
+    "no_side_status": "UNTRADABLE",
+    "direction": "NONE",
+    "capital_check_passed": false,
+    "rate_limit_passed": false,
+    "notes": "ArbitrageEngine returned None: no_side token had no real book and synthetic price unavailable (MISSING). Decision dropped before reaching live gate. Logged as REJECT/REAL_BOOK_MISSING."
+  }
+]

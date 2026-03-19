@@ -1,0 +1,23 @@
+{
+  "type": "YES_EXECUTE",
+  "market_title": "Ethereum Up or Down - March 16, 7:00PM-7:15PM ET",
+  "horizon": "15m",
+  "asset": "ETHUSDT",
+  "bayesian_prob": 0.68,
+  "yes_best_ask": 0.58,
+  "yes_best_bid": 0.56,
+  "yes_edge": 0.10,
+  "no_best_ask": 0.44,
+  "no_best_bid": 0.42,
+  "no_edge": -0.26,
+  "no_price_source": "REAL_BOOK",
+  "no_side_health": "OK",
+  "direction": "YES",
+  "direction_reason": "YES_EDGE_DOMINATES",
+  "token_id_used": "yes_token_id",
+  "entry_price": 0.576,
+  "size_usd": 18.75,
+  "entry_window_status": "PASS",
+  "live_gate_passed": true,
+  "note": "15m ETH market: both YES and NO real books present, NO book is healthy at 0.44, but yes_edge=0.10 dominates no_edge=-0.26. Larger position due to stronger edge signal."
+}

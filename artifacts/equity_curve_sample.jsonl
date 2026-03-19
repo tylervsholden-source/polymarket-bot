@@ -1,0 +1,6 @@
+{"_note": "SYNTHETIC \u2014 3-day hypothetical pilot trajectory"}
+{"ts": "2026-03-13T20:00:00+00:00", "equity_usdc": 100.0, "open_positions": 0, "realized_pnl_usdc": 0.0}
+{"ts": "2026-03-14T08:00:00+00:00", "equity_usdc": 100.48, "open_positions": 1, "realized_pnl_usdc": 0.0}
+{"ts": "2026-03-14T20:00:00+00:00", "equity_usdc": 101.11, "open_positions": 0, "realized_pnl_usdc": 0.63}
+{"ts": "2026-03-15T08:00:00+00:00", "equity_usdc": 100.8, "open_positions": 1, "realized_pnl_usdc": 0.63}
+{"ts": "2026-03-15T20:00:00+00:00", "equity_usdc": 101.74, "open_positions": 0, "realized_pnl_usdc": 1.74}

@@ -1,0 +1,41 @@
+{
+  "_note": "SYNTHETIC \u2014 current state: insufficient evidence (shadow running ~1 day)",
+  "generated_utc": "2026-03-15T20:00:00+00:00",
+  "verdict": "INSUFFICIENT_EVIDENCE",
+  "evidence_sufficient": false,
+  "verdict_reason": "Insufficient shadow evidence: Need 100 evaluated decisions; have 60. Need 5.0 observation days; have 1.0.",
+  "blockers": [],
+  "fails": [],
+  "warns": [],
+  "checks": [],
+  "evidence_result": {
+    "live_like_evaluated": 60,
+    "live_like_executes": 17,
+    "live_like_rejects": 43,
+    "observation_days": 1.0,
+    "gaps": [
+      {
+        "dimension": "live_like_evaluated",
+        "required": 100,
+        "actual": 60,
+        "message": "Need 100 evaluated decisions; have 60."
+      },
+      {
+        "dimension": "observation_days",
+        "required": 5.0,
+        "actual": 1.0,
+        "message": "Need 5.0 calendar days; have 1.0."
+      }
+    ]
+  },
+  "pilot_constraints": {
+    "max_open_positions": 1,
+    "pilot_asset": "BTC",
+    "pilot_horizon_minutes": 15,
+    "max_nominal_usdc": 10.0,
+    "daily_max_loss_usdc": 5.0,
+    "single_loss_kill_usdc": 3.0,
+    "mandatory_review_hours": 24,
+    "pilot_evaluation_days": 3
+  }
+}

@@ -78,8 +78,9 @@ def _volume_multiplier(volume_ratio: float) -> float:
     Research: volume spikes are the strongest confirmation signal for momentum.
     Log scale (old approach) fails to differentiate 3x from 10x volume.
     """
-    if volume_ratio < 0.3:   return 0.25   # very low: suspicious, don't trust signal
-    elif volume_ratio < 0.6: return 0.50   # below normal: weak confirmation
+    if volume_ratio < 0.1:   return 0.15   # neredeyse sıfır: veri yok, sinyal güvenilmez
+    elif volume_ratio < 0.3: return 0.50   # very low: dikkatli ol ama sinyal var
+    elif volume_ratio < 0.6: return 0.75   # below normal: 5m candle'da normal dalgalanma
     elif volume_ratio < 1.2: return 1.00   # normal volume: neutral
     elif volume_ratio < 2.0: return 1.30   # slightly elevated: moderate confirm
     elif volume_ratio < 4.0: return 1.60   # high volume spike: strong confirm
@@ -95,12 +96,11 @@ def _news_lag_multiplier(spot_change_pct: float) -> float:
     Source: 2025 prediction market research — ~30-120s repricing lag.
     """
     abs_change = abs(spot_change_pct)
-    if abs_change < 0.15:  return 1.0    # tiny move: no boost
-    elif abs_change < 0.3: return 1.15   # small move: mild boost
-    elif abs_change < 0.5: return 1.30   # moderate move: moderate boost
-    elif abs_change < 1.0: return 1.50   # notable move: strong boost (market lagging)
-    elif abs_change < 2.0: return 1.80   # large move: very high confidence
-    else:                  return 2.00   # extreme move: maximum lag exploitation
+    if abs_change < 0.30:  return 1.0    # küçük hareket: boost yok (önceki: 0.15)
+    elif abs_change < 0.5: return 1.10   # orta hareket: hafif boost (önceki: 1.30)
+    elif abs_change < 1.0: return 1.25   # belirgin hareket: orta boost (önceki: 1.50)
+    elif abs_change < 2.0: return 1.50   # büyük hareket: güçlü boost (önceki: 1.80)
+    else:                  return 1.75   # aşırı hareket: max boost (önceki: 2.00)
 
 
 class BayesianEstimator:
@@ -113,6 +113,19 @@ class BayesianEstimator:
         rsi: float = 50.0,            # RSI(14) — 0-100
         volume_ratio: float = 1.0,    # Current candle vol / avg vol
         related_market_delta: float = 0.0,
+        macd_hist: float = 0.0,       # MACD(3,15,3) histogram value
+        leader_bias: float = 0.0,     # BTC+ETH 4h regime bias
+        # ── New technical indicators ──
+        bb_pos: float = 0.5,          # Bollinger position (0=lower, 1=upper)
+        bb_width: float = 0.0,        # Bollinger width (squeeze detection)
+        ema_cross: float = 0.0,       # EMA 9/21 cross (% normalized)
+        atr_pct: float = 0.0,         # ATR as % of price
+        stoch_k: float = 50.0,        # Stochastic RSI %K
+        sr_position: float = 0.5,     # Support/Resistance position (0=support, 1=resistance)
+        vwap_dev: float = 0.0,        # VWAP deviation (%)
+        ichi_signal: float = 0.0,     # Ichimoku cloud signal [-1, 1]
+        ichi_tk_cross: float = 0.0,   # Ichimoku Tenkan/Kijun cross
+        fib_level: float = 0.5,       # Fibonacci level (0=low, 1=high)
     ) -> BayesianEstimate:
 
         # ── 1. Favorite-Longshot Bias correction on prior ──────────────────────
@@ -122,53 +135,108 @@ class BayesianEstimator:
         prior = max(0.05, min(0.95, prior))
 
         # ── 2. Spot momentum signal ────────────────────────────────────────────
-        # tanh: 0.5% → 0.92, 0.1% → 0.46, saturates for big moves
-        spot_signal = math.tanh(spot_change_pct * 5.0)
+        spot_signal = math.tanh(spot_change_pct * 3.0)
 
-        # ── 3. RSI signal ──────────────────────────────────────────────────────
-        # RSI > 70: overbought → short-term DOWN signal
-        # RSI < 30: oversold  → short-term UP signal
-        if rsi > 70:
-            rsi_signal = -0.5 * ((rsi - 70) / 30)
-        elif rsi < 30:
-            rsi_signal = 0.5 * ((30 - rsi) / 30)
+        # ── 3. MACD(3,15,3) signal ────────────────────────────────────────────
+        macd_signal = math.tanh(macd_hist * 10.0)
+
+        # ── 4. RSI signal (trend-aware) ───────────────────────────────────────
+        if rsi > 65:
+            raw_rsi = -0.6 * ((rsi - 65) / 35)
+            rsi_signal = raw_rsi * 0.2 if spot_signal > 0.15 else raw_rsi
+        elif rsi < 35:
+            raw_rsi = 0.6 * ((35 - rsi) / 35)
+            rsi_signal = raw_rsi * 0.2 if spot_signal < -0.15 else raw_rsi
         else:
-            rsi_signal = spot_signal * 0.3   # neutral: reinforce spot
+            rsi_signal = 0.0
 
-        # ── 4. Order book imbalance ────────────────────────────────────────────
+        # ── 5. Order book imbalance ────────────────────────────────────────────
         ob_signal = order_book_imbalance * 0.5
 
-        # ── 5. Related market ──────────────────────────────────────────────────
-        related_signal = math.tanh(related_market_delta * 3.0) * 0.2
+        # ── 6. Leader bias (BTC+ETH 4h regime) ────────────────────────────────
+        leader_signal = math.tanh(leader_bias * 2.0)
 
-        # ── 6. Weighted combination ────────────────────────────────────────────
+        # ── 7. Bollinger Bands signal ─────────────────────────────────────────
+        # bb_pos: 0=lower band (oversold), 1=upper band (overbought)
+        # Squeeze (bb_width < 0.02): breakout imminent → boost signal confidence
+        bb_signal = (bb_pos - 0.5) * -0.6  # contrarian: near upper = bearish
+        if bb_width > 0 and bb_width < 0.015:
+            # Squeeze detected — amplify directional signal
+            bb_signal *= 1.5
+
+        # ── 8. EMA crossover signal ───────────────────────────────────────────
+        # ema_cross: % difference between EMA9 and EMA21 (positive = bullish)
+        ema_signal = math.tanh(ema_cross * 5.0)
+
+        # ── 9. Stochastic RSI signal ──────────────────────────────────────────
+        # stoch_k: 0-100, <20 = oversold (bullish), >80 = overbought (bearish)
+        if stoch_k > 80:
+            stoch_signal = -0.5 * ((stoch_k - 80) / 20)
+        elif stoch_k < 20:
+            stoch_signal = 0.5 * ((20 - stoch_k) / 20)
+        else:
+            stoch_signal = 0.0
+
+        # ── 10. VWAP deviation signal ─────────────────────────────────────────
+        # Price above VWAP = bullish, below = bearish
+        vwap_signal = math.tanh(vwap_dev * 2.0)
+
+        # ── 11. Ichimoku Cloud signal ─────────────────────────────────────────
+        # ichi_signal: [-1, 1], above cloud = bullish
+        # ichi_tk_cross: Tenkan/Kijun cross confirmation
+        ichi_combined = ichi_signal * 0.6 + math.tanh(ichi_tk_cross * 5.0) * 0.4
+
+        # ── 12. Support/Resistance + Fibonacci ────────────────────────────────
+        # Near support (sr_position < 0.2) = bounce likely (bullish)
+        # Near resistance (sr_position > 0.8) = rejection likely (bearish)
+        sr_signal = (0.5 - sr_position) * 0.8  # contrarian near extremes
+        # Fibonacci reinforces S/R: near 0.618/0.786 retrace = reversal zone
+        if fib_level < 0.3:
+            sr_signal += 0.15  # near swing low: bullish bounce
+        elif fib_level > 0.7:
+            sr_signal -= 0.15  # near swing high: bearish rejection
+
+        # ── 13. Weighted combination (total = 1.0) ───────────────────────────
+        # 12 signals, balanced across categories:
+        #   Momentum (0.30): spot 0.12 + MACD 0.10 + EMA cross 0.08
+        #   Mean-rev (0.15): RSI 0.05 + Stoch RSI 0.05 + BB 0.05
+        #   Structure(0.20): OB 0.10 + VWAP 0.05 + S/R+Fib 0.05
+        #   Trend   (0.20): Ichimoku 0.10 + leader 0.10
+        #   Regime  (0.15): leader bias 0.15 (was 0.20, split with Ichimoku)
         raw_signal = (
-            spot_signal    * 0.40 +
-            rsi_signal     * 0.25 +
-            ob_signal      * 0.20 +
-            related_signal * 0.15
+            spot_signal    * 0.12 +   # spot momentum
+            macd_signal    * 0.10 +   # MACD trend
+            ema_signal     * 0.08 +   # EMA 9/21 crossover
+            rsi_signal     * 0.05 +   # trend-aware RSI
+            stoch_signal   * 0.05 +   # Stochastic RSI
+            bb_signal      * 0.05 +   # Bollinger Bands
+            ob_signal      * 0.10 +   # order book pressure
+            vwap_signal    * 0.05 +   # VWAP deviation
+            sr_signal      * 0.05 +   # support/resistance + fibonacci
+            ichi_combined  * 0.10 +   # Ichimoku cloud + TK cross
+            leader_signal  * 0.15 +   # BTC+ETH regime gate
+            0.0            * 0.10     # reserved (future signals)
         )
         raw_signal = max(-1.0, min(1.0, raw_signal))
 
-        # ── 7. Volume multiplier (tiered) ─────────────────────────────────────
+        # ── 14. Volume multiplier (tiered) ────────────────────────────────────
         vol_mult = _volume_multiplier(volume_ratio)
 
-        # ── 8. News lag boost ─────────────────────────────────────────────────
+        # ── 15. News lag boost ────────────────────────────────────────────────
         lag_mult = _news_lag_multiplier(spot_change_pct)
 
-        # ── 9. Volatility dampens confidence ──────────────────────────────────
-        # High volatility = uncertain prediction → reduce signal weight
-        confidence = 1.0 / (1.0 + volatility * 15.0)
+        # ── 16. ATR-based volatility dampening ────────────────────────────────
+        # Use ATR if available (more accurate than trend_pct derived volatility)
+        effective_vol = atr_pct / 100.0 if atr_pct > 0 else volatility
+        confidence = 1.0 / (1.0 + effective_vol * 10.0)
         adjusted_signal = raw_signal * confidence * vol_mult * lag_mult
 
-        # Clamp after all multipliers
+        # Clamp (±1.5)
         adjusted_signal = max(-1.5, min(1.5, adjusted_signal))
 
-        # ── 10. Bayesian update (logistic / log-odds) ─────────────────────────
-        # Log-odds update: prior + signal → posterior
-        # Max shift ±1.5 log-odds → ~±0.15-0.25 probability shift
+        # ── 17. Bayesian update (log-odds) ────────────────────────────────────
         log_odds_prior = math.log(prior / (1.0 - prior))
-        log_odds_update = adjusted_signal * 1.5
+        log_odds_update = adjusted_signal * 2.0
         log_odds_post = log_odds_prior + log_odds_update
         updated_prob = 1.0 / (1.0 + math.exp(-log_odds_post))
         updated_prob = max(0.05, min(0.95, updated_prob))

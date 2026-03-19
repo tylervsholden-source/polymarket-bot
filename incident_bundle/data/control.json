@@ -1,0 +1,5 @@
+{
+  "live_trading": false,
+  "simulation_running": false,
+  "min_bet": 10
+}

@@ -1,0 +1,116 @@
+ROOT CAUSE ANALYSIS — INC-2026-03-15-001
+======================================================================
+
+EXECUTIVE SUMMARY
+----------------------------------------------------------------------
+7 real USDC orders ($72.73 total) were placed on Polymarket without
+operator approval. 4 of these were on an already-expired market.
+The root cause is a combination of 5 systemic failures.
+
+FINDING #1 — NO APPROVAL MECHANISM EXISTS
+----------------------------------------------------------------------
+Severity: CRITICAL
+Path: agents/orchestrator.py → _cycle() → line 177
+
+The code path from signal detection to order placement is:
+
+  if self._is_live_trading():
+      order = await self.client.place_order(...)
+
+There is NO:
+  - User confirmation prompt
+  - Dashboard approval button
+  - Queue-then-approve workflow
+  - Manual gate between signal and execution
+
+The dashboard (core/web_server.py) is purely read-only.
+The Architect Chamber (operator_layer/) is for post-hoc analysis only.
+The user expected an approval step that was never implemented.
+
+FINDING #2 — RE-ENTRY LOOP (SAME MARKET TRADED EVERY CYCLE)
+----------------------------------------------------------------------
+Severity: CRITICAL
+Path: orchestrator._cycle() → _finalize_cycle() → update_positions()
+
+Sequence per cycle:
+  1. Signal: "Dogecoin Up or Down" has edge → place_order()
+  2. add_position() → positions dict has 1 entry
+  3. update_positions() → market expired → _close_position()
+  4. positions dict now empty → open_count = 0
+  5. Next cycle: open_count < max_open_positions → same signal picked again
+  6. GOTO 1
+
+Result: 4 identical DOGE orders on the same expired market, 1 per cycle.
+No per-session or per-market "already traded" guard existed.
+
+FINDING #3 — EXPIRED MARKET FILTER MISSING
+----------------------------------------------------------------------
+Severity: HIGH
+Path: strategies/arbitrage_engine.py → _evaluate_market()
+
+The _time_remaining_fraction() function existed and returned 0.0 for
+expired markets, but was only used for Stoikov entry price adjustment.
+No check of time_remaining <= 0 → return None existed.
+
+The Dogecoin "12:00PM-4:00PM ET" market ended at 21:00 UTC.
+Orders were placed at 22:26-22:30 UTC (86-90 minutes after expiry).
+Polymarket CLOB API still listed the market as "active" despite expiry.
+
+FINDING #4 — MULTIPLE BOT INSTANCES (NO PROCESS GUARD)
+----------------------------------------------------------------------
+Severity: HIGH
+Path: main.py
+
+Three python main.py processes ran simultaneously:
+  - Instance A (21:58): SIM mode (readiness gate blocked)
+  - Instance B (22:20): Synced old position, stuck at max_positions
+  - Instance C (22:23): No positions loaded, placed all 7 orders
+
+No PID file, lock file, or singleton check exists in main.py.
+Each instance shares data/positions.json — race conditions possible.
+
+FINDING #5 — READINESS GATE MANUALLY BYPASSED
+----------------------------------------------------------------------
+Severity: MEDIUM (operator-authorized, but still a contributing factor)
+Path: data/readiness_verdict.json
+
+The readiness gate requires 5 days of shadow evidence to produce
+TINY_PILOT_CANDIDATE verdict. The system had 0.09 days of data.
+
+The operator manually wrote TINY_PILOT_CANDIDATE to authorize live
+trading for a pilot test. This is the DESIGNED override path, but
+without Finding #1 (approval mechanism), it removed the last safety gate.
+
+CONTRIBUTING FACTORS
+----------------------------------------------------------------------
+- LIVE_TRADING_ENABLED=true was already set in .env
+- control.json live_trading=true was set by operator
+- READINESS_MAX_AGE_HOURS=26 (default) is very permissive
+- No rate limiting on order placement (7 orders in 7 minutes)
+- No duplicate market detection (same market ordered multiple times)
+- No position value cap enforcement at order time
+- Dashboard showed no warning about live trading being active
+
+WHAT DID NOT CAUSE THIS
+----------------------------------------------------------------------
+- API key compromise: orders came from the bot's normal code path
+- Code injection: no evidence of external interference
+- Schema mismatch: the decision_summary→decision fix was unrelated
+- Shadow runner: was not running at incident time
+
+REMEDIATION APPLIED (SAME SESSION)
+----------------------------------------------------------------------
+1. control.json live_trading set to false
+2. arbitrage_engine.py: time_remaining <= 0 → return None (expired filter)
+3. orchestrator.py: _session_closed_markets set (re-entry guard)
+4. orchestrator.py: _sync_real_balance skips already-closed positions
+
+REMEDIATION STILL NEEDED
+----------------------------------------------------------------------
+1. Implement approval mechanism (queue → dashboard → confirm → execute)
+2. Add PID/lock file in main.py to prevent multiple instances
+3. Add per-market order cooldown (same market_id cannot be ordered twice)
+4. Add order rate limiter (max N orders per hour)
+5. Remove LIVE_TRADING_ENABLED=true from .env as default
+6. Reduce READINESS_MAX_AGE_HOURS to 6-12 hours
+7. Add dashboard warning banner when live_trading is enabled

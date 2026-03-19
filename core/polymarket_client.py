@@ -287,18 +287,40 @@ class PolymarketClient:
             from py_clob_client.order_builder.constants import BUY
 
             side = BUY  # Her zaman BUY — caller doğru token_id'yi geçer
-            size = amount / price  # Harcanan USDC → share sayısı
+
+            # py_clob_client ROUNDING_CONFIG["0.01"] allows amount=4 decimals,
+            # but CLOB API requires maker_amount ≤ 2 decimals ($0.01 granularity).
+            # Patch: set amount=2 so the library's rounding cascade truncates correctly.
+            from py_clob_client.order_builder.builder import ROUNDING_CONFIG
+            from py_clob_client.clob_types import RoundConfig
+            ROUNDING_CONFIG["0.1"] = RoundConfig(price=1, size=2, amount=2)
+            ROUNDING_CONFIG["0.01"] = RoundConfig(price=2, size=2, amount=2)
+            ROUNDING_CONFIG["0.001"] = RoundConfig(price=3, size=2, amount=2)
+
+            size = amount / price
+
+            logger.info(
+                f"CLOB order: price={price} size={size:.4f} "
+                f"amount={amount} (lib will round to 2dp)"
+            )
 
             order_args = OrderArgs(
                 token_id=token_id,
-                price=round(price, 4),
-                size=round(size, 2),
+                price=price,
+                size=size,
                 side=side,
             )
             signed = self._clob.create_order(order_args)
-            response = self._clob.post_order(signed, OrderType.GTC)
+            response = self._clob.post_order(signed, OrderType.FOK)
 
-            order_id = response.get("orderID") or response.get("id", "unknown")
+            if not response or not isinstance(response, dict):
+                logger.error(f"FOK emir reddedildi (response={response})")
+                return None
+
+            order_id = response.get("orderID") or response.get("id", "")
+            if not order_id:
+                logger.error("CLOB boş order_id döndü — emir kayıp olabilir, reddediliyor.")
+                return None
             logger.success(f"Emir kabul edildi: {order_id}")
 
             return {
@@ -311,6 +333,29 @@ class PolymarketClient:
             }
         except Exception as e:
             logger.error(f"Emir verilemedi: {e}")
+            return None
+
+    def get_orderbook(self, token_id: str) -> dict | None:
+        """CLOB orderbook'tan token fiyatlarını çeker.
+
+        Returns: {"best_ask": float, "best_bid": float} or None
+        """
+        if not self._clob or not token_id:
+            return None
+        try:
+            book = self._clob.get_order_book(token_id)
+            if not book:
+                return None
+            asks = book.asks if hasattr(book, "asks") else []
+            bids = book.bids if hasattr(book, "bids") else []
+            # CLOB API: asks descending, bids descending
+            # asks[0]=en pahalı, asks[-1]=en ucuz (best ask)
+            # bids[0]=en yüksek (best bid), bids[-1]=en düşük
+            best_ask = min(float(a.price) for a in asks) if asks else 0.0
+            best_bid = max(float(b.price) for b in bids) if bids else 0.0
+            return {"best_ask": best_ask, "best_bid": best_bid}
+        except Exception as e:
+            logger.debug(f"Orderbook alınamadı ({token_id[:20]}...): {e}")
             return None
 
     async def get_order_status(self, order_id: str) -> dict | None:

@@ -54,15 +54,22 @@ class PositionManager:
         logger.info(f"Pozisyon eklendi: {question[:50]}")
 
     def daily_loss_exceeded(self, threshold: float) -> bool:
-        today = str(date.today())
+        today = str(datetime.now(timezone.utc).date())
         if self.data["daily"]["date"] != today:
             self.data["daily"] = {"date": today, "pnl": 0}
             self._save()
+        if self.initial_capital <= 0:
+            return False
         loss_pct = abs(min(0, self.data["daily"]["pnl"])) / self.initial_capital
         return loss_pct >= threshold
 
     async def update_positions(self, client):
-        """Açık pozisyonların güncel fiyatlarını çeker, kapananları kapatır."""
+        """Açık pozisyonların güncel fiyatlarını çeker, kapananları kapatır.
+
+        Emir dolum durumunu CLOB'dan kontrol eder:
+        - Dolmamış (LIVE) emir + market expired → NEUTRAL (USDC iade)
+        - Dolmuş (MATCHED) emir + market expired → resolution'a göre WIN/LOSS
+        """
         now = datetime.now(timezone.utc)
         for market_id in list(self.data["positions"]):
             pos = self.data["positions"][market_id]
@@ -85,18 +92,61 @@ class PositionManager:
             if market and (market.get("resolved") or market.get("closed")):
                 market_expired = True
 
+            # ── Emir dolum durumunu kontrol et ──
+            order_filled = await self._check_order_filled(client, pos)
+
             if market is None:
-                logger.info(f"Market bulunamadı (resolved), kapatılıyor: {pos['question'][:50]}")
-                self._close_position(market_id, 0.0)
+                if order_filled:
+                    # Token var ama market API'den silindi — LOSS olarak kaydet
+                    logger.info(f"Market silinmiş, emir dolmuş → LOSS: {pos['question'][:50]}")
+                    self._close_position(market_id, 0.0)
+                else:
+                    # Emir dolmadı, USDC iade edildi → NEUTRAL
+                    logger.info(f"Market silinmiş, emir dolmamış → NEUTRAL: {pos['question'][:50]}")
+                    self._close_position_neutral(market_id)
                 continue
 
             yes_ask = float(market.get("best_ask", 0) or 0) or (1.0 - float(market.get("best_bid", 0) or 0))
             outcome = pos.get("outcome", "YES").upper()
 
-            # Token fiyatı: YES için YES bid, NO için 1 - YES ask
+            # ── Market resolved → resolution outcome'dan close price belirle ──
+            is_resolved = market.get("resolved") or market.get("closed") or market_expired
+            if is_resolved:
+                if not order_filled:
+                    # Emir dolmadı — USDC iade edildi
+                    logger.info(f"Emir dolmadı (NEUTRAL): {pos['question'][:50]}")
+                    self._close_position_neutral(market_id)
+                    continue
+
+                # Emir doldu — resolution'a göre WIN/LOSS
+                resolution = self._get_resolution_outcome(market)
+                if resolution == "YES":
+                    close_price = 1.0 if outcome == "YES" else 0.0
+                elif resolution == "NO":
+                    close_price = 0.0 if outcome == "YES" else 1.0
+                else:
+                    # Resolution bilinmiyor — gerçek orderbook'tan oku (fallback)
+                    if outcome == "NO":
+                        no_tid = (market or {}).get("no_token_id")
+                        no_book = client.get_orderbook(no_tid) if no_tid else None
+                        if no_book and no_book["best_bid"] > 0:
+                            close_price = no_book["best_bid"]
+                        else:
+                            close_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else 0.0
+                    else:
+                        close_price = float(market.get("best_bid", 0) or 0)
+                self._close_position(market_id, close_price)
+                continue
+
+            # Token fiyatı: YES için YES bid, NO için gerçek NO orderbook
             if outcome == "NO":
-                yes_bid = float(market.get("best_bid", 0) or 0)
-                current_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else pos["entry_price"]
+                # Gerçek NO orderbook fiyatını çek
+                no_tid = (market or {}).get("no_token_id")
+                no_book = client.get_orderbook(no_tid) if no_tid else None
+                if no_book and no_book["best_bid"] > 0:
+                    current_price = no_book["best_bid"]
+                else:
+                    current_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else pos["entry_price"]
             else:
                 current_price = float(market.get("best_bid", pos["entry_price"]) or pos["entry_price"])
 
@@ -110,10 +160,104 @@ class PositionManager:
             pos["current_value"] = round(current_value, 2)
             pos["unrealized_pnl"] = round(pnl, 2)
 
-            if not market.get("active", True) or market_expired:
-                self._close_position(market_id, current_price)
-
         self._save()
+
+    @staticmethod
+    async def _check_order_filled(client, pos: dict) -> bool:
+        """CLOB'dan emir dolum durumunu kontrol et.
+
+        Returns True if order was matched/filled, False if still live/cancelled.
+        Partial fill durumunda amount'u gerçek dolum tutarına günceller.
+        """
+        # İlk status zaten MATCHED ise kesinlikle dolmuş
+        status = (pos.get("status") or "").upper()
+        if status in ("MATCHED", "FILLED"):
+            return True
+
+        # CLOB'dan güncel durumu sor
+        order_id = pos.get("order_id", "")
+        if not order_id or order_id.startswith("SIM-"):
+            return False
+
+        try:
+            order_data = await client.get_order_status(order_id)
+            if order_data:
+                clob_status = (order_data.get("status") or "").upper()
+                size_matched = float(order_data.get("size_matched", 0) or 0)
+                original_size = float(order_data.get("original_size", 0) or order_data.get("size", 0) or 0)
+
+                if clob_status in ("MATCHED", "FILLED"):
+                    pos["status"] = "MATCHED"
+                    # Tam dolum — amount doğru zaten
+                    return True
+
+                if size_matched > 0:
+                    # Kısmi dolum — amount'u gerçek harcanan USDC'ye güncelle
+                    entry_price = pos.get("entry_price", 0)
+                    if entry_price > 0 and original_size > 0:
+                        fill_ratio = size_matched / original_size
+                        original_amount = pos.get("amount", 0)
+                        filled_amount = round(original_amount * fill_ratio, 4)
+                        if filled_amount != original_amount:
+                            logger.info(
+                                f"Kısmi dolum: {fill_ratio:.0%} | "
+                                f"${original_amount:.2f} → ${filled_amount:.2f}"
+                            )
+                            pos["amount"] = filled_amount
+                    pos["status"] = "MATCHED"
+                    return True
+        except Exception as e:
+            logger.debug(f"Order status kontrol hatası: {e}")
+
+        return False
+
+    @staticmethod
+    def _get_resolution_outcome(market: dict) -> str | None:
+        """Market resolution sonucunu döner: 'YES', 'NO', veya None (bilinmiyor).
+
+        Gamma API resolved market'lerde şu alanları döndürebilir:
+        - outcome: "Yes"/"No"/"Up"/"Down"
+        - resolution: "Yes"/"No"
+        - resolutionSource / winner
+        """
+        for field in ("outcome", "resolution", "winner"):
+            val = (market.get(field) or "").strip().lower()
+            if val in ("yes", "up", "1", "true"):
+                return "YES"
+            if val in ("no", "down", "0", "false"):
+                return "NO"
+        # best_ask yaklaşımı: resolved markette ask ~1.0 ise YES kazandı
+        ask = float(market.get("best_ask", 0) or 0)
+        bid = float(market.get("best_bid", 0) or 0)
+        if ask >= 0.95 or bid >= 0.95:
+            return "YES"
+        if ask <= 0.05 and bid <= 0.05:
+            return "NO"
+        return None
+
+    def _close_position_neutral(self, market_id: str):
+        """Dolmamış emir — USDC iade edildi, PnL = 0."""
+        pos = self.data["positions"].get(market_id)
+        if pos is None:
+            return
+
+        # Duplicate guard: aynı order_id zaten closed'daysa pozisyonu sil ama tekrar kaydetme
+        existing_ids = {c.get("order_id") for c in self.data["closed"]}
+        if pos.get("order_id") in existing_ids:
+            self.data["positions"].pop(market_id, None)
+            return
+
+        self.data["positions"].pop(market_id)
+        pos["close_price"] = pos["entry_price"]
+        pos["pnl"] = 0.0
+        pos["payout"] = pos["amount"]
+        pos["result"] = "NEUTRAL"
+
+        # Capital değişmez — USDC zaten iade edildi
+        self.data["closed"].append(pos)
+        logger.info(
+            f"Pozisyon kapatıldı (dolmadı): {pos['question'][:40]} | NEUTRAL"
+        )
 
     def _close_position(self, market_id: str, token_close_price: float):
         """
@@ -121,7 +265,18 @@ class PositionManager:
           - YES pozisyon için: YES fiyatı (0.0 = loss, 1.0 = win)
           - NO pozisyon için: NO fiyatı (0.0 = loss, 1.0 = win)
         """
-        pos = self.data["positions"].pop(market_id)
+        pos = self.data["positions"].get(market_id)
+        if pos is None:
+            return
+
+        # Duplicate guard: aynı order_id zaten closed'daysa pozisyonu sil ama capital'e dokunma
+        existing_ids = {c.get("order_id") for c in self.data["closed"]}
+        if pos.get("order_id") in existing_ids:
+            self.data["positions"].pop(market_id, None)
+            logger.debug(f"Duplicate closed trade atlandı: {pos.get('order_id')}")
+            return
+
+        self.data["positions"].pop(market_id)
         amount = pos["amount"]
         entry = pos["entry_price"]
         shares = amount / entry if entry > 0 else 0
@@ -152,7 +307,9 @@ class PositionManager:
         logger.info("=" * 50)
         logger.info(f"Sermaye    : ${capital:.2f}")
         logger.info(f"Unrealized : ${unrealized:.2f}")
-        logger.info(f"Toplam PnL : ${total_pnl:.2f} ({total_pnl/self.initial_capital*100:.1f}%)")
-        logger.info(f"Hedef      : ${target:.0f} ({capital/target*100:.1f}% tamamlandı)")
+        pnl_pct = (total_pnl / self.initial_capital * 100) if self.initial_capital > 0 else 0.0
+        target_pct = (capital / target * 100) if target > 0 else 0.0
+        logger.info(f"Toplam PnL : ${total_pnl:.2f} ({pnl_pct:.1f}%)")
+        logger.info(f"Hedef      : ${target:.0f} ({target_pct:.1f}% tamamlandı)")
         logger.info(f"Açık Poz   : {open_pos}")
         logger.info("=" * 50)

@@ -1,0 +1,56 @@
+PROCESS / RUNTIME INFORMATION
+======================================================================
+
+HOW THE BOT WAS STARTED
+----------------------------------------------------------------------
+Command: python main.py
+Working directory: c:\Users\lcladm\.antigravity\Polymarket
+Shell: Git Bash on Windows 11
+Started by: Claude Code (background process) at user's explicit request.
+
+THREE SIMULTANEOUS BOT INSTANCES DETECTED
+----------------------------------------------------------------------
+Instance A: Started 21:58:42 UTC
+  - Started via Claude Code background task
+  - Had LIVE_TRADING_ENABLED=true but readiness_verdict.json NOT FOUND
+  - Ran in SIM mode the entire time
+  - Was NEVER stopped before Instance B/C started
+
+Instance B: Started 22:20:34 UTC
+  - Started via Claude Code background task (new python main.py)
+  - Dashboard on port 8080
+  - Synced old Solana position from Polymarket API → 1/1 slots full
+  - BLOCKED at "Max pozisyon limitinde (1/1)" for entire lifetime
+
+Instance C: Started 22:23:30 UTC
+  - Started via Claude Code background task (THIRD python main.py)
+  - CLOB client initialized fresh
+  - Positions empty → open_count=0 < max_open_positions=1
+  - THIS INSTANCE PLACED ALL 7 REAL ORDERS
+
+WHY THREE INSTANCES?
+----------------------------------------------------------------------
+Between 22:20 and 22:23, the operator (via Claude Code) was:
+1. Clearing positions.json (removing stuck Solana position)
+2. Restarting bot to test the fix
+Each restart launched a NEW python process WITHOUT killing the previous one.
+No process management (systemd, supervisor, screen) was used.
+No PID file or lock file mechanism exists in the bot code.
+
+DASHBOARD
+----------------------------------------------------------------------
+Port: 8080 (started by Instance B at 22:20:34)
+Type: HTTP server (core/web_server.py)
+Nature: READ-ONLY status display
+  - Shows: positions, PnL, crypto prices, cycle status
+  - Does NOT show: approval buttons, order confirmation dialogs
+  - Has NO mechanism to approve/deny individual trades
+  - Has NO kill switch button
+The dashboard was accessible but had no control capability.
+
+ARCHITECT CHAMBER (operator_layer/)
+----------------------------------------------------------------------
+The Architect Chamber is a SEPARATE dashboard layer (not the main web_server).
+It aggregates shadow journal records, health metrics, readiness views.
+It was NOT running as a separate server during the incident.
+It is designed for post-hoc analysis, not real-time trade approval.

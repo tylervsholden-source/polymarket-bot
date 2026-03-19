@@ -10,25 +10,32 @@ q = internal Bayesian probability
 p = market price
 c = dynamic_taker_fee + spread + slippage
 
-Research finding (2026): Polymarket charges dynamic taker fees.
-Near 50/50 (~3.0-3.15%), at extremes (~1.0%). This kills edge for near-50/50 markets.
-Best opportunities: price 0.10-0.28 and 0.72-0.90 (lower fees, less bot competition).
+Polymarket fee formula: fee = price * (1-price) * fee_rate
+FOK orders are taker orders. fee_rate ≈ 2%.
+Max fee at price 0.50: 0.50*0.50*0.02 = 0.5%
+At extremes (0.10/0.90): 0.10*0.90*0.02 = 0.18%
 """
 
-SPREAD_COST = 0.004   # ~0.4 cent spread cost
-SLIPPAGE_EST = 0.003  # estimated slippage on limit orders
+SPREAD_COST = 0.003   # limit order spread cost (Stoikov adjusts entry)
+SLIPPAGE_EST = 0.002  # FOK limit order slippage (lower than market orders)
+
+# Polymarket taker fee rate — FOK orders are taker orders
+_TAKER_FEE_RATE = 0.02
 
 
 def _dynamic_taker_fee(price: float) -> float:
     """
-    Polymarket dynamic taker fee based on distance from 0.50.
-    Research: ~3.15% near 50/50, ~1.0% at extremes.
+    Polymarket actual taker fee: fee = price * (1-price) * fee_rate.
+    FOK orders are taker orders.
+
+    Examples:
+      price=0.50 → 0.50*0.50*0.02 = 0.005 (0.5%)
+      price=0.30 → 0.30*0.70*0.02 = 0.0042 (0.42%)
+      price=0.10 → 0.10*0.90*0.02 = 0.0018 (0.18%)
     """
-    d = abs(price - 0.5)
-    if d < 0.08:    return 0.030   # very near 50/50: 3.0%
-    elif d < 0.18:  return 0.020   # moderate: 2.0%
-    elif d < 0.28:  return 0.013   # further: 1.3%
-    else:           return 0.008   # extremes (>0.72 or <0.28): 0.8%
+    p = max(0.01, min(0.99, price))
+    fee = p * (1.0 - p) * _TAKER_FEE_RATE
+    return int(fee * 1_000_000) / 1_000_000
 
 
 class EdgeModel:

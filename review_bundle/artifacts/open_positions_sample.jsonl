@@ -1,0 +1,2 @@
+{"_note": "SYNTHETIC \u2014 example $5 YES position"}
+{"position_id": "0xaaa111", "market_id": "0xaaa111", "question": "Bitcoin Up or Down - Mar 15 8:30PM-8:45PM ET", "outcome": "YES", "amount_usdc": 5.0, "entry_price": 0.62, "current_mark": 0.68, "current_value_usdc": 5.48, "unrealized_pnl_usdc": 0.48, "status": "MATCHED", "order_id": "0xaaa111", "age_seconds": 480, "risk_flags": []}

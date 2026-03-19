@@ -1,0 +1,60 @@
+{
+  "_type": "stale_pricing_reject",
+  "_note": "SYNTHETIC",
+  "record": {
+    "record_id": "20136533-8309-44e8-a797-100b62ffe728",
+    "run_id": "5e002b5d-0341-4f8b-873d-b3ee74075000",
+    "ts_recorded_utc": "2026-03-15T20:00:00+00:00",
+    "schema_version": "1",
+    "signal": {
+      "asset": "SOL",
+      "horizon_minutes": 15,
+      "signal_timestamp_utc": "2026-03-15T20:00:00+00:00",
+      "predicted_class": "UP",
+      "raw_confidence": 0.72,
+      "class_probabilities": {
+        "UP": 0.72,
+        "DOWN": 0.18,
+        "NO_TRADE": 0.1
+      },
+      "model_version": "v0",
+      "calibrated_up_prob": 0.67,
+      "calibrated_down_prob": 0.28,
+      "calibrated_no_trade_prob": 0.05,
+      "calibration_method": "platt",
+      "calibration_quality": "good",
+      "effective_yes_prob": 0.67,
+      "effective_no_prob": 0.33,
+      "mapping_context": "UP\u2192YES",
+      "bridge_intent_side": "YES",
+      "brier_score": 0.18,
+      "ece": 0.04
+    },
+    "pricing": {
+      "market_id": "0xb3d274b457384329844f4c5b2064fec1",
+      "ask_yes": 0.55,
+      "bid_yes": 0.54,
+      "ask_no": 0.46,
+      "bid_no": 0.45,
+      "liquidity": 8000,
+      "pricing_timestamp_utc": "2026-03-15T20:00:00+00:00",
+      "snapshot_age_seconds": 185.0
+    },
+    "policy_profile": "live",
+    "intended_size_usdc": 20.0,
+    "evidence_source": "live_shadow",
+    "decision_summary": {
+      "decision": "REJECT",
+      "rejection_reason": "STALE_PRICING",
+      "policy_mode": "live",
+      "passes_final_gate": false,
+      "intended_size_usdc_used": 20.0,
+      "pricing_sanity_notes": null,
+      "gross_ev": null,
+      "net_ev_after_fee": null,
+      "execution_adjusted_ev": null,
+      "required_edge_threshold": 0.03,
+      "fill_fraction": null
+    }
+  }
+}

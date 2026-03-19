@@ -121,8 +121,38 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #2d2d45; border-radius: 2px; }
 
+  .live-warning { background: #7f1d1d; border: 1px solid #ef4444; color: #fca5a5; padding: 10px 20px; text-align: center; font-size: 13px; font-weight: 600; display: none; }
+  .live-warning.visible { display: block; }
+
+  .pending-panel { background: #1c1917; border: 1px solid #f59e0b; border-radius: 10px; margin: 12px 16px; padding: 14px; display: none; }
+  .pending-panel.visible { display: block; }
+  .pending-title { font-size: 12px; color: #f59e0b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .pending-order { background: #0d0d18; border: 1px solid #2d2d45; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .pending-order-q { font-size: 12px; color: #e2e8f0; margin-bottom: 6px; }
+  .pending-order-meta { font-size: 11px; color: #94a3b8; margin-bottom: 8px; }
+  .pending-btns { display: flex; gap: 8px; }
+  .pending-btns button { flex: 1; padding: 7px; border-radius: 6px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-approve { background: #22c55e; color: #000; }
+  .btn-approve:hover { background: #16a34a; }
+  .btn-reject { background: #ef4444; color: #fff; }
+  .btn-reject:hover { background: #dc2626; }
+
   .toast { position: fixed; bottom: 24px; right: 24px; background: #1e2035; border: 1px solid #2d2d55; color: #e2e8f0; padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .toast.show { opacity: 1; }
+
+  .gate-panel { padding: 16px; border-bottom: 1px solid #1e2035; }
+  .gate-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .gate-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .gate-status-dot.pass { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .gate-status-dot.fail { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .gate-checks { display: flex; flex-direction: column; gap: 4px; }
+  .gate-check { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: #13131f; border-radius: 6px; font-size: 11px; }
+  .gate-check-name { color: #94a3b8; }
+  .gate-check-icon { font-size: 12px; }
+  .gate-check.pass .gate-check-icon { color: #22c55e; }
+  .gate-check.fail .gate-check-icon { color: #ef4444; }
+  .gate-check.fail { border: 1px solid #7f1d1d; }
+  .gate-check.pass { border: 1px solid transparent; }
 </style>
 </head>
 <body>
@@ -138,6 +168,7 @@
   </div>
 </div>
 
+<div class="live-warning" id="liveWarning">CANLI ISLEM AKTIF — Onaylanmayan emirler 5 dakika sonra iptal olur</div>
 <div class="main">
   <div class="left">
     <div class="portfolio-card">
@@ -175,6 +206,10 @@
   </div>
 
   <div class="center">
+    <div class="pending-panel" id="pendingPanel">
+      <div class="pending-title">Onay Bekleyen Emirler</div>
+      <div id="pendingList"></div>
+    </div>
     <div class="bets-header">
       <h2>Bet Gecmisi</h2>
       <span class="bet-count" id="betCount">0 bet</span>
@@ -190,6 +225,13 @@
   </div>
 
   <div class="right">
+    <div class="gate-panel" id="gatePanel">
+      <div class="gate-title">
+        <span class="gate-status-dot" id="gateDot"></span>
+        Live Gate <span id="gateLabel" style="color:#94a3b8; font-weight:400"></span>
+      </div>
+      <div class="gate-checks" id="gateChecks"></div>
+    </div>
     <div class="positions-section">
       <div class="section-title">Acik Pozisyonlar</div>
       <div id="positionsList"><div class="no-pos">Acik pozisyon yok</div></div>
@@ -206,6 +248,12 @@
 <script>
 let ctrl = { live_trading: true, simulation_running: false, min_bet: 1 };
 let lastStatus = {};
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
 
 async function fetchStatus() {
   try {
@@ -318,9 +366,9 @@ function renderPositions(positions) {
     const u = p.unrealized_pnl || 0;
     const pc = u >= 0 ? 'pnl-green' : 'pnl-red';
     const ps = u >= 0 ? '+' : '';
-    html += '<div class="pos-card"><div class="pos-question">' + (p.question||'').substring(0,70) + '</div>' +
-      '<div class="pos-row"><div>' + (p.outcome||'?') + ' @ ' + parseFloat(p.entry_price||0).toFixed(3) + '</div><div class="' + pc + '">' + ps + '$' + Math.abs(u).toFixed(2) + '</div></div>' +
-      '<div class="pos-row" style="margin-top:4px"><div style="color:#475569">Yatirim: <span>$' + parseFloat(p.amount||0).toFixed(2) + '</span></div><div style="color:#475569">Durum: <span>' + (p.status||'ACIK') + '</span></div></div></div>';
+    html += '<div class="pos-card"><div class="pos-question">' + esc((p.question||'').substring(0,70)) + '</div>' +
+      '<div class="pos-row"><div>' + esc(p.outcome||'?') + ' @ ' + parseFloat(p.entry_price||0).toFixed(3) + '</div><div class="' + pc + '">' + ps + '$' + Math.abs(u).toFixed(2) + '</div></div>' +
+      '<div class="pos-row" style="margin-top:4px"><div style="color:#475569">Yatirim: <span>$' + parseFloat(p.amount||0).toFixed(2) + '</span></div><div style="color:#475569">Durum: <span>' + esc(p.status||'ACIK') + '</span></div></div></div>';
   }
   document.getElementById('positionsList').innerHTML = html;
 }
@@ -341,20 +389,25 @@ function renderBets(orders, closed) {
   let html = '';
   for (const item of items) {
     if (item.type === 'closed') {
+      const isCanceled = item.result === 'CANCELED';
       const win = item.result === 'WIN';
+      const loss = item.result === 'LOSS';
+      const badgeCls = isCanceled ? 'badge-pending' : (win ? 'badge-win' : 'badge-loss');
+      const badgeText = isCanceled ? 'IPTAL' : (win ? 'WIN' : (loss ? 'LOSS' : 'NOTR'));
+      const cardCls = isCanceled ? 'pending' : (win ? 'win' : 'loss');
       const pc = item.pnl >= 0 ? 'pnl-green' : 'pnl-red';
       const ps = item.pnl >= 0 ? '+' : '';
-      html += '<div class="bet-card ' + (win?'win':'loss') + '">' +
-        '<div class="bet-top"><div class="bet-question">' + item.question.substring(0,80) + '</div><span class="bet-badge ' + (win?'badge-win':'badge-loss') + '">' + (win?'WIN':'LOSS') + '</span></div>' +
-        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + item.outcome + '</span></div><div class="bet-meta-item">Giris: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Yatirim: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
+      html += '<div class="bet-card ' + cardCls + '">' +
+        '<div class="bet-top"><div class="bet-question">' + esc(item.question.substring(0,80)) + '</div><span class="bet-badge ' + badgeCls + '">' + badgeText + '</span></div>' +
+        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + esc(item.outcome) + '</span></div><div class="bet-meta-item">Giris: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Yatirim: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
         '<div class="bet-pnl ' + pc + '">' + ps + '$' + Math.abs(item.pnl).toFixed(2) + '</div></div></div>';
     } else {
       const isLive = item.status !== 'SIMULATED';
       html += '<div class="bet-card ' + (isLive?'open':'pending') + '">' +
-        '<div class="bet-top"><div class="bet-question">' + item.question.substring(0,80) + '</div><span class="bet-badge ' + (isLive?'badge-open':'badge-pending') + '">' + (isLive?'CANLI':'SIM') + '</span></div>' +
-        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + item.outcome + '</span></div><div class="bet-meta-item">Fiyat: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Miktar: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
+        '<div class="bet-top"><div class="bet-question">' + esc(item.question.substring(0,80)) + '</div><span class="bet-badge ' + (isLive?'badge-open':'badge-pending') + '">' + (isLive?'CANLI':'SIM') + '</span></div>' +
+        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + esc(item.outcome) + '</span></div><div class="bet-meta-item">Fiyat: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Miktar: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
         (item.edge ? '<div class="bet-meta-item">Edge: <span>' + (item.edge*100).toFixed(1) + '%</span></div>' : '') +
-        '<div class="bet-meta-item">Saat: <span>' + item.time + '</span></div></div></div>';
+        '<div class="bet-meta-item">Saat: <span>' + esc(item.time) + '</span></div></div></div>';
     }
   }
   document.getElementById('betsList').innerHTML = html;
@@ -367,9 +420,9 @@ function renderDecisions(decisions) {
     const isOrder = d.action==='ORDER'||d.action==='SIM_BUY';
     const tagCls = isOrder ? 'tag-order' : (d.action==='SIMULATED' ? 'tag-sim' : 'tag-skip');
     const tagTxt = isOrder ? 'BET' : (d.action==='SIMULATED' ? 'SIM' : 'ATLA');
-    html += '<div class="decision-item"><div class="dec-top"><div class="dec-market">' + (d.market||'').substring(0,50) + '</div><div class="dec-time">' + (d.time||'') + '</div></div>' +
+    html += '<div class="decision-item"><div class="dec-top"><div class="dec-market">' + esc((d.market||'').substring(0,50)) + '</div><div class="dec-time">' + esc(d.time||'') + '</div></div>' +
       '<div class="dec-bottom"><span class="dec-tag ' + tagCls + '">' + tagTxt + '</span>' +
-      (d.category ? '<span class="dec-tag" style="background:#1e2035;color:#64748b">' + d.category + '</span>' : '') +
+      (d.category ? '<span class="dec-tag" style="background:#1e2035;color:#64748b">' + esc(d.category) + '</span>' : '') +
       '<span class="dec-edge">Edge: ' + ((d.edge||0)*100).toFixed(1) + '% | P=' + ((d.prob||0)*100).toFixed(0) + '%</span></div></div>';
   }
   document.getElementById('decisionsList').innerHTML = html;
@@ -388,6 +441,7 @@ function updateControls() {
     const el = document.getElementById('bet'+v);
     if (el) el.className = 'bet-btn' + (mb===v ? ' active' : '');
   }
+  updateLiveWarning();
 }
 
 function toast(msg) {
@@ -397,10 +451,90 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 2500);
 }
 
+// ── Pending Orders (Approval Queue) ──
+async function fetchPending() {
+  try {
+    const r = await fetch('/api/pending');
+    if (!r.ok) return;
+    const data = await r.json();
+    renderPending(data.pending || []);
+  } catch(e) {}
+}
+
+function renderPending(orders) {
+  const panel = document.getElementById('pendingPanel');
+  const list = document.getElementById('pendingList');
+  if (!orders.length) { panel.classList.remove('visible'); return; }
+  panel.classList.add('visible');
+  let html = '';
+  for (const o of orders) {
+    const age = Math.round((Date.now()/1000 - o.enqueued_at) / 60);
+    const safeId = esc(o.id);
+    html += '<div class="pending-order">' +
+      '<div class="pending-order-q">' + esc((o.question||'').substring(0,70)) + '</div>' +
+      '<div class="pending-order-meta">' + esc(o.direction) + ' | $' + parseFloat(o.amount).toFixed(2) + ' @ ' + parseFloat(o.entry_price).toFixed(3) + ' | Edge: ' + (o.edge*100).toFixed(1) + '% | ' + age + 'dk once</div>' +
+      '<div class="pending-btns">' +
+      '<button class="btn-approve" onclick="approveOrder(\'' + safeId + '\')">ONAYLA</button>' +
+      '<button class="btn-reject" onclick="rejectOrder(\'' + safeId + '\')">REDDET</button>' +
+      '</div></div>';
+  }
+  list.innerHTML = html;
+}
+
+async function approveOrder(id) {
+  try {
+    await fetch('/api/pending/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    toast('Emir onaylandi');
+    fetchPending();
+  } catch(e) {}
+}
+
+async function rejectOrder(id) {
+  try {
+    await fetch('/api/pending/reject', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    toast('Emir reddedildi');
+    fetchPending();
+  } catch(e) {}
+}
+
+// ── Live Warning Banner ──
+function updateLiveWarning() {
+  const el = document.getElementById('liveWarning');
+  if (ctrl.live_trading) { el.classList.add('visible'); } else { el.classList.remove('visible'); }
+}
+
+async function fetchGate() {
+  try {
+    const r = await fetch('/api/gate');
+    if (!r.ok) return;
+    const g = await r.json();
+    const dot = document.getElementById('gateDot');
+    const label = document.getElementById('gateLabel');
+    const list = document.getElementById('gateChecks');
+    if (g.error) { label.textContent = 'hata'; return; }
+    dot.className = 'gate-status-dot ' + (g.passed ? 'pass' : 'fail');
+    const fails = (g.blockers || []).length;
+    label.textContent = g.passed ? '10/10' : `${10 - fails}/10`;
+    const checks = g.checks || {};
+    const names = {process_lock:'Lock',live_trading:'Live',readiness:'Readiness',daily_stop:'Stop-Loss',position_count:'Pozisyon',rate_limit:'Rate Limit',reentry_guard:'Reentry',expiry_guard:'Expiry',approval:'Onay',capital:'Sermaye'};
+    let html = '';
+    for (const [k, v] of Object.entries(checks)) {
+      const p = v.passed;
+      const nm = names[k] || k;
+      html += `<div class="gate-check ${p?'pass':'fail'}"><span class="gate-check-name">${nm}</span><span class="gate-check-icon">${p?'&#10003;':'&#10007;'}</span></div>`;
+    }
+    list.innerHTML = html;
+  } catch(e) {}
+}
+
 fetchControl();
 fetchStatus();
+fetchPending();
+fetchGate();
 setInterval(fetchStatus, 3000);
 setInterval(fetchControl, 10000);
+setInterval(fetchPending, 3000);
+setInterval(fetchGate, 5000);
 </script>
 </body>
 </html>

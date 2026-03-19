@@ -161,6 +161,12 @@ GLOBAL PİYASA ENDEKSLERİ (Güncel)
 ═══════════════════════════════════════
 {index_ctx}
 """ if index_ctx else ""}
+{f"""
+═══════════════════════════════════════
+TEKNIK ANALIZ MODELLERI (Candlestick)
+═══════════════════════════════════════
+Tespit Edilen Formasyonlar: {', '.join(market.get('patterns', []))}
+""" if market.get('patterns') else ""}
 ═══════════════════════════════════════
 ANALİZ TALİMATI
 ═══════════════════════════════════════

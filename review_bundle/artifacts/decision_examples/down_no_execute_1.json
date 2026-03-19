@@ -1,0 +1,23 @@
+{
+  "type": "NO_EXECUTE",
+  "market_title": "Bitcoin Up or Down - March 16, 10:00PM-10:05PM ET",
+  "horizon": "5m",
+  "asset": "BTCUSDT",
+  "bayesian_prob": 0.32,
+  "yes_best_ask": 0.80,
+  "yes_best_bid": 0.78,
+  "yes_edge": -0.48,
+  "no_best_ask": 0.42,
+  "no_best_bid": 0.40,
+  "no_edge": 0.26,
+  "no_price_source": "REAL_BOOK",
+  "no_side_health": "OK",
+  "direction": "NO",
+  "direction_reason": "NO_EDGE_DOMINATES",
+  "token_id_used": "no_token_id",
+  "entry_price": 0.418,
+  "size_usd": 15.00,
+  "entry_window_status": "PASS",
+  "live_gate_passed": true,
+  "note": "Theoretical ideal NO execute: real book with healthy ask=0.42 (well below suspicious_threshold=0.90). bayesian_prob=0.32 → no_prob=0.68 → no_edge=0.68-0.42=0.26 > yes_edge=-0.48. All conditions met: REAL_BOOK + health=OK + no_edge > yes_edge + no_edge > min_edge_threshold=0.04. Engine selects NO direction and uses no_token_id."
+}

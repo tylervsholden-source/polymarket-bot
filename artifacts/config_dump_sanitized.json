@@ -1,0 +1,62 @@
+{
+  "env_settings": {
+    "INITIAL_CAPITAL": 115.83,
+    "MAX_POSITION_PCT": 0.07,
+    "DAILY_STOP_LOSS_PCT": 0.25,
+    "MAX_OPEN_POSITIONS": 10,
+    "MIN_EDGE_THRESHOLD": 0.04,
+    "CYCLE_INTERVAL_SECONDS": 60,
+    "MIN_BET_SIZE": 2,
+    "MAX_BET_SIZE": 5,
+    "MAX_TOTAL_EXPOSURE": 50,
+    "MAX_ORDERS_PER_HOUR": 100,
+    "MIN_HOURS_TO_CLOSE": 0.05,
+    "MAX_HOURS_TO_CLOSE": 1.0,
+    "LIVE_TRADING_ENABLED": true,
+    "CRYPTO_UPDOWN_ONLY": true
+  },
+  "control_json": {
+    "live_trading": true,
+    "simulation_running": false,
+    "min_bet": 2
+  },
+  "timing_windows": {
+    "bridge_config_5m": {
+      "min_sec": 60,
+      "max_sec": 600
+    },
+    "bridge_config_15m": {
+      "min_sec": 120,
+      "max_sec": 1800
+    },
+    "orchestrator_pre_filter": {
+      "min_hours_to_close": 0.0,
+      "max_hours_to_close": 1.0,
+      "minutes_to_market_end_max": 15,
+      "minutes_to_market_end_min": 0,
+      "accepted_horizons": [
+        5,
+        15
+      ]
+    },
+    "expiry_guard": {
+      "min_hours": 0.0,
+      "max_hours": 24.0
+    }
+  },
+  "reentry_guard": {
+    "cooldown_hours": 24.0
+  },
+  "staleness_thresholds": {
+    "5m": {
+      "fresh_max_sec": 30,
+      "aging_max_sec": 90,
+      "stale_max_sec": 180
+    },
+    "15m": {
+      "fresh_max_sec": 60,
+      "aging_max_sec": 180,
+      "stale_max_sec": 300
+    }
+  }
+}

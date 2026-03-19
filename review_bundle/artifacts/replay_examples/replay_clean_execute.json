@@ -1,0 +1,10 @@
+{
+  "_note": "SYNTHETIC",
+  "record_id": "a8e8580b-e84a-4f66-90cc-7e4f0d53cf50",
+  "original_decision": "EXECUTE_YES",
+  "replayed_decision": "EXECUTE_YES",
+  "original_rejection": null,
+  "replayed_rejection": null,
+  "match": true,
+  "mismatch_reason": null
+}

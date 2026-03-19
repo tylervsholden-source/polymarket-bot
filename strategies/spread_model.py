@@ -46,38 +46,69 @@ class SpreadModel:
         current = price1 - price2
         mu = sum(spreads) / len(spreads)
         variance = sum((s - mu) ** 2 for s in spreads) / len(spreads)
-        sigma = math.sqrt(variance) if variance > 1e-8 else 0.001
+        if variance <= 1e-8:
+            return 0.0  # Stabil spread — dislokasyon sinyali yok
+        sigma = math.sqrt(variance)
         return round((current - mu) / sigma, 3)
+
+    @staticmethod
+    def _detect_horizon(question: str) -> str:
+        """Market sorusundan horizon çıkar (gruplama için)."""
+        import re
+        m = re.search(
+            r'(\d{1,2}):(\d{2})\s*(AM|PM)\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM)',
+            question, re.IGNORECASE,
+        )
+        if not m:
+            return "unknown"
+        t1 = ((int(m.group(1)) % 12) + (12 if m.group(3).upper() == "PM" else 0)) * 60 + int(m.group(2))
+        t2 = ((int(m.group(4)) % 12) + (12 if m.group(6).upper() == "PM" else 0)) * 60 + int(m.group(5))
+        diff = t2 - t1
+        if diff <= 0:
+            diff += 24 * 60
+        if diff <= 7:
+            return "5m"
+        elif diff <= 20:
+            return "15m"
+        elif diff <= 90:
+            return "1h"
+        return "4h"
 
     def find_dislocations(self, markets: list[dict]) -> list[dict]:
         """
-        Group related markets by asset, compare pairs, return dislocated ones.
+        Group related markets by asset AND horizon, compare pairs, return dislocated ones.
+        Only same-horizon markets are compared — different horizons naturally diverge.
         Returns list sorted by |z_score| descending.
         """
-        # Group by asset
-        by_asset: dict[str, list] = {}
+        # Group by (asset, horizon) — farklı horizon'lar karşılaştırılmaz
+        by_group: dict[str, list] = {}
+        _ALIASES = {
+            "bitcoin": ["btc"], "ethereum": ["eth"], "solana": ["sol"],
+            "dogecoin": ["doge"], "hyperliquid": ["hype"],
+        }
         for m in markets:
             q = m.get("question", "").lower()
-            for asset in ["bitcoin", "ethereum", "solana", "xrp", "dogecoin", "bnb"]:
-                if asset in q or (asset == "bitcoin" and "btc" in q):
-                    by_asset.setdefault(asset, []).append(m)
+            for asset in ["bitcoin", "ethereum", "solana", "xrp", "dogecoin", "bnb", "hyperliquid"]:
+                if asset in q or any(alias in q for alias in _ALIASES.get(asset, [])):
+                    horizon = self._detect_horizon(m.get("question", ""))
+                    key = f"{asset}|{horizon}"
+                    by_group.setdefault(key, []).append(m)
                     break
 
         dislocations = []
-        for asset, asset_markets in by_asset.items():
-            if len(asset_markets) < 2:
+        for group_key, group_markets in by_group.items():
+            if len(group_markets) < 2:
                 continue
+            asset = group_key.split("|")[0]
 
-            # Compare all pairs within the same asset
-            for i, m1 in enumerate(asset_markets):
-                for m2 in asset_markets[i + 1:]:
+            for i, m1 in enumerate(group_markets):
+                for m2 in group_markets[i + 1:]:
                     p1 = float(m1.get("best_ask", 0.5) or 0.5)
                     p2 = float(m2.get("best_ask", 0.5) or 0.5)
 
                     z = self.record(m1["condition_id"], p1, m2["condition_id"], p2)
 
                     if abs(z) >= self.min_z:
-                        # Positive z: m1 is overpriced vs m2 → buy m2 (underpriced)
                         underpriced = m2 if z > 0 else m1
                         overpriced = m1 if z > 0 else m2
                         dislocations.append({

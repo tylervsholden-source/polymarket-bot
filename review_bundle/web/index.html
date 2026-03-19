@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket Bot</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  .header { background: #0f0f1a; border-bottom: 1px solid #1e2035; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+  .logo span { color: #6366f1; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .status-dot.running { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 2s infinite; }
+  .status-dot.stopped { background: #ef4444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-label { font-size: 13px; color: #94a3b8; }
+  .updated { font-size: 12px; color: #475569; }
+
+  .main { display: grid; grid-template-columns: 300px 1fr 340px; gap: 0; height: calc(100vh - 57px); }
+
+  .left { background: #0d0d18; border-right: 1px solid #1e2035; display: flex; flex-direction: column; overflow-y: auto; }
+
+  .portfolio-card { padding: 24px 20px; border-bottom: 1px solid #1e2035; }
+  .portfolio-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .portfolio-value { font-size: 36px; font-weight: 700; color: #fff; }
+  .portfolio-pnl { margin-top: 6px; font-size: 14px; }
+  .pnl-pos { color: #22c55e; }
+  .pnl-neg { color: #ef4444; }
+  .portfolio-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .stat-box { background: #13131f; border: 1px solid #1e2035; border-radius: 8px; padding: 10px 12px; }
+  .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-val { font-size: 18px; font-weight: 600; color: #e2e8f0; margin-top: 2px; }
+
+  .controls { padding: 20px; border-bottom: 1px solid #1e2035; }
+  .controls-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+  .bot-toggle { width: 100%; padding: 14px; border-radius: 10px; border: none; cursor: pointer; font-size: 15px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s; margin-bottom: 16px; }
+  .bot-toggle.live { background: #ef4444; color: #fff; }
+  .bot-toggle.live:hover { background: #dc2626; }
+  .bot-toggle.stopped { background: #22c55e; color: #000; }
+  .bot-toggle.stopped:hover { background: #16a34a; }
+
+  .mode-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .mode-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #2d2d45; background: #13131f; color: #94a3b8; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .mode-btn.active-live { background: #6366f1; border-color: #6366f1; color: #fff; }
+  .mode-btn.active-sim { background: #f59e0b; border-color: #f59e0b; color: #000; }
+  .mode-btn:hover { border-color: #4f4f7a; }
+
+  .bet-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .bet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .bet-btn { padding: 10px 4px; border-radius: 8px; border: 1px solid #2d2d45; background: #13131f; color: #94a3b8; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .bet-btn:hover { border-color: #6366f1; color: #fff; }
+  .bet-btn.active { background: #6366f1; border-color: #6366f1; color: #fff; }
+
+  .crypto-panel { padding: 16px 20px; flex: 1; }
+  .section-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .crypto-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1a1a2e; }
+  .crypto-row:last-child { border-bottom: none; }
+  .crypto-name { font-size: 13px; font-weight: 600; color: #e2e8f0; width: 46px; }
+  .crypto-price { font-size: 13px; color: #fff; font-weight: 600; }
+  .crypto-chg { font-size: 12px; min-width: 60px; text-align: right; }
+  .chg-up { color: #22c55e; }
+  .chg-dn { color: #ef4444; }
+  .chg-flat { color: #64748b; }
+
+  .center { display: flex; flex-direction: column; overflow: hidden; }
+  .bets-header { padding: 16px 20px 12px; border-bottom: 1px solid #1e2035; display: flex; align-items: center; justify-content: space-between; background: #0a0a0f; flex-shrink: 0; }
+  .bets-header h2 { font-size: 14px; font-weight: 600; color: #fff; }
+  .bet-count { background: #1e2035; padding: 3px 10px; border-radius: 20px; font-size: 12px; color: #94a3b8; }
+  .bets-list { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+  .bet-card { background: #0d0d18; border: 1px solid #1e2035; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; transition: border-color 0.2s; }
+  .bet-card:hover { border-color: #2d2d55; }
+  .bet-card.win { border-left: 3px solid #22c55e; }
+  .bet-card.loss { border-left: 3px solid #ef4444; }
+  .bet-card.open { border-left: 3px solid #6366f1; }
+  .bet-card.pending { border-left: 3px solid #f59e0b; }
+  .bet-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .bet-question { font-size: 13px; color: #e2e8f0; font-weight: 500; flex: 1; margin-right: 12px; line-height: 1.4; }
+  .bet-badge { font-size: 11px; padding: 3px 8px; border-radius: 5px; font-weight: 700; white-space: nowrap; }
+  .badge-win { background: #14532d; color: #22c55e; }
+  .badge-loss { background: #450a0a; color: #ef4444; }
+  .badge-open { background: #1e1b4b; color: #818cf8; }
+  .badge-pending { background: #422006; color: #f59e0b; }
+  .bet-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+  .bet-meta-item { font-size: 12px; color: #64748b; }
+  .bet-meta-item span { color: #94a3b8; font-weight: 500; }
+  .bet-pnl { font-size: 14px; font-weight: 700; }
+  .pnl-green { color: #22c55e; }
+  .pnl-red { color: #ef4444; }
+  .no-bets { text-align: center; padding: 60px 20px; color: #475569; }
+  .no-bets-icon { font-size: 48px; margin-bottom: 12px; }
+  .no-bets-text { font-size: 14px; }
+
+  .right { background: #0d0d18; border-left: 1px solid #1e2035; display: flex; flex-direction: column; overflow-y: auto; }
+  .positions-section { padding: 16px 16px 8px; border-bottom: 1px solid #1e2035; }
+  .pos-card { background: #13131f; border: 1px solid #1e2035; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 3px solid #6366f1; }
+  .pos-question { font-size: 12px; color: #c7d2fe; margin-bottom: 6px; line-height: 1.3; }
+  .pos-row { display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
+  .pos-row span { color: #94a3b8; }
+  .no-pos { font-size: 12px; color: #475569; padding: 12px 0; text-align: center; }
+  .decisions-section { padding: 16px; flex: 1; }
+  .decision-item { padding: 10px 12px; background: #13131f; border-radius: 8px; margin-bottom: 8px; border: 1px solid #1e2035; }
+  .dec-top { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .dec-market { font-size: 12px; color: #c7d2fe; flex: 1; margin-right: 8px; }
+  .dec-time { font-size: 11px; color: #475569; white-space: nowrap; }
+  .dec-bottom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .dec-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .tag-order { background: #1e3a2e; color: #4ade80; }
+  .tag-skip { background: #1e1e2e; color: #64748b; }
+  .tag-sim { background: #2d1e3a; color: #c084fc; }
+  .dec-edge { font-size: 11px; color: #94a3b8; }
+
+  .cycle-bar { background: #0f0f1a; border-top: 1px solid #1e2035; padding: 8px 20px; display: flex; gap: 24px; font-size: 11px; color: #475569; flex-shrink: 0; }
+  .cycle-bar span { color: #64748b; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d2d45; border-radius: 2px; }
+
+  .live-warning { background: #7f1d1d; border: 1px solid #ef4444; color: #fca5a5; padding: 10px 20px; text-align: center; font-size: 13px; font-weight: 600; display: none; }
+  .live-warning.visible { display: block; }
+
+  .pending-panel { background: #1c1917; border: 1px solid #f59e0b; border-radius: 10px; margin: 12px 16px; padding: 14px; display: none; }
+  .pending-panel.visible { display: block; }
+  .pending-title { font-size: 12px; color: #f59e0b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .pending-order { background: #0d0d18; border: 1px solid #2d2d45; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .pending-order-q { font-size: 12px; color: #e2e8f0; margin-bottom: 6px; }
+  .pending-order-meta { font-size: 11px; color: #94a3b8; margin-bottom: 8px; }
+  .pending-btns { display: flex; gap: 8px; }
+  .pending-btns button { flex: 1; padding: 7px; border-radius: 6px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-approve { background: #22c55e; color: #000; }
+  .btn-approve:hover { background: #16a34a; }
+  .btn-reject { background: #ef4444; color: #fff; }
+  .btn-reject:hover { background: #dc2626; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #1e2035; border: 1px solid #2d2d55; color: #e2e8f0; padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  .gate-panel { padding: 16px; border-bottom: 1px solid #1e2035; }
+  .gate-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .gate-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .gate-status-dot.pass { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .gate-status-dot.fail { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .gate-checks { display: flex; flex-direction: column; gap: 4px; }
+  .gate-check { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: #13131f; border-radius: 6px; font-size: 11px; }
+  .gate-check-name { color: #94a3b8; }
+  .gate-check-icon { font-size: 12px; }
+  .gate-check.pass .gate-check-icon { color: #22c55e; }
+  .gate-check.fail .gate-check-icon { color: #ef4444; }
+  .gate-check.fail { border: 1px solid #7f1d1d; }
+  .gate-check.pass { border: 1px solid transparent; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">POLY<span>BOT</span></div>
+  <div class="header-right">
+    <div>
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-label" id="statusLabel">Baglaniyor...</span>
+    </div>
+    <div class="updated" id="updatedAt"></div>
+  </div>
+</div>
+
+<div class="live-warning" id="liveWarning">CANLI ISLEM AKTIF — Onaylanmayan emirler 5 dakika sonra iptal olur</div>
+<div class="main">
+  <div class="left">
+    <div class="portfolio-card">
+      <div class="portfolio-label">Portfoy</div>
+      <div class="portfolio-value" id="capital">$0.00</div>
+      <div class="portfolio-pnl" id="pnlDisplay"></div>
+      <div class="portfolio-stats">
+        <div class="stat-box"><div class="stat-label">Acik Poz</div><div class="stat-val" id="openPos">0</div></div>
+        <div class="stat-box"><div class="stat-label">Dongu</div><div class="stat-val" id="cycleNum">-</div></div>
+        <div class="stat-box"><div class="stat-label">Toplam Bet</div><div class="stat-val" id="totalBets">0</div></div>
+        <div class="stat-box"><div class="stat-label">Sonraki</div><div class="stat-val" id="nextCycle">-</div></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-title">Bot Kontrol</div>
+      <button class="bot-toggle" id="botToggle" onclick="toggleMode()">...</button>
+      <div class="mode-row">
+        <button class="mode-btn" id="btnLive" onclick="setMode('live')">CANLI</button>
+        <button class="mode-btn" id="btnSim" onclick="setMode('sim')">SIMULASYON</button>
+      </div>
+      <div class="bet-title">Min Bet Buyuklugu</div>
+      <div class="bet-grid">
+        <button class="bet-btn" id="bet1" onclick="setBet(1)">$1</button>
+        <button class="bet-btn" id="bet5" onclick="setBet(5)">$5</button>
+        <button class="bet-btn" id="bet10" onclick="setBet(10)">$10</button>
+        <button class="bet-btn" id="bet20" onclick="setBet(20)">$20</button>
+      </div>
+    </div>
+
+    <div class="crypto-panel">
+      <div class="section-title">Kripto Fiyatlar</div>
+      <div id="cryptoList"></div>
+    </div>
+  </div>
+
+  <div class="center">
+    <div class="pending-panel" id="pendingPanel">
+      <div class="pending-title">Onay Bekleyen Emirler</div>
+      <div id="pendingList"></div>
+    </div>
+    <div class="bets-header">
+      <h2>Bet Gecmisi</h2>
+      <span class="bet-count" id="betCount">0 bet</span>
+    </div>
+    <div class="bets-list" id="betsList">
+      <div class="no-bets"><div class="no-bets-icon">&#128202;</div><div class="no-bets-text">Henuz bet yok</div></div>
+    </div>
+    <div class="cycle-bar">
+      <div>Taranan: <span id="scanned">0</span></div>
+      <div>Aday: <span id="candidates">0</span></div>
+      <div>Mod: <span id="modeLabel">-</span></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="gate-panel" id="gatePanel">
+      <div class="gate-title">
+        <span class="gate-status-dot" id="gateDot"></span>
+        Live Gate <span id="gateLabel" style="color:#94a3b8; font-weight:400"></span>
+      </div>
+      <div class="gate-checks" id="gateChecks"></div>
+    </div>
+    <div class="positions-section">
+      <div class="section-title">Acik Pozisyonlar</div>
+      <div id="positionsList"><div class="no-pos">Acik pozisyon yok</div></div>
+    </div>
+    <div class="decisions-section">
+      <div class="section-title">Sinyal Akisi</div>
+      <div id="decisionsList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let ctrl = { live_trading: true, simulation_running: false, min_bet: 1 };
+let lastStatus = {};
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) return;
+    lastStatus = await r.json();
+    render(lastStatus);
+  } catch(e) {}
+}
+
+async function fetchControl() {
+  try {
+    const r = await fetch('/api/control');
+    if (!r.ok) return;
+    ctrl = { ...ctrl, ...(await r.json()) };
+    updateControls();
+  } catch(e) {}
+}
+
+async function postControl(patch) {
+  ctrl = { ...ctrl, ...patch };
+  updateControls();
+  try {
+    await fetch('/api/control', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(patch)
+    });
+  } catch(e) {}
+}
+
+function toggleMode() {
+  const live = ctrl.live_trading;
+  if (live) {
+    postControl({ live_trading: false, simulation_running: false });
+    toast('Bot durduruldu');
+  } else {
+    postControl({ live_trading: true, simulation_running: false });
+    toast('Bot baslatildi');
+  }
+}
+
+function setMode(mode) {
+  if (mode === 'live') {
+    postControl({ live_trading: true, simulation_running: false });
+    toast('Canli mod aktif');
+  } else {
+    postControl({ live_trading: false, simulation_running: true });
+    toast('Simulasyon modu aktif');
+  }
+}
+
+function setBet(amount) {
+  postControl({ min_bet: amount });
+  toast('Min bet: $' + amount);
+}
+
+function render(d) {
+  const running = d.running;
+  document.getElementById('statusDot').className = 'status-dot ' + (running ? 'running' : 'stopped');
+  document.getElementById('statusLabel').textContent = running ? 'Calisiyor' : 'Durdu';
+  document.getElementById('updatedAt').textContent = d.updated ? 'Son: ' + d.updated : '';
+
+  const cap = parseFloat(d.capital) || 0;
+  const init = parseFloat(d.initial_capital) || cap;
+  const pnl = cap - init;
+  const pnlPct = init > 0 ? ((pnl / init) * 100) : 0;
+  document.getElementById('capital').textContent = '$' + cap.toFixed(2);
+  const sign = pnl >= 0 ? '+' : '';
+  const cls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+  document.getElementById('pnlDisplay').innerHTML = '<span class="' + cls + '">' + sign + '$' + Math.abs(pnl).toFixed(2) + ' (' + sign + pnlPct.toFixed(1) + '%)</span>';
+
+  document.getElementById('openPos').textContent = d.open_positions || 0;
+  document.getElementById('cycleNum').textContent = d.cycle || 0;
+  document.getElementById('nextCycle').textContent = d.next_cycle_in || '-';
+  document.getElementById('scanned').textContent = d.scanned || 0;
+  document.getElementById('candidates').textContent = d.candidates || 0;
+  document.getElementById('modeLabel').textContent = d.live_trading !== false ? 'CANLI' : 'SIMULASYON';
+
+  const totalBets = (d.orders || []).length + (d.closed || []).length;
+  document.getElementById('totalBets').textContent = totalBets;
+  document.getElementById('betCount').textContent = totalBets + ' bet';
+
+  renderCrypto(d.crypto || {});
+  renderPositions(d.positions || {});
+  renderBets(d.orders || [], d.closed || []);
+  renderDecisions(d.decisions || []);
+}
+
+function renderCrypto(crypto) {
+  const syms = ['BTC','ETH','SOL','XRP','DOGE'];
+  let html = '';
+  for (const sym of syms) {
+    const d = crypto[sym] || {};
+    const price = d.price || 0;
+    const chg = d.change_pct || 0;
+    const cls = chg > 0.05 ? 'chg-up' : chg < -0.05 ? 'chg-dn' : 'chg-flat';
+    const s = chg > 0 ? '+' : '';
+    const p = price > 100 ? '$' + price.toLocaleString('en',{maximumFractionDigits:0}) : '$' + price.toFixed(4);
+    html += '<div class="crypto-row"><span class="crypto-name">' + sym + '</span><span class="crypto-price">' + p + '</span><span class="crypto-chg ' + cls + '">' + s + chg.toFixed(2) + '%</span></div>';
+  }
+  document.getElementById('cryptoList').innerHTML = html || '<div style="color:#475569;font-size:12px">Veri yok</div>';
+}
+
+function renderPositions(positions) {
+  const keys = Object.keys(positions);
+  if (!keys.length) { document.getElementById('positionsList').innerHTML = '<div class="no-pos">Acik pozisyon yok</div>'; return; }
+  let html = '';
+  for (const [id, p] of Object.entries(positions)) {
+    const u = p.unrealized_pnl || 0;
+    const pc = u >= 0 ? 'pnl-green' : 'pnl-red';
+    const ps = u >= 0 ? '+' : '';
+    html += '<div class="pos-card"><div class="pos-question">' + (p.question||'').substring(0,70) + '</div>' +
+      '<div class="pos-row"><div>' + (p.outcome||'?') + ' @ ' + parseFloat(p.entry_price||0).toFixed(3) + '</div><div class="' + pc + '">' + ps + '$' + Math.abs(u).toFixed(2) + '</div></div>' +
+      '<div class="pos-row" style="margin-top:4px"><div style="color:#475569">Yatirim: <span>$' + parseFloat(p.amount||0).toFixed(2) + '</span></div><div style="color:#475569">Durum: <span>' + (p.status||'ACIK') + '</span></div></div></div>';
+  }
+  document.getElementById('positionsList').innerHTML = html;
+}
+
+function renderBets(orders, closed) {
+  let items = [];
+  for (const c of closed) {
+    const pnl = c.pnl || 0;
+    items.push({ type:'closed', question:c.question||'?', outcome:c.outcome||'?', amount:c.amount||0, entry:c.entry_price||c.close_price||0, pnl:pnl, result:c.result||(pnl>=0?'WIN':'LOSS') });
+  }
+  for (const o of orders) {
+    items.push({ type:'order', question:o.market||'?', outcome:o.outcome||'?', amount:o.amount||0, entry:o.price||0, status:o.status||'LIVE', time:o.time||'', edge:o.edge||0 });
+  }
+  if (!items.length) {
+    document.getElementById('betsList').innerHTML = '<div class="no-bets"><div class="no-bets-icon">&#128202;</div><div class="no-bets-text">Henuz bet yok - bot sinyal urettiginde burada gorunecek</div></div>';
+    return;
+  }
+  let html = '';
+  for (const item of items) {
+    if (item.type === 'closed') {
+      const isCanceled = item.result === 'CANCELED';
+      const win = item.result === 'WIN';
+      const loss = item.result === 'LOSS';
+      const badgeCls = isCanceled ? 'badge-pending' : (win ? 'badge-win' : 'badge-loss');
+      const badgeText = isCanceled ? 'IPTAL' : (win ? 'WIN' : (loss ? 'LOSS' : 'NOTR'));
+      const cardCls = isCanceled ? 'pending' : (win ? 'win' : 'loss');
+      const pc = item.pnl >= 0 ? 'pnl-green' : 'pnl-red';
+      const ps = item.pnl >= 0 ? '+' : '';
+      html += '<div class="bet-card ' + cardCls + '">' +
+        '<div class="bet-top"><div class="bet-question">' + item.question.substring(0,80) + '</div><span class="bet-badge ' + badgeCls + '">' + badgeText + '</span></div>' +
+        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + item.outcome + '</span></div><div class="bet-meta-item">Giris: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Yatirim: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
+        '<div class="bet-pnl ' + pc + '">' + ps + '$' + Math.abs(item.pnl).toFixed(2) + '</div></div></div>';
+    } else {
+      const isLive = item.status !== 'SIMULATED';
+      html += '<div class="bet-card ' + (isLive?'open':'pending') + '">' +
+        '<div class="bet-top"><div class="bet-question">' + item.question.substring(0,80) + '</div><span class="bet-badge ' + (isLive?'badge-open':'badge-pending') + '">' + (isLive?'CANLI':'SIM') + '</span></div>' +
+        '<div class="bet-meta"><div class="bet-meta-item">Yon: <span>' + item.outcome + '</span></div><div class="bet-meta-item">Fiyat: <span>' + parseFloat(item.entry).toFixed(3) + '</span></div><div class="bet-meta-item">Miktar: <span>$' + parseFloat(item.amount).toFixed(2) + '</span></div>' +
+        (item.edge ? '<div class="bet-meta-item">Edge: <span>' + (item.edge*100).toFixed(1) + '%</span></div>' : '') +
+        '<div class="bet-meta-item">Saat: <span>' + item.time + '</span></div></div></div>';
+    }
+  }
+  document.getElementById('betsList').innerHTML = html;
+}
+
+function renderDecisions(decisions) {
+  if (!decisions.length) { document.getElementById('decisionsList').innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px">Sinyal bekleniyor...</div>'; return; }
+  let html = '';
+  for (const d of decisions.slice(0,20)) {
+    const isOrder = d.action==='ORDER'||d.action==='SIM_BUY';
+    const tagCls = isOrder ? 'tag-order' : (d.action==='SIMULATED' ? 'tag-sim' : 'tag-skip');
+    const tagTxt = isOrder ? 'BET' : (d.action==='SIMULATED' ? 'SIM' : 'ATLA');
+    html += '<div class="decision-item"><div class="dec-top"><div class="dec-market">' + (d.market||'').substring(0,50) + '</div><div class="dec-time">' + (d.time||'') + '</div></div>' +
+      '<div class="dec-bottom"><span class="dec-tag ' + tagCls + '">' + tagTxt + '</span>' +
+      (d.category ? '<span class="dec-tag" style="background:#1e2035;color:#64748b">' + d.category + '</span>' : '') +
+      '<span class="dec-edge">Edge: ' + ((d.edge||0)*100).toFixed(1) + '% | P=' + ((d.prob||0)*100).toFixed(0) + '%</span></div></div>';
+  }
+  document.getElementById('decisionsList').innerHTML = html;
+}
+
+function updateControls() {
+  const live = ctrl.live_trading;
+  const running = lastStatus.running;
+  const btn = document.getElementById('botToggle');
+  if (live) { btn.textContent = 'BOTU DURDUR'; btn.className = 'bot-toggle live'; }
+  else { btn.textContent = 'BOTU BASLAT'; btn.className = 'bot-toggle stopped'; }
+  document.getElementById('btnLive').className = 'mode-btn' + (live ? ' active-live' : '');
+  document.getElementById('btnSim').className = 'mode-btn' + (!live ? ' active-sim' : '');
+  const mb = ctrl.min_bet || 1;
+  for (const v of [1,5,10,20]) {
+    const el = document.getElementById('bet'+v);
+    if (el) el.className = 'bet-btn' + (mb===v ? ' active' : '');
+  }
+  updateLiveWarning();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── Pending Orders (Approval Queue) ──
+async function fetchPending() {
+  try {
+    const r = await fetch('/api/pending');
+    if (!r.ok) return;
+    const data = await r.json();
+    renderPending(data.pending || []);
+  } catch(e) {}
+}
+
+function renderPending(orders) {
+  const panel = document.getElementById('pendingPanel');
+  const list = document.getElementById('pendingList');
+  if (!orders.length) { panel.classList.remove('visible'); return; }
+  panel.classList.add('visible');
+  let html = '';
+  for (const o of orders) {
+    const age = Math.round((Date.now()/1000 - o.enqueued_at) / 60);
+    html += '<div class="pending-order">' +
+      '<div class="pending-order-q">' + (o.question||'').substring(0,70) + '</div>' +
+      '<div class="pending-order-meta">' + o.direction + ' | $' + parseFloat(o.amount).toFixed(2) + ' @ ' + parseFloat(o.entry_price).toFixed(3) + ' | Edge: ' + (o.edge*100).toFixed(1) + '% | ' + age + 'dk once</div>' +
+      '<div class="pending-btns">' +
+      '<button class="btn-approve" onclick="approveOrder(\'' + o.id + '\')">ONAYLA</button>' +
+      '<button class="btn-reject" onclick="rejectOrder(\'' + o.id + '\')">REDDET</button>' +
+      '</div></div>';
+  }
+  list.innerHTML = html;
+}
+
+async function approveOrder(id) {
+  try {
+    await fetch('/api/pending/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    toast('Emir onaylandi');
+    fetchPending();
+  } catch(e) {}
+}
+
+async function rejectOrder(id) {
+  try {
+    await fetch('/api/pending/reject', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    toast('Emir reddedildi');
+    fetchPending();
+  } catch(e) {}
+}
+
+// ── Live Warning Banner ──
+function updateLiveWarning() {
+  const el = document.getElementById('liveWarning');
+  if (ctrl.live_trading) { el.classList.add('visible'); } else { el.classList.remove('visible'); }
+}
+
+async function fetchGate() {
+  try {
+    const r = await fetch('/api/gate');
+    if (!r.ok) return;
+    const g = await r.json();
+    const dot = document.getElementById('gateDot');
+    const label = document.getElementById('gateLabel');
+    const list = document.getElementById('gateChecks');
+    if (g.error) { label.textContent = 'hata'; return; }
+    dot.className = 'gate-status-dot ' + (g.passed ? 'pass' : 'fail');
+    const fails = (g.blockers || []).length;
+    label.textContent = g.passed ? '10/10' : `${10 - fails}/10`;
+    const checks = g.checks || {};
+    const names = {process_lock:'Lock',live_trading:'Live',readiness:'Readiness',daily_stop:'Stop-Loss',position_count:'Pozisyon',rate_limit:'Rate Limit',reentry_guard:'Reentry',expiry_guard:'Expiry',approval:'Onay',capital:'Sermaye'};
+    let html = '';
+    for (const [k, v] of Object.entries(checks)) {
+      const p = v.passed;
+      const nm = names[k] || k;
+      html += `<div class="gate-check ${p?'pass':'fail'}"><span class="gate-check-name">${nm}</span><span class="gate-check-icon">${p?'&#10003;':'&#10007;'}</span></div>`;
+    }
+    list.innerHTML = html;
+  } catch(e) {}
+}
+
+fetchControl();
+fetchStatus();
+fetchPending();
+fetchGate();
+setInterval(fetchStatus, 3000);
+setInterval(fetchControl, 10000);
+setInterval(fetchPending, 3000);
+setInterval(fetchGate, 5000);
+</script>
+</body>
+</html>

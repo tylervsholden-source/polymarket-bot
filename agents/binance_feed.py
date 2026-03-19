@@ -4,12 +4,25 @@ CryptoFeed — Bitstamp REST API'den gerçek zamanlı çoklu zaman dilimi verisi
 
 Her coin için: anlık fiyat, RSI(14), momentum, hacim oranı, order book imbalance.
 Zaman dilimleri: 5m, 15m, 1h, 4h
+
+Technical indicators via `ta` library:
+  ADX (trend strength), OBV (volume confirmation), CMF (money flow)
 """
 from __future__ import annotations
 
 import asyncio
 import math
 from loguru import logger
+from core.candlestick_analyzer import CandlestickAnalyzer
+
+# ta library for advanced indicators
+try:
+    import pandas as pd
+    from ta.trend import ADXIndicator
+    from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
+    _TA_AVAILABLE = True
+except ImportError:
+    _TA_AVAILABLE = False
 
 BITSTAMP_BASE = "https://www.bitstamp.net/api/v2"
 
@@ -32,7 +45,7 @@ _STEPS: dict[str, int] = {
     "4h":  14400,
 }
 
-KLINES_LIMIT = 20   # RSI için yeterli
+KLINES_LIMIT = 52   # BB(20), EMA(50), Ichimoku(52) için yeterli
 
 
 class BinanceFeed:
@@ -41,7 +54,7 @@ class BinanceFeed:
 
     def __init__(self, session=None):
         import httpx
-        self.session = httpx.AsyncClient(timeout=10, verify=False)
+        self.session = httpx.AsyncClient(timeout=10)
         self._cache: dict[str, dict] = {}   # symbol → {price, ob_imbalance, intervals}
 
     async def refresh(self, symbols: set[str]) -> None:
@@ -67,14 +80,17 @@ class BinanceFeed:
             )
 
             intervals: dict[str, dict] = {}
+            raw_klines: dict[str, list] = {}
             for iv, result in zip(kline_tasks.keys(), kline_results):
                 if isinstance(result, list) and len(result) >= 3:
                     intervals[iv] = self._process_klines(result)
+                    raw_klines[iv] = result  # Store for multi-TF candle analysis
 
             self._cache[symbol] = {
                 "price": price_task if isinstance(price_task, float) else 0.0,
                 "ob_imbalance": ob_task if isinstance(ob_task, float) else 0.0,
                 "intervals": intervals,
+                "raw_klines": raw_klines,
             }
 
             if intervals:
@@ -136,9 +152,18 @@ class BinanceFeed:
         return 0.0
 
     def _process_klines(self, klines: list) -> dict:
-        closes  = [float(k[4]) for k in klines]
-        opens   = [float(k[1]) for k in klines]
-        volumes = [float(k[5]) for k in klines]
+        try:
+            closes  = [float(k[4]) for k in klines]
+            opens   = [float(k[1]) for k in klines]
+            highs   = [float(k[2]) for k in klines]
+            lows    = [float(k[3]) for k in klines]
+            volumes = [float(k[5]) for k in klines]
+        except (IndexError, ValueError, TypeError) as e:
+            logger.debug(f"CryptoFeed._process_klines parse error: {e}")
+            return {}
+
+        # Formasyon Analizi
+        patterns = CandlestickAnalyzer.analyze(klines)
 
         # Mevcut mumun % değişimi (open → close)
         cur_open  = opens[-1]
@@ -152,6 +177,7 @@ class BinanceFeed:
         # Hacim oranı: güncel mum / son N mum ortalaması
         avg_vol = sum(volumes[:-1]) / max(len(volumes) - 1, 1)
         vol_ratio = volumes[-1] / avg_vol if avg_vol > 0 else 1.0
+        vol_ratio = min(vol_ratio, 30.0)  # Clamp: extreme spikes don't blow up multiplier
 
         # RSI(14)
         rsi = self._calc_rsi(closes, 14)
@@ -162,13 +188,295 @@ class BinanceFeed:
             for i in range(max(1, len(closes) - 3), len(closes))
         )
 
-        return {
+        # MACD(3,15,3) — kısa periyot, 5dk marketlere uygun
+        macd_hist_raw = self._calc_macd(closes, fast=3, slow=15, signal=3)
+        mid_price = closes[-1] if closes[-1] > 0 else 1.0
+        macd_hist_pct = (macd_hist_raw / mid_price) * 100
+
+        # ── Yeni teknik indikatörler ──────────────────────────────────────
+        bb = self._calc_bollinger(closes)
+        ema_cross = self._calc_ema_cross(closes)
+        atr_pct = self._calc_atr(highs, lows, closes)
+        stoch = self._calc_stoch_rsi(closes)
+        sr = self._calc_support_resistance(highs, lows, closes)
+        vwap = self._calc_vwap(highs, lows, closes, volumes)
+        ichi = self._calc_ichimoku(highs, lows, closes)
+        fib = self._calc_fibonacci(highs, lows, closes)
+
+        # ── OPT-3: Momentum deceleration (son 3 mum change karşılaştır) ──
+        # abs(change[-1]) < abs(change[-2]) < abs(change[-3]) → momentum azalıyor
+        candle_changes = []
+        for i in range(max(1, len(closes) - 3), len(closes)):
+            prev_c = closes[i - 1]
+            if prev_c > 0:
+                candle_changes.append((closes[i] - prev_c) / prev_c * 100)
+            else:
+                candle_changes.append(0.0)
+        momentum_decelerating = False
+        if len(candle_changes) >= 3:
+            a0, a1, a2 = abs(candle_changes[-3]), abs(candle_changes[-2]), abs(candle_changes[-1])
+            momentum_decelerating = (a2 < a1 < a0) and a0 > 0.05  # at least 0.05% initial move
+
+        # ── CONSECUTIVE CANDLE COUNTER (bounce detection) ──────────────
+        # Son 4 saat verisi: 8 ardışık bearish mum → %100 bounce.
+        # Gerçek data kanıtı: BTC 4x, ETH 5x, SOL 4x bounce son 4 saatte.
+        # Bot bunu göremiyordu çünkü sadece son muma bakıyordu.
+        consecutive_bearish = 0
+        consecutive_bullish = 0
+        # Sondan geriye say — streak kırılınca dur
+        for i in range(len(closes) - 1, 0, -1):
+            if closes[i] < opens[i]:
+                if consecutive_bullish > 0:
+                    break  # streak kırıldı
+                consecutive_bearish += 1
+            elif closes[i] > opens[i]:
+                if consecutive_bearish > 0:
+                    break  # streak kırıldı
+                consecutive_bullish += 1
+            else:
+                break  # doji = streak kırılması
+
+        # Bounce signal: ilk yeşil mum, öncesinde 4+ bearish streak
+        # Streak 0 ama önceki mumlar bearish ise → bounce başladı
+        bounce_signal = False
+        pre_bounce_streak = 0
+        if closes[-1] >= opens[-1] and len(closes) >= 5:
+            # Son mum yeşil — önceki ardışık bearish mumları say
+            for i in range(len(closes) - 2, 0, -1):
+                if closes[i] < opens[i]:
+                    pre_bounce_streak += 1
+                else:
+                    break
+            if pre_bounce_streak >= 4:
+                bounce_signal = True
+
+        result = {
             "change_pct": round(change_pct, 4),
             "trend_pct": round(trend_pct, 4),
             "volume_ratio": round(vol_ratio, 3),
             "rsi": round(rsi, 1),
             "momentum": momentum,
+            "macd_hist": round(macd_hist_pct, 6),
+            "patterns": patterns,
+            "momentum_decelerating": momentum_decelerating,
+            # Bollinger Bands
+            "bb_width": bb["bb_width"],
+            "bb_pos": bb["bb_pos"],
+            "bb_squeeze": bb.get("bb_squeeze", False),
+            "bb_breakout": bb.get("bb_breakout", 0.0),
+            "bb_bandwidth_pctile": bb.get("bb_bandwidth_pctile", 50.0),
+            # EMA crossover
+            "ema_cross": ema_cross["ema_cross"],
+            # ATR (normalized %)
+            "atr_pct": round(atr_pct, 4),
+            # Stochastic RSI
+            "stoch_k": stoch["stoch_k"],
+            "stoch_d": stoch["stoch_d"],
+            # Support / Resistance
+            "sr_position": sr["sr_position"],
+            # VWAP
+            "vwap_dev": vwap["vwap_dev"],
+            # Ichimoku
+            "ichi_signal": ichi["ichi_signal"],
+            "ichi_tk_cross": ichi.get("ichi_tk_cross", 0.0),
+            # Fibonacci
+            "fib_level": fib["fib_level"],
+            # Bounce detection
+            "consecutive_bearish": consecutive_bearish,
+            "consecutive_bullish": consecutive_bullish,
+            "bounce_signal": bounce_signal,
+            "pre_bounce_streak": pre_bounce_streak,
+            # ── NEW: ta library indicators ──
+            **self._calc_ta_indicators(highs, lows, closes, volumes),
         }
+
+        # ── COMPOSITE TECHNICAL SCORE ──────────────────────────────────────
+        # Aggregates ALL indicators into single -1.0 to +1.0 score.
+        # Positive = bullish, negative = bearish. Magnitude = confidence.
+        result["tech_score"] = self._calc_composite_score(result)
+
+        return result
+
+    def _calc_ta_indicators(self, highs: list[float], lows: list[float],
+                            closes: list[float], volumes: list[float]) -> dict:
+        """ADX, OBV, CMF via ta library. Falls back to manual calc if ta unavailable."""
+        out = {"adx": 25.0, "adx_plus": 0.0, "adx_minus": 0.0,
+               "obv_slope": 0.0, "cmf": 0.0}
+        if len(closes) < 15:
+            return out
+
+        if _TA_AVAILABLE:
+            try:
+                df = pd.DataFrame({"high": highs, "low": lows, "close": closes, "volume": volumes})
+                # ADX(14): trend strength (>25 = trending, <20 = ranging)
+                adx_ind = ADXIndicator(df["high"], df["low"], df["close"], window=14)
+                adx_val = adx_ind.adx().iloc[-1]
+                adx_plus = adx_ind.adx_pos().iloc[-1]
+                adx_minus = adx_ind.adx_neg().iloc[-1]
+                out["adx"] = round(adx_val if not math.isnan(adx_val) else 25.0, 1)
+                out["adx_plus"] = round(adx_plus if not math.isnan(adx_plus) else 0.0, 1)
+                out["adx_minus"] = round(adx_minus if not math.isnan(adx_minus) else 0.0, 1)
+
+                # OBV slope: rising OBV = volume confirms price direction
+                obv = OnBalanceVolumeIndicator(df["close"], df["volume"]).on_balance_volume()
+                obv_vals = obv.dropna().values
+                if len(obv_vals) >= 5:
+                    slope = (obv_vals[-1] - obv_vals[-5]) / (abs(obv_vals[-5]) + 1e-9)
+                    out["obv_slope"] = round(max(-1.0, min(1.0, slope)), 4)
+
+                # CMF(20): Chaikin Money Flow — positive = buying pressure
+                cmf = ChaikinMoneyFlowIndicator(df["high"], df["low"], df["close"], df["volume"], window=min(20, len(closes) - 1))
+                cmf_val = cmf.chaikin_money_flow().iloc[-1]
+                out["cmf"] = round(cmf_val if not math.isnan(cmf_val) else 0.0, 4)
+            except Exception as e:
+                logger.debug(f"ta indicators error: {e}")
+        else:
+            # Manual fallback: simple ADX approximation
+            out["adx"] = self._calc_adx_simple(highs, lows, closes)
+            # Manual OBV slope
+            if len(closes) >= 5:
+                obv_sum = 0
+                for i in range(1, len(closes)):
+                    obv_sum += volumes[i] if closes[i] > closes[i-1] else -volumes[i]
+                obv_prev = 0
+                for i in range(1, len(closes) - 5):
+                    obv_prev += volumes[i] if closes[i] > closes[i-1] else -volumes[i]
+                out["obv_slope"] = round(max(-1.0, min(1.0, (obv_sum - obv_prev) / (abs(obv_prev) + 1e-9))), 4)
+        return out
+
+    def _calc_adx_simple(self, highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float:
+        """Simple ADX approximation without ta library."""
+        if len(closes) < period + 1:
+            return 25.0
+        # Average True Range as proxy for trend strength
+        trs = []
+        for i in range(-period, 0):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+            trs.append(tr)
+        atr = sum(trs) / period
+        price_range = max(highs[-period:]) - min(lows[-period:])
+        if price_range == 0:
+            return 15.0
+        # Normalized directional movement
+        return round(min(50.0, (atr / closes[-1] * 100) * 15), 1)
+
+    def _calc_composite_score(self, data: dict) -> float:
+        """
+        Composite technical score: -1.0 (strong bearish) to +1.0 (strong bullish).
+        Aggregates ALL computed indicators with empirically-tuned weights.
+
+        Weight distribution:
+          Momentum signals (50%): change_pct, macd, ema_cross, momentum
+          Volume signals (20%): volume_ratio, obv_slope, cmf
+          Trend signals (20%): ichi_signal, bb_pos, vwap_dev, adx direction
+          Pattern signals (10%): candlestick pattern_score
+        """
+        signals = []
+
+        # ── MOMENTUM (50% weight) ──
+        # Spot change: strongest single predictor for 5-min markets
+        chg = data.get("change_pct", 0.0)
+        if abs(chg) > 0.05:
+            signals.append(("spot_momentum", max(-1.0, min(1.0, chg / 0.5)), 0.20))
+
+        # MACD histogram direction
+        macd = data.get("macd_hist", 0.0)
+        if abs(macd) > 0.001:
+            signals.append(("macd", max(-1.0, min(1.0, macd / 0.01)), 0.12))
+
+        # EMA crossover
+        ema_c = data.get("ema_cross", 0.0)
+        if abs(ema_c) > 0.005:
+            signals.append(("ema_cross", max(-1.0, min(1.0, ema_c / 0.1)), 0.10))
+
+        # Raw momentum (candle direction count)
+        mom = data.get("momentum", 0)
+        if mom != 0:
+            signals.append(("candle_momentum", max(-1.0, min(1.0, mom / 3.0)), 0.08))
+
+        # ── VOLUME (20% weight) ──
+        # Volume ratio: high volume confirms trend
+        vol = data.get("volume_ratio", 1.0)
+        vol_confirm = 0.0
+        if vol > 1.5:
+            vol_confirm = min(1.0, (vol - 1.0) / 3.0)  # high vol = confirm direction
+        elif vol < 0.5:
+            vol_confirm = -0.3  # low vol = suspect move
+        # Direction from spot change
+        if chg > 0:
+            signals.append(("volume_confirm", vol_confirm, 0.08))
+        elif chg < 0:
+            signals.append(("volume_confirm", -vol_confirm, 0.08))
+
+        # OBV slope: volume flow direction
+        obv = data.get("obv_slope", 0.0)
+        if abs(obv) > 0.01:
+            signals.append(("obv_flow", max(-1.0, min(1.0, obv * 2)), 0.07))
+
+        # CMF: money flow
+        cmf = data.get("cmf", 0.0)
+        if abs(cmf) > 0.01:
+            signals.append(("cmf", max(-1.0, min(1.0, cmf * 3)), 0.05))
+
+        # ── TREND (20% weight) ──
+        # Ichimoku cloud signal
+        ichi = data.get("ichi_signal", 0.0)
+        if abs(ichi) > 0.1:
+            signals.append(("ichimoku", max(-1.0, min(1.0, ichi)), 0.07))
+
+        # Bollinger position (trend-following: >0.8=bullish, <0.2=bearish)
+        bb = data.get("bb_pos", 0.5)
+        bb_signal = (bb - 0.5) * 2  # normalize to -1..+1
+        if abs(bb_signal) > 0.2:
+            signals.append(("bollinger", max(-1.0, min(1.0, bb_signal)), 0.05))
+
+        # VWAP deviation
+        vwap = data.get("vwap_dev", 0.0)
+        if abs(vwap) > 0.05:
+            signals.append(("vwap", max(-1.0, min(1.0, vwap / 0.3)), 0.05))
+
+        # ADX direction: +DI vs -DI
+        adx = data.get("adx", 25.0)
+        adx_p = data.get("adx_plus", 0.0)
+        adx_m = data.get("adx_minus", 0.0)
+        if adx > 20 and (adx_p + adx_m) > 0:
+            adx_dir = (adx_p - adx_m) / (adx_p + adx_m)  # -1 to +1
+            # Scale by ADX strength (stronger trend = more confident)
+            adx_weight = min(1.0, adx / 40.0)
+            signals.append(("adx_direction", adx_dir * adx_weight, 0.03))
+
+        # ── PATTERNS (10% weight) ──
+        pattern_score = CandlestickAnalyzer.pattern_score(data.get("patterns", []))
+        if abs(pattern_score) > 0.1:
+            signals.append(("candle_patterns", pattern_score, 0.10))
+
+        # ── AGGREGATE ──
+        if not signals:
+            return 0.0
+
+        total_weight = sum(w for _, _, w in signals)
+        if total_weight == 0:
+            return 0.0
+
+        score = sum(val * w for _, val, w in signals) / total_weight
+        return round(max(-1.0, min(1.0, score)), 4)
+
+    def _calc_macd(self, closes: list[float], fast: int = 3, slow: int = 15, signal: int = 3) -> float:
+        """MACD(fast,slow,signal) histogram değeri döner. Pozitif=UP, Negatif=DOWN."""
+        if len(closes) < slow + signal:
+            return 0.0
+        # EMA hesaplama
+        def ema(data: list[float], period: int) -> list[float]:
+            k = 2.0 / (period + 1)
+            result = [data[0]]
+            for val in data[1:]:
+                result.append(val * k + result[-1] * (1 - k))
+            return result
+        ema_fast = ema(closes, fast)
+        ema_slow = ema(closes, slow)
+        macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
+        signal_line = ema(macd_line, signal)
+        return macd_line[-1] - signal_line[-1]
 
     def _calc_rsi(self, closes: list[float], period: int = 14) -> float:
         if len(closes) < period + 1:
@@ -185,19 +493,382 @@ class BinanceFeed:
         rs = avg_gain / avg_loss
         return 100 - (100 / (1 + rs))
 
+    # ── Technical Analysis Indicators ─────────────────────────────────────
+
+    @staticmethod
+    def _ema(data: list[float], period: int) -> list[float]:
+        """EMA hesaplama — tüm indikatörlerde kullanılır."""
+        if not data:
+            return []
+        k = 2.0 / (period + 1)
+        result = [data[0]]
+        for val in data[1:]:
+            result.append(val * k + result[-1] * (1 - k))
+        return result
+
+    def _calc_bollinger(self, closes: list[float], period: int = 20, num_std: float = 2.0) -> dict:
+        """Bollinger Bands (20,2): squeeze/breakout detection."""
+        if len(closes) < period:
+            return {"bb_upper": 0.0, "bb_lower": 0.0, "bb_mid": 0.0,
+                    "bb_width": 0.0, "bb_pos": 0.5,
+                    "bb_squeeze": False, "bb_breakout": 0.0, "bb_bandwidth_pctile": 50.0}
+        window = closes[-period:]
+        mid = sum(window) / period
+        variance = sum((x - mid) ** 2 for x in window) / period
+        std = math.sqrt(variance)
+        upper = mid + num_std * std
+        lower = mid - num_std * std
+        width = (upper - lower) / mid if mid > 0 else 0.0
+        # Position: 0=lower band, 1=upper band
+        pos = (closes[-1] - lower) / (upper - lower) if (upper - lower) > 0 else 0.5
+
+        # ── Squeeze detection: bandwidth < 1.2% = low volatility compression ──
+        is_squeeze = width < 0.012
+
+        # ── Breakout detection: price crossing bands ──
+        # +1.0 = upper band breakout (bullish), -1.0 = lower band breakout (bearish)
+        breakout = 0.0
+        price = closes[-1]
+        prev_price = closes[-2] if len(closes) > 1 else price
+        if price > upper and prev_price <= upper:
+            breakout = 1.0   # upper band breakout
+        elif price < lower and prev_price >= lower:
+            breakout = -1.0  # lower band breakout
+        elif price > upper:
+            breakout = min(1.0, (price - upper) / (std if std > 0 else 1) * 0.5)
+        elif price < lower:
+            breakout = max(-1.0, (price - lower) / (std if std > 0 else 1) * 0.5)
+
+        # ── Bandwidth percentile: how tight are bands vs recent history ──
+        bb_bandwidth_pctile = 50.0
+        if len(closes) >= period + 10:
+            recent_widths = []
+            for i in range(10):
+                idx = len(closes) - 1 - i
+                if idx >= period:
+                    w = closes[idx - period:idx]
+                    m = sum(w) / period
+                    s = math.sqrt(sum((x - m) ** 2 for x in w) / period)
+                    bw = (2 * num_std * s) / m if m > 0 else 0
+                    recent_widths.append(bw)
+            if recent_widths:
+                below = sum(1 for w in recent_widths if w > width)
+                bb_bandwidth_pctile = (below / len(recent_widths)) * 100
+
+        return {
+            "bb_upper": round(upper, 6),
+            "bb_lower": round(lower, 6),
+            "bb_mid": round(mid, 6),
+            "bb_width": round(width, 6),
+            "bb_pos": round(max(0.0, min(1.0, pos)), 4),
+            "bb_squeeze": is_squeeze,
+            "bb_breakout": round(breakout, 4),
+            "bb_bandwidth_pctile": round(bb_bandwidth_pctile, 1),
+        }
+
+    def _calc_ema_cross(self, closes: list[float]) -> dict:
+        """EMA crossover: 9/21 (short-term) signal."""
+        if len(closes) < 21:
+            return {"ema_9": 0.0, "ema_21": 0.0, "ema_cross": 0.0}
+        ema9 = self._ema(closes, 9)
+        ema21 = self._ema(closes, 21)
+        # Cross signal: positive = bullish (9 above 21), negative = bearish
+        cross = (ema9[-1] - ema21[-1]) / closes[-1] * 100 if closes[-1] > 0 else 0.0
+        return {
+            "ema_9": round(ema9[-1], 6),
+            "ema_21": round(ema21[-1], 6),
+            "ema_cross": round(cross, 4),
+        }
+
+    def _calc_atr(self, highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float:
+        """ATR(14): volatilite ölçümü, fiyata göre normalize (%)."""
+        if len(closes) < period + 1:
+            return 0.0
+        trs = []
+        for i in range(-period, 0):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            trs.append(tr)
+        atr = sum(trs) / period
+        # Fiyata göre normalize → yüzde
+        return (atr / closes[-1] * 100) if closes[-1] > 0 else 0.0
+
+    def _calc_stoch_rsi(self, closes: list[float], rsi_period: int = 14, stoch_period: int = 14,
+                         k_smooth: int = 3, d_smooth: int = 3) -> dict:
+        """Stochastic RSI(14,14,3,3): oversold/overbought momentum."""
+        if len(closes) < rsi_period + stoch_period + 1:
+            return {"stoch_k": 50.0, "stoch_d": 50.0}
+        # RSI serisi hesapla
+        rsi_values = []
+        for i in range(rsi_period + 1, len(closes) + 1):
+            rsi_values.append(self._calc_rsi(closes[:i], rsi_period))
+        if len(rsi_values) < stoch_period:
+            return {"stoch_k": 50.0, "stoch_d": 50.0}
+        # Stochastic RSI
+        stoch_vals = []
+        for i in range(stoch_period - 1, len(rsi_values)):
+            window = rsi_values[i - stoch_period + 1:i + 1]
+            mn, mx = min(window), max(window)
+            stoch_vals.append((rsi_values[i] - mn) / (mx - mn) * 100 if (mx - mn) > 0 else 50.0)
+        # %K = SMA(stoch, k_smooth), %D = SMA(%K, d_smooth)
+        if len(stoch_vals) >= k_smooth:
+            k_line = sum(stoch_vals[-k_smooth:]) / k_smooth
+        else:
+            k_line = stoch_vals[-1] if stoch_vals else 50.0
+        # For %D we'd need k_line history, simplified:
+        d_line = k_line  # single-point approximation
+        return {"stoch_k": round(k_line, 1), "stoch_d": round(d_line, 1)}
+
+    def _calc_support_resistance(self, highs: list[float], lows: list[float], closes: list[float]) -> dict:
+        """Son N mumdan support/resistance seviyeleri."""
+        if len(highs) < 5:
+            return {"support": 0.0, "resistance": 0.0, "sr_position": 0.5}
+        n = min(20, len(highs))
+        recent_highs = highs[-n:]
+        recent_lows = lows[-n:]
+        resistance = max(recent_highs)
+        support = min(recent_lows)
+        rng = resistance - support
+        pos = (closes[-1] - support) / rng if rng > 0 else 0.5
+        return {
+            "support": round(support, 6),
+            "resistance": round(resistance, 6),
+            "sr_position": round(max(0.0, min(1.0, pos)), 4),
+        }
+
+    def _calc_vwap(self, highs: list[float], lows: list[float], closes: list[float],
+                    volumes: list[float]) -> dict:
+        """VWAP: volume-weighted average price, deviation."""
+        if len(closes) < 3 or sum(volumes) == 0:
+            return {"vwap": 0.0, "vwap_dev": 0.0}
+        n = min(20, len(closes))
+        total_vol = sum(volumes[-n:])
+        if total_vol == 0:
+            return {"vwap": closes[-1], "vwap_dev": 0.0}
+        typical_prices = [(highs[-n + i] + lows[-n + i] + closes[-n + i]) / 3 for i in range(n)]
+        vwap = sum(tp * v for tp, v in zip(typical_prices, volumes[-n:])) / total_vol
+        # Deviation: current price vs VWAP (%)
+        dev = (closes[-1] - vwap) / vwap * 100 if vwap > 0 else 0.0
+        return {"vwap": round(vwap, 6), "vwap_dev": round(dev, 4)}
+
+    def _calc_ichimoku(self, highs: list[float], lows: list[float], closes: list[float]) -> dict:
+        """Ichimoku Cloud (9,26,52): trend direction + cloud position."""
+        n = len(highs)
+        if n < 26:
+            return {"ichi_signal": 0.0, "ichi_cloud_top": 0.0, "ichi_cloud_bot": 0.0}
+        # Tenkan-sen (conversion line): (9-period high + 9-period low) / 2
+        tenkan = (max(highs[-9:]) + min(lows[-9:])) / 2
+        # Kijun-sen (base line): (26-period high + 26-period low) / 2
+        kijun = (max(highs[-26:]) + min(lows[-26:])) / 2
+        # Senkou Span A: (Tenkan + Kijun) / 2
+        span_a = (tenkan + kijun) / 2
+        # Senkou Span B: (52-period high + 52-period low) / 2
+        if n >= 52:
+            span_b = (max(highs[-52:]) + min(lows[-52:])) / 2
+        else:
+            span_b = (max(highs) + min(lows)) / 2
+        cloud_top = max(span_a, span_b)
+        cloud_bot = min(span_a, span_b)
+        # Signal: price above cloud = bullish, below = bearish, normalized
+        price = closes[-1]
+        if cloud_top == cloud_bot:
+            signal = 0.0
+        elif price > cloud_top:
+            signal = min(1.0, (price - cloud_top) / (cloud_top - cloud_bot + 0.001))
+        elif price < cloud_bot:
+            signal = max(-1.0, (price - cloud_bot) / (cloud_top - cloud_bot + 0.001))
+        else:
+            signal = (price - cloud_bot) / (cloud_top - cloud_bot) * 2 - 1  # inside cloud
+        # Tenkan/Kijun cross signal
+        tk_cross = (tenkan - kijun) / price * 100 if price > 0 else 0.0
+        return {
+            "ichi_signal": round(signal, 4),
+            "ichi_tk_cross": round(tk_cross, 4),
+            "ichi_cloud_top": round(cloud_top, 6),
+            "ichi_cloud_bot": round(cloud_bot, 6),
+        }
+
+    def _calc_fibonacci(self, highs: list[float], lows: list[float], closes: list[float]) -> dict:
+        """Fibonacci retracement: son swing'den seviyelere mesafe."""
+        n = min(20, len(highs))
+        if n < 5:
+            return {"fib_level": 0.5, "fib_retrace": 0.5}
+        swing_high = max(highs[-n:])
+        swing_low = min(lows[-n:])
+        rng = swing_high - swing_low
+        if rng <= 0:
+            return {"fib_level": 0.5, "fib_retrace": 0.5}
+        # Current position as fibonacci level (0 = low, 1 = high)
+        fib_level = (closes[-1] - swing_low) / rng
+        # Closest standard fib level: 0.236, 0.382, 0.5, 0.618, 0.786
+        fibs = [0.236, 0.382, 0.5, 0.618, 0.786]
+        closest = min(fibs, key=lambda f: abs(fib_level - f))
+        return {
+            "fib_level": round(fib_level, 4),
+            "fib_retrace": round(closest, 3),
+        }
+
     def get_signal(self, symbol: str, timeframe: str = "1h") -> dict:
         """Verilen sembol ve zaman dilimi için sinyal dict döner."""
         cached = self._cache.get(symbol, {})
         iv_data = cached.get("intervals", {}).get(timeframe, {})
+
+        # İstenen timeframe verisi yoksa 1h'ye fallback et (5m verisi bazen eksik)
+        if not iv_data:
+            iv_data = cached.get("intervals", {}).get("1h", {})
+
         return {
             "price":        cached.get("price", 0.0),
             "ob_imbalance": cached.get("ob_imbalance", 0.0),
             "change_pct":   iv_data.get("change_pct", 0.0),
             "trend_pct":    iv_data.get("trend_pct", 0.0),
-            "volume_ratio": iv_data.get("volume_ratio", 1.0),
+            "volume_ratio": iv_data.get("volume_ratio", 0.0),
             "rsi":          iv_data.get("rsi", 50.0),
             "momentum":     iv_data.get("momentum", 0),
+            "macd_hist":    iv_data.get("macd_hist", 0.0),
             "volatility":   abs(iv_data.get("trend_pct", 0.0)) / 100 + 0.005,
+            "patterns":     iv_data.get("patterns", []),
+            # ── New technical indicators ──
+            "bb_width":     iv_data.get("bb_width", 0.0),
+            "bb_pos":       iv_data.get("bb_pos", 0.5),
+            "ema_cross":    iv_data.get("ema_cross", 0.0),
+            "atr_pct":      iv_data.get("atr_pct", 0.0),
+            "stoch_k":      iv_data.get("stoch_k", 50.0),
+            "stoch_d":      iv_data.get("stoch_d", 50.0),
+            "sr_position":  iv_data.get("sr_position", 0.5),
+            "vwap_dev":     iv_data.get("vwap_dev", 0.0),
+            "ichi_signal":  iv_data.get("ichi_signal", 0.0),
+            "ichi_tk_cross": iv_data.get("ichi_tk_cross", 0.0),
+            "fib_level":    iv_data.get("fib_level", 0.5),
+            # OPT-3: momentum deceleration
+            "momentum_decelerating": iv_data.get("momentum_decelerating", False),
+            # Bounce detection
+            "consecutive_bearish": iv_data.get("consecutive_bearish", 0),
+            "consecutive_bullish": iv_data.get("consecutive_bullish", 0),
+            "bounce_signal": iv_data.get("bounce_signal", False),
+            "pre_bounce_streak": iv_data.get("pre_bounce_streak", 0),
+            # ta library indicators
+            "adx": iv_data.get("adx", 25.0),
+            "adx_plus": iv_data.get("adx_plus", 0.0),
+            "adx_minus": iv_data.get("adx_minus", 0.0),
+            "obv_slope": iv_data.get("obv_slope", 0.0),
+            "cmf": iv_data.get("cmf", 0.0),
+            # Composite technical score
+            "tech_score": iv_data.get("tech_score", 0.0),
+        }
+
+    def get_candle_analysis(self, symbol: str) -> dict:
+        """
+        Multi-timeframe candlestick analysis for a symbol.
+        Analyzes patterns + trends across 4h/1h/15m/5m timeframes.
+
+        Returns:
+            {
+                "candle_bias": float,      # -1 to +1 weighted directional signal
+                "candle_strength": float,  # 0-1 confidence in the signal
+                "dominant_tf": str,        # which TF has strongest pattern
+                "pattern_count": int,      # total patterns across all TFs
+                "alignment": float,        # 0-1 how aligned TFs are
+                "tf_patterns": dict,       # patterns per TF
+                "tf_trends": dict,         # trend analysis per TF
+                "tf_scores": dict,         # combined score per TF
+            }
+        """
+        cached = self._cache.get(symbol, {})
+        raw_klines = cached.get("raw_klines", {})
+
+        if not raw_klines:
+            return {
+                "candle_bias": 0.0, "candle_strength": 0.0,
+                "dominant_tf": "1h", "pattern_count": 0,
+                "alignment": 0.0, "tf_patterns": {}, "tf_trends": {},
+                "tf_scores": {},
+            }
+
+        # Lookback per timeframe: how many candles to analyze for trend
+        tf_lookback = {"4h": 6, "1h": 24, "15m": 16, "5m": 12}
+
+        tf_patterns = {}
+        tf_trends = {}
+
+        for tf, klines in raw_klines.items():
+            if not klines or len(klines) < 3:
+                continue
+            # Pattern detection (uses last 3-5 candles)
+            tf_patterns[tf] = CandlestickAnalyzer.analyze(klines)
+            # Trend analysis over lookback window
+            lookback = tf_lookback.get(tf, 6)
+            tf_trends[tf] = CandlestickAnalyzer.trend_analysis(klines, lookback)
+
+        # Multi-TF aggregation
+        result = CandlestickAnalyzer.multi_tf_score(tf_patterns, tf_trends)
+        result["tf_patterns"] = tf_patterns
+        result["tf_trends"] = tf_trends
+        return result
+
+    def get_market_regime(self) -> dict:
+        """BTC + ETH 4h trend'inden piyasa rejimi belirle.
+
+        Returns:
+            {
+                "regime": "BULLISH" | "BEARISH" | "NEUTRAL",
+                "btc_4h_pct": float,   # BTC 4h change %
+                "eth_4h_pct": float,   # ETH 4h change %
+                "btc_5m_pct": float,   # BTC 5m anlık hareket %
+                "eth_5m_pct": float,   # ETH 5m anlık hareket %
+                "strength": float,     # 0-1 rejim gücü
+            }
+        """
+        btc = self._cache.get("BTCUSDT", {})
+        eth = self._cache.get("ETHUSDT", {})
+
+        btc_4h = btc.get("intervals", {}).get("4h", {})
+        eth_4h = eth.get("intervals", {}).get("4h", {})
+        btc_5m = btc.get("intervals", {}).get("5m", {})
+        eth_5m = eth.get("intervals", {}).get("5m", {})
+
+        btc_4h_pct = btc_4h.get("change_pct", 0.0)
+        eth_4h_pct = eth_4h.get("change_pct", 0.0)
+        btc_5m_pct = btc_5m.get("change_pct", 0.0)
+        eth_5m_pct = eth_5m.get("change_pct", 0.0)
+
+        # 4h trend: BTC %60 ağırlık, ETH %40
+        trend_4h = btc_4h_pct * 0.6 + eth_4h_pct * 0.4
+
+        # 5m ani hareket: büyük düşüş = kaskad sinyali
+        momentum_5m = btc_5m_pct * 0.6 + eth_5m_pct * 0.4
+
+        # Rejim belirleme
+        # 4h trend yönü + 5m momentum birleşimi
+        combined = trend_4h * 0.6 + momentum_5m * 0.4
+
+        if combined > 0.15:
+            regime = "BULLISH"
+        elif combined < -0.15:
+            regime = "BEARISH"
+        else:
+            regime = "NEUTRAL"
+
+        # Divider 2.5: BTC -1% → str≈0.28, -2% → str≈0.72, -3%+ → str=1.00
+        # Eski 1.0 divider her şeyi 1.00'a satüre ediyordu (nüans kaybı)
+        strength = min(1.0, abs(combined) / 2.5)
+
+        logger.info(
+            f"REGIME: {regime} (str={strength:.2f}) | "
+            f"BTC 4h={btc_4h_pct:+.2f}% 5m={btc_5m_pct:+.2f}% | "
+            f"ETH 4h={eth_4h_pct:+.2f}% 5m={eth_5m_pct:+.2f}%"
+        )
+
+        return {
+            "regime": regime,
+            "btc_4h_pct": btc_4h_pct,
+            "eth_4h_pct": eth_4h_pct,
+            "btc_5m_pct": btc_5m_pct,
+            "eth_5m_pct": eth_5m_pct,
+            "strength": float(f"{strength:.3f}"),
         }
 
     def has_data(self, symbol: str) -> bool:

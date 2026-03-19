@@ -1,0 +1,45 @@
+{
+  "generated_utc": "2026-03-16T12:00:00+00:00",
+  "note": "Sanitized config dump - no secrets",
+  "entry_window_policy": {
+    "5m": {
+      "entry_before_start_sec": 45,
+      "entry_after_start_sec": 90
+    },
+    "15m": {
+      "entry_before_start_sec": 60,
+      "entry_after_start_sec": 180
+    }
+  },
+  "no_side_thresholds": {
+    "untradable_threshold": 0.95,
+    "suspicious_threshold": 0.90
+  },
+  "live_gate_checks": [
+    "process_lock",
+    "live_trading",
+    "readiness",
+    "daily_stop",
+    "position_count",
+    "rate_limit",
+    "reentry_guard",
+    "expiry_guard",
+    "entry_window",
+    "approval",
+    "capital"
+  ],
+  "risk_limits": {
+    "max_open_positions": 5,
+    "max_orders_per_hour": 3,
+    "daily_stop_loss": -0.15,
+    "min_edge_threshold": 0.04,
+    "max_position_pct": 0.20
+  },
+  "expiry_guard": {
+    "min_hours": 0.0,
+    "max_hours": 24.0
+  },
+  "reentry_cooldown_hours": 24.0,
+  "approval_timeout_seconds": 300,
+  "readiness_max_age_hours": 26.0
+}

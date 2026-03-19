@@ -1,0 +1,23 @@
+{
+  "type": "YES_EXECUTE",
+  "market_title": "Solana Up or Down - March 16, 8:00PM-8:05PM ET",
+  "horizon": "5m",
+  "asset": "SOLUSDT",
+  "bayesian_prob": 0.65,
+  "yes_best_ask": 0.52,
+  "yes_best_bid": 0.50,
+  "yes_edge": 0.13,
+  "no_best_ask": null,
+  "no_best_bid": null,
+  "no_edge": -0.13,
+  "no_price_source": "SYNTHETIC",
+  "no_side_health": "OK",
+  "direction": "YES",
+  "direction_reason": "NO_REAL_BOOK_MISSING",
+  "token_id_used": "yes_token_id",
+  "entry_price": 0.516,
+  "size_usd": 10.00,
+  "entry_window_status": "PASS",
+  "live_gate_passed": true,
+  "note": "SOL 5m market: NO book not present; no_price_source=SYNTHETIC derived as 1-yes_price=0.48. no_edge=-0.13 is synthetic-negative. YES edge dominates; NO_REAL_BOOK_MISSING recorded but direction is YES. Stoikov-adjusted entry at 0.516."
+}
