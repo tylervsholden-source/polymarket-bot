@@ -738,3 +738,310 @@
 23:45:49 | INFO | ==================================================
 23:45:49 | INFO | Sonraki döngü 30s sonra...
 23:45:56 | INFO | Endeksler guncellendi — USDTRY: +0.10% | EURTRY: +0.40% | EURUSD: +0.44% | GBPUSD: +0.53% | GOLD: -4.70% | SILVER: -5.88% | OIL: -2.28% | NASDAQ: -0.28% | S&P500: -0.27% | BIST100: -0.51% | NIKKEI: -3.38% | DAX: -2.82% | SHANGHAI: -1.39% | HANGSENG: -2.02% | GRAM_ALTIN: -4.70%
+23:46:19 | INFO | KALSHI: bitcoin 5 market taranidi
+23:46:19 | INFO | KALSHI: ethereum 5 market taranidi
+23:46:20 | INFO | KALSHI: solana 0 market taranidi
+23:46:20 | INFO | === Döngü #12: 23:46:20 ===
+23:46:20 | INFO | DYNAMIC_KELLY: W1/L0 → multiplier=1.05
+23:46:23 | INFO | Toplam çekilen: 10000 | Gelecekteki: 7637
+23:46:23 | INFO | 7637 aktif market bulundu.
+23:46:23 | INFO | Filtre sonrası: 14 market arbitraj analizine giriyor.
+23:46:24 | INFO | NO orderbook: 14/14 market zenginleştirildi.
+23:46:37 | INFO | MULTI_EX: 6 coins from 3 exchanges
+23:46:37 | INFO | REGIME: BULLISH (str=0.09) | BTC 4h=+0.38% 5m=+0.02% | ETH 4h=+0.33% 5m=+0.04%
+23:46:38 | INFO | ARB_OPPORTUNITY: Solana Up or Down - March 19, 4:45PM-4:5 | YES=0.490 + NO=0.260 = 0.750 | Est.Profit=33.3%
+23:46:38 | INFO | SUM_MONITOR: Solana Up or Down - March 19, 4:45P | YES+NO=0.750 dev=-25.0% adj=+0.125 arb=YES
+23:46:38 | INFO | LEAD_LAG: Solana Up or Down - March 19, 4:45P | Binance=$89.08 Bitstamp=$89.01 spread=+0.0798% → BULLISH boost=+0.0120
+23:46:38 | INFO | MULTI_EX: Solana Up or Down - March 19, 4:45P | orderflow=+0.631 spread=0.045% → BULLISH boost=+0.0200
+23:46:38 | INFO | ENHANCED_TOTAL: Solana Up or Down - March 19, 4:45P | raw=+0.0200 capped=+0.0200 → prob=0.655
+23:46:38 | INFO | SIDE_DIAG: Solana Up or Down - March 19, 4:45PM-4:50PM E | YES_e=0.1875 NO_e=0.0625 | no_ask=0.260 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | CANDLE_PATTERNS: Solana Up or Down - March 19, 4:45P | ['HAMMER'] score=+0.50 bull=1 bear=0
+23:46:38 | INFO | CANDLE_YES_ACTIVATE: Solana Up or Down - March 19, 4:45P patterns=['HAMMER'] → YES (edge=0.1875, price=0.49, pscore=+0.50)
+23:46:38 | INFO | MICRO_MOVE_SCALE: Solana Up or Down - March 19, 4:45PM-4:5 |chg|=0.007%<0.10% → $11.27→$5.63
+23:46:38 | INFO | ML_BOOST: Solana Up or Down - March 19, 4:45PM-4:5 ml=+0.985 (high confidence)
+23:46:38 | INFO | ARB [bayesian/5m]: Solana Up or Down - March 19, 4:45PM-4:50PM ET | YES@0.490 P=0.655 Edge=0.177 $5.63 tech=+0.25 adx=21 ml=+0.985
+23:46:38 | INFO | OB_ILLIQUID: BNB Up or Down - March 19, 4:45PM-4 | spread=64.8% bid_depth=$21 ask_depth=$401
+23:46:38 | INFO | OVERPRICED: BNB Up or Down - March 19, 4:45PM-4:50PM | YES=0.530 + NO=0.850 = 1.380 | Sapma=+38.0%
+23:46:38 | INFO | SUM_MONITOR: BNB Up or Down - March 19, 4:45PM-4 | YES+NO=1.380 dev=+38.0% adj=-0.190 arb=NO
+23:46:38 | INFO | SIDE_DIAG: BNB Up or Down - March 19, 4:45PM-4:50PM ET | YES_e=-0.1626 NO_e=-0.2174 | no_ask=0.850 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:46:38 | INFO | TECH_SCORE: BNB Up or Down - March 19, 4:45PM-4 score=+0.352 adx=65 obv=+0.001 cmf=+0.995
+23:46:38 | INFO | ARB_OPPORTUNITY: Ethereum Up or Down - March 19, 4:45PM-4 | YES=0.480 + NO=0.440 = 0.920 | Est.Profit=8.7%
+23:46:38 | INFO | SUM_MONITOR: Ethereum Up or Down - March 19, 4:4 | YES+NO=0.920 dev=-8.0% adj=+0.040 arb=YES
+23:46:38 | INFO | MULTI_EX: Ethereum Up or Down - March 19, 4:4 | orderflow=+0.437 spread=0.013% → BULLISH boost=+0.0200
+23:46:38 | INFO | OPTIONS: Ethereum Up or Down - March 19, 4:4 | PCR=0.56 IV=89% → BEARISH boost=-0.0231
+23:46:38 | INFO | ENHANCED_TOTAL: Ethereum Up or Down - March 19, 4:4 | raw=-0.0031 capped=-0.0031 → prob=0.553
+23:46:38 | INFO | SIDE_DIAG: Ethereum Up or Down - March 19, 4:45PM-4:50PM | YES_e=0.0959 NO_e=-0.0159 | no_ask=0.440 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | CANDLE_PATTERNS: Ethereum Up or Down - March 19, 4:4 | ['TWEEZER_BOTTOM'] score=+0.50 bull=1 bear=0
+23:46:38 | INFO | CANDLE_YES_ACTIVATE: Ethereum Up or Down - March 19, 4:4 patterns=['TWEEZER_BOTTOM'] → YES (edge=0.0959, price=0.48, pscore=+0.50)
+23:46:38 | INFO | TECH_SCORE: Ethereum Up or Down - March 19, 4:4 score=+0.403 adx=26 obv=+0.022 cmf=-0.062
+23:46:38 | INFO | MICRO_MOVE_SCALE: Ethereum Up or Down - March 19, 4:45PM-4 |chg|=0.037%<0.10% → $7.48→$3.74
+23:46:38 | INFO | ML_BOOST: Ethereum Up or Down - March 19, 4:45PM-4 ml=+0.982 (high confidence)
+23:46:38 | INFO | ARB [bayesian/5m]: Ethereum Up or Down - March 19, 4:45PM-4:50PM ET | YES@0.480 P=0.553 Edge=0.086 $3.74 tech=+0.40 adx=26 ml=+0.982
+23:46:38 | INFO | OB_DEPTH: XRP Up or Down - March 19, 4:45PM-4 | spread=1.7% imb=+0.23 liq=0.93 boost=+0.006 | walls: bid=$58 ask=$50
+23:46:38 | INFO | ARB_OPPORTUNITY: XRP Up or Down - March 19, 4:45PM-4:50PM | YES=0.470 + NO=0.430 = 0.900 | Est.Profit=11.1%
+23:46:38 | INFO | SUM_MONITOR: XRP Up or Down - March 19, 4:45PM-4 | YES+NO=0.900 dev=-10.0% adj=+0.050 arb=YES
+23:46:38 | INFO | LEAD_LAG: XRP Up or Down - March 19, 4:45PM-4 | Binance=$1.45 Bitstamp=$1.45 spread=+0.0400% → BULLISH boost=+0.0060
+23:46:38 | INFO | MULTI_EX: XRP Up or Down - March 19, 4:45PM-4 | orderflow=+0.693 spread=0.054% → BULLISH boost=+0.0200
+23:46:38 | INFO | ENHANCED_TOTAL: XRP Up or Down - March 19, 4:45PM-4 | raw=+0.0200 capped=+0.0200 → prob=0.584
+23:46:38 | INFO | SIDE_DIAG: XRP Up or Down - March 19, 4:45PM-4:50PM ET | YES_e=0.1365 NO_e=-0.0365 | no_ask=0.430 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | CANDLE_PATTERNS: XRP Up or Down - March 19, 4:45PM-4 | ['HAMMER'] score=+0.50 bull=1 bear=0
+23:46:38 | INFO | CANDLE_YES_ACTIVATE: XRP Up or Down - March 19, 4:45PM-4 patterns=['HAMMER'] → YES (edge=0.1365, price=0.47, pscore=+0.50)
+23:46:38 | INFO | MICRO_MOVE_SCALE: XRP Up or Down - March 19, 4:45PM-4:50PM |chg|=0.005%<0.10% → $10.70→$5.35
+23:46:38 | INFO | ML_BOOST: XRP Up or Down - March 19, 4:45PM-4:50PM ml=+0.991 (high confidence)
+23:46:38 | INFO | ARB [bayesian/5m]: XRP Up or Down - March 19, 4:45PM-4:50PM ET | YES@0.470 P=0.584 Edge=0.127 $5.35 tech=+0.15 adx=19 ml=+0.991
+23:46:38 | INFO | OB_DEPTH: Bitcoin Up or Down - March 19, 4:45 | spread=1.9% imb=-0.20 liq=0.93 boost=-0.006 | walls: bid=$514 ask=$510
+23:46:38 | INFO | ARB_OPPORTUNITY: Bitcoin Up or Down - March 19, 4:45PM-4: | YES=0.480 + NO=0.440 = 0.920 | Est.Profit=8.7%
+23:46:38 | INFO | SUM_MONITOR: Bitcoin Up or Down - March 19, 4:45 | YES+NO=0.920 dev=-8.0% adj=+0.040 arb=YES
+23:46:38 | INFO | MULTI_EX: Bitcoin Up or Down - March 19, 4:45 | orderflow=+0.348 spread=0.014% → BULLISH boost=+0.0174
+23:46:38 | INFO | ENHANCED_TOTAL: Bitcoin Up or Down - March 19, 4:45 | raw=+0.0174 capped=+0.0174 → prob=0.547
+23:46:38 | INFO | SIDE_DIAG: Bitcoin Up or Down - March 19, 4:45PM-4:50PM  | YES_e=0.0892 NO_e=-0.0092 | no_ask=0.440 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | TECH_SCORE: Bitcoin Up or Down - March 19, 4:45 score=+0.431 adx=25 obv=-0.025 cmf=+0.105
+23:46:38 | INFO | CAUTIOUS_HOUR: Bitcoin Up or Down - March 19, 4:45PM-4: edge=0.079 < 0.090 — 04PM ET needs stronger conviction
+23:46:38 | INFO | OB_ILLIQUID: Dogecoin Up or Down - March 19, 4:4 | spread=66.7% bid_depth=$22 ask_depth=$456
+23:46:38 | INFO | OVERPRICED: Dogecoin Up or Down - March 19, 4:45PM-4 | YES=0.540 + NO=0.530 = 1.070 | Sapma=+7.0%
+23:46:38 | INFO | SUM_MONITOR: Dogecoin Up or Down - March 19, 4:4 | YES+NO=1.070 dev=+7.0% adj=-0.035 arb=NO
+23:46:38 | INFO | MULTI_EX: Dogecoin Up or Down - March 19, 4:4 | orderflow=+0.639 spread=0.021% → BULLISH boost=+0.0200
+23:46:38 | INFO | ENHANCED_TOTAL: Dogecoin Up or Down - March 19, 4:4 | raw=+0.0200 capped=+0.0200 → prob=0.548
+23:46:38 | INFO | SIDE_DIAG: Dogecoin Up or Down - March 19, 4:45PM-4:50PM | YES_e=0.0307 NO_e=-0.1007 | no_ask=0.530 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | OB_ILLIQUID: Hyperliquid Up or Down - March 19,  | spread=70.7% bid_depth=$20 ask_depth=$421
+23:46:38 | INFO | OVERPRICED: Hyperliquid Up or Down - March 19, 4:45P | YES=0.590 + NO=0.570 = 1.160 | Sapma=+16.0%
+23:46:38 | INFO | SUM_MONITOR: Hyperliquid Up or Down - March 19,  | YES+NO=1.160 dev=+16.0% adj=-0.080 arb=NO
+23:46:38 | INFO | SIDE_DIAG: Hyperliquid Up or Down - March 19, 4:45PM-4:5 | YES_e=-0.0643 NO_e=-0.0957 | no_ask=0.570 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:46:38 | INFO | CANDLE_PATTERNS: Hyperliquid Up or Down - March 19,  | ['BULLISH_MARUBOZU', 'BULLISH_HARAMI', 'TWEEZER_BOTTOM'] score=+1.00 bull=3 bear=0
+23:46:38 | INFO | OB_ILLIQUID: Dogecoin Up or Down - March 19, 4:4 | spread=104.0% bid_depth=$15 ask_depth=$110
+23:46:38 | INFO | OVERPRICED: Dogecoin Up or Down - March 19, 4:45PM-5 | YES=0.540 + NO=0.520 = 1.060 | Sapma=+6.0%
+23:46:38 | INFO | SUM_MONITOR: Dogecoin Up or Down - March 19, 4:4 | YES+NO=1.060 dev=+6.0% adj=-0.030 arb=NO
+23:46:38 | INFO | MULTI_EX: Dogecoin Up or Down - March 19, 4:4 | orderflow=+0.639 spread=0.021% → BULLISH boost=+0.0200
+23:46:38 | INFO | ENHANCED_TOTAL: Dogecoin Up or Down - March 19, 4:4 | raw=+0.0200 capped=+0.0200 → prob=0.541
+23:46:38 | INFO | SIDE_DIAG: Dogecoin Up or Down - March 19, 4:45PM-5:00PM | YES_e=0.0231 NO_e=-0.0831 | no_ask=0.520 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | TECH_SCORE: Dogecoin Up or Down - March 19, 4:4 score=+0.379 adx=24 obv=+1.000 cmf=+0.026
+23:46:38 | INFO | ARB_OPPORTUNITY: Solana Up or Down - March 19, 4:45PM-5:0 | YES=0.500 + NO=0.390 = 0.890 | Est.Profit=12.4%
+23:46:38 | INFO | SUM_MONITOR: Solana Up or Down - March 19, 4:45P | YES+NO=0.890 dev=-11.0% adj=+0.055 arb=YES
+23:46:38 | INFO | LEAD_LAG: Solana Up or Down - March 19, 4:45P | Binance=$89.08 Bitstamp=$89.01 spread=+0.0798% → BULLISH boost=+0.0120
+23:46:38 | INFO | MULTI_EX: Solana Up or Down - March 19, 4:45P | orderflow=+0.631 spread=0.045% → BULLISH boost=+0.0200
+23:46:38 | INFO | ENHANCED_TOTAL: Solana Up or Down - March 19, 4:45P | raw=+0.0200 capped=+0.0200 → prob=0.598
+23:46:38 | INFO | SIDE_DIAG: Solana Up or Down - March 19, 4:45PM-5:00PM E | YES_e=0.1203 NO_e=-0.0103 | no_ask=0.390 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | CANDLE_PATTERNS: Solana Up or Down - March 19, 4:45P | ['HAMMER', 'HANGING_MAN'] score=+0.00 bull=1 bear=1
+23:46:38 | INFO | CANDLE_YES_ACTIVATE: Solana Up or Down - March 19, 4:45P patterns=['HAMMER'] → YES (edge=0.1203, price=0.50, pscore=+0.00)
+23:46:38 | INFO | CAUTIOUS_HOUR: Solana Up or Down - March 19, 4:45PM-5:0 edge=0.110 < 0.120 — 04PM ET needs stronger conviction
+23:46:38 | INFO | OB_DEPTH: Bitcoin Up or Down - March 19, 4:45 | spread=1.9% imb=-0.19 liq=0.92 boost=-0.005 | walls: bid=$920 ask=$766
+23:46:38 | INFO | ARB_OPPORTUNITY: Bitcoin Up or Down - March 19, 4:45PM-5: | YES=0.470 + NO=0.470 = 0.940 | Est.Profit=6.4%
+23:46:38 | INFO | SUM_MONITOR: Bitcoin Up or Down - March 19, 4:45 | YES+NO=0.940 dev=-6.0% adj=+0.030 arb=YES
+23:46:38 | INFO | MULTI_EX: Bitcoin Up or Down - March 19, 4:45 | orderflow=+0.348 spread=0.014% → BULLISH boost=+0.0174
+23:46:38 | INFO | ENHANCED_TOTAL: Bitcoin Up or Down - March 19, 4:45 | raw=+0.0174 capped=+0.0174 → prob=0.532
+23:46:38 | INFO | SIDE_DIAG: Bitcoin Up or Down - March 19, 4:45PM-5:00PM  | YES_e=0.0845 NO_e=-0.0245 | no_ask=0.470 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:38 | INFO | CANDLE_PATTERNS: Bitcoin Up or Down - March 19, 4:45 | ['THREE_WHITE_SOLDIERS'] score=+0.90 bull=1 bear=0
+23:46:38 | INFO | CANDLE_YES_ACTIVATE: Bitcoin Up or Down - March 19, 4:45 patterns=['THREE_WHITE_SOLDIERS'] → YES (edge=0.1045, price=0.47, pscore=+0.90)
+23:46:38 | INFO | TECH_SCORE: Bitcoin Up or Down - March 19, 4:45 score=+0.619 adx=26 obv=+0.275 cmf=+0.142
+23:46:38 | INFO | MICRO_MOVE_SCALE: Bitcoin Up or Down - March 19, 4:45PM-5: |chg|=0.024%<0.10% → $7.76→$3.88
+23:46:38 | INFO | ML_BOOST: Bitcoin Up or Down - March 19, 4:45PM-5: ml=+0.987 (high confidence)
+23:46:38 | INFO | ARB [bayesian/15m]: Bitcoin Up or Down - March 19, 4:45PM-5:00PM ET | YES@0.470 P=0.532 Edge=0.095 $3.88 tech=+0.62 adx=26 ml=+0.987
+23:46:39 | INFO | LEAD_LAG: XRP Up or Down - March 19, 4:45PM-5 | Binance=$1.45 Bitstamp=$1.45 spread=+0.0400% → BULLISH boost=+0.0060
+23:46:39 | INFO | MULTI_EX: XRP Up or Down - March 19, 4:45PM-5 | orderflow=+0.693 spread=0.054% → BULLISH boost=+0.0200
+23:46:39 | INFO | ENHANCED_TOTAL: XRP Up or Down - March 19, 4:45PM-5 | raw=+0.0200 capped=+0.0200 → prob=0.530
+23:46:39 | INFO | SIDE_DIAG: XRP Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=0.0626 NO_e=-0.0626 | no_ask=0.510 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:39 | INFO | CANDLE_PATTERNS: XRP Up or Down - March 19, 4:45PM-5 | ['HAMMER', 'HANGING_MAN'] score=+0.00 bull=1 bear=1
+23:46:39 | INFO | CANDLE_YES_ACTIVATE: XRP Up or Down - March 19, 4:45PM-5 patterns=['HAMMER'] → YES (edge=0.0626, price=0.49, pscore=+0.00)
+23:46:39 | INFO | TECH_SCORE: XRP Up or Down - March 19, 4:45PM-5 score=+0.566 adx=20 obv=+1.000 cmf=+0.057
+23:46:39 | INFO | CAUTIOUS_HOUR: XRP Up or Down - March 19, 4:45PM-5:00PM edge=0.053 < 0.075 — 04PM ET needs stronger conviction
+23:46:39 | INFO | OB_ILLIQUID: Hyperliquid Up or Down - March 19,  | spread=57.4% bid_depth=$19 ask_depth=$119
+23:46:39 | INFO | OVERPRICED: Hyperliquid Up or Down - March 19, 4:45P | YES=0.590 + NO=0.640 = 1.230 | Sapma=+23.0%
+23:46:39 | INFO | SUM_MONITOR: Hyperliquid Up or Down - March 19,  | YES+NO=1.230 dev=+23.0% adj=-0.115 arb=NO
+23:46:39 | INFO | SIDE_DIAG: Hyperliquid Up or Down - March 19, 4:45PM-5:0 | YES_e=-0.0939 NO_e=-0.1361 | no_ask=0.640 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:46:39 | INFO | CANDLE_PATTERNS: Hyperliquid Up or Down - March 19,  | ['BULLISH_MARUBOZU'] score=+0.60 bull=1 bear=0
+23:46:39 | INFO | ARB_OPPORTUNITY: Ethereum Up or Down - March 19, 4:45PM-5 | YES=0.460 + NO=0.490 = 0.950 | Est.Profit=5.3%
+23:46:39 | INFO | SUM_MONITOR: Ethereum Up or Down - March 19, 4:4 | YES+NO=0.950 dev=-5.0% adj=+0.025 arb=YES
+23:46:39 | INFO | MULTI_EX: Ethereum Up or Down - March 19, 4:4 | orderflow=+0.437 spread=0.013% → BULLISH boost=+0.0200
+23:46:39 | INFO | OPTIONS: Ethereum Up or Down - March 19, 4:4 | PCR=0.56 IV=89% → BEARISH boost=-0.0231
+23:46:39 | INFO | ENHANCED_TOTAL: Ethereum Up or Down - March 19, 4:4 | raw=-0.0031 capped=-0.0031 → prob=0.504
+23:46:39 | INFO | SIDE_DIAG: Ethereum Up or Down - March 19, 4:45PM-5:00PM | YES_e=0.0666 NO_e=-0.0166 | no_ask=0.490 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:46:39 | INFO | CANDLE_YES_ACTIVATE: Ethereum Up or Down - March 19, 4:4 2green → YES (edge=0.0666, price=0.46, pscore=+0.00)
+23:46:39 | INFO | TECH_SCORE: Ethereum Up or Down - March 19, 4:4 score=+0.423 adx=26 obv=+0.006 cmf=+0.097
+23:46:39 | INFO | CAUTIOUS_HOUR: Ethereum Up or Down - March 19, 4:45PM-5 edge=0.057 < 0.075 — 04PM ET needs stronger conviction
+23:46:39 | INFO | OB_ILLIQUID: BNB Up or Down - March 19, 4:45PM-5 | spread=49.1% bid_depth=$16 ask_depth=$142
+23:46:39 | INFO | OVERPRICED: BNB Up or Down - March 19, 4:45PM-5:00PM | YES=0.540 + NO=0.570 = 1.110 | Sapma=+11.0%
+23:46:39 | INFO | SUM_MONITOR: BNB Up or Down - March 19, 4:45PM-5 | YES+NO=1.110 dev=+11.0% adj=-0.055 arb=NO
+23:46:39 | INFO | SIDE_DIAG: BNB Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=-0.0264 NO_e=-0.0836 | no_ask=0.570 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:46:39 | INFO | TECH_SCORE: BNB Up or Down - March 19, 4:45PM-5 score=+0.604 adx=27 obv=+1.000 cmf=+0.775
+23:46:39 | INFO | Monte Carlo: E[r]=-67.1% | WR=58.7% | DD=69.8% | Sharpe=-5.52 | Viable=❌
+23:46:39 | INFO | 4 arbitraj sinyali üretildi.
+23:46:39 | INFO | COIN_LIMIT: 4:45PM-4:50PM | açık=0 + yeni=2 (max 2), 1 düşürüldü
+23:46:39 | INFO | SİNYAL [bayesian]: Solana Up or Down - March 19, 4:45PM-4:50PM ET | Bayesian=0.655 | Fiyat=0.490 | Edge=0.177 | Z=0.0 | $4.00 | candle_sec=99s
+23:46:39 | INFO | CLOB GTC order: price=0.5 size=8.0000 amount=4.0 notional=$4.0000
+23:46:39 | INFO | GTC emir gönderildi (0x0c421e54cf7da96a27ceb0170e02898360204eba87421e050fad043c4bb7553c), fill bekleniyor (max 30sn)...
+23:46:44 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:46:50 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:46:55 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:47:00 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:47:05 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:47:10 | INFO | GTC poll: status=LIVE matched=0.00/8.00
+23:47:10 | WARNING | GTC emir 30sn içinde dolmadı — iptal ediliyor: 0x0c421e54cf7da96a27ceb0170e02898360204eba87421e050fad043c4bb7553c
+23:47:10 | INFO | GTC emir iptal edildi: 0x0c421e54cf7da96a27ceb0170e02898360204eba87421e050fad043c4bb7553c
+23:47:10 | ERROR | Emir başarısız: Solana Up or Down - March 19, 4:45PM-4:50PM ET
+23:47:10 | INFO | SİNYAL [bayesian]: XRP Up or Down - March 19, 4:45PM-4:50PM ET | Bayesian=0.584 | Fiyat=0.470 | Edge=0.127 | Z=0.0 | $4.00 | candle_sec=130s
+23:47:10 | INFO | CLOB GTC order: price=0.48 size=8.3300 amount=4.0 notional=$3.9984
+23:47:11 | INFO | GTC emir gönderildi (0x60a1b3105238c24cd578de758e9ec7b1b12a23933b2c54ba64d9e70d782f2842), fill bekleniyor (max 30sn)...
+23:47:16 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:21 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:26 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:31 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:37 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:42 | INFO | GTC poll: status=LIVE matched=0.00/8.33
+23:47:42 | WARNING | GTC emir 30sn içinde dolmadı — iptal ediliyor: 0x60a1b3105238c24cd578de758e9ec7b1b12a23933b2c54ba64d9e70d782f2842
+23:47:42 | INFO | GTC emir iptal edildi: 0x60a1b3105238c24cd578de758e9ec7b1b12a23933b2c54ba64d9e70d782f2842
+23:47:42 | ERROR | Emir başarısız: XRP Up or Down - March 19, 4:45PM-4:50PM ET
+23:47:42 | INFO | SİNYAL [bayesian]: Bitcoin Up or Down - March 19, 4:45PM-5:00PM ET | Bayesian=0.532 | Fiyat=0.470 | Edge=0.095 | Z=0.0 | $3.88 | candle_sec=162s
+23:47:42 | INFO | CLOB GTC order: price=0.48 size=8.0800 amount=3.88 notional=$3.8784
+23:47:42 | INFO | GTC emir gönderildi (0x329dafcc1ade6915f1c7af211b362ef8117fe4d2e5fadeb6879d4e3fc52e23f5), fill bekleniyor (max 30sn)...
+23:47:47 | INFO | GTC poll: status=LIVE matched=0.00/8.08
+23:47:53 | INFO | GTC poll: status=MATCHED matched=8.08/8.08
+23:47:53 | SUCCESS | Emir dolduruldu: 0x329dafcc1ade6915f1c7af211b362ef8117fe4d2e5fadeb6879d4e3fc52e23f5 status=matched
+23:47:53 | INFO | Pozisyon eklendi: Bitcoin Up or Down - March 19, 4:45PM-5:00PM ET
+23:47:53 | SUCCESS | EMİR VERİLDİ: Bitcoin Up or Down - March 19, 4:45PM-5:00PM ET | $3.88 @ 0.4700
+23:47:53 | INFO | TIME_EXPIRED: XRP Up or Down - March 19, 4:30PM-4:45PM ET (end=16:45 ET, now=16:47 ET)
+23:47:54 | INFO | SPOT_RESOLVE: XRP Up or Down - March 19, 4:30PM-4:45PM ET → UP (open=1.45, close=1.45, Δ=+0.173%)
+23:47:54 | INFO | SPOT_RESOLUTION (no-gamma): XRP Up or Down - March 19, 4:30PM-4:45PM ET → YES
+23:47:54 | INFO | SPOT resolved UP → YES = WIN: XRP Up or Down - March 19, 4:30PM-4:45PM ET
+23:47:54 | INFO | Pozisyon kapatıldı: XRP Up or Down - March 19, 4:30PM-4:45PM | WIN | PnL: $+4.00
+23:47:54 | INFO | ==================================================
+23:47:54 | INFO | Sermaye    : $169.00
+23:47:54 | INFO | Unrealized : $0.00
+23:47:54 | INFO | Toplam PnL : $69.57 (70.0%)
+23:47:54 | INFO | Hedef      : $298 (56.7% tamamlandı)
+23:47:54 | INFO | Açık Poz   : 1
+23:47:54 | INFO | ==================================================
+23:47:54 | INFO | Sonraki döngü 30s sonra...
+23:48:24 | INFO | TOP_TRADER: 200 buyuk islem taranidi, 0 market icin sinyal
+23:48:25 | INFO | KALSHI: bitcoin 5 market taranidi
+23:48:25 | INFO | KALSHI: ethereum 5 market taranidi
+23:48:25 | INFO | KALSHI: solana 0 market taranidi
+23:48:25 | INFO | === Döngü #13: 23:48:25 ===
+23:48:25 | INFO | DYNAMIC_KELLY: W2/L0 → multiplier=1.10
+23:48:29 | INFO | Toplam çekilen: 10000 | Gelecekteki: 7638
+23:48:29 | INFO | 7638 aktif market bulundu.
+23:48:29 | INFO | Filtre sonrası: 7 market arbitraj analizine giriyor.
+23:48:30 | INFO | NO orderbook: 7/7 market zenginleştirildi.
+23:48:44 | INFO | MULTI_EX: 6 coins from 3 exchanges
+23:48:44 | INFO | REGIME: NEUTRAL (str=0.03) | BTC 4h=+0.27% 5m=-0.08% | ETH 4h=+0.11% 5m=-0.18%
+23:48:44 | INFO | OB_ILLIQUID: Dogecoin Up or Down - March 19, 4:4 | spread=120.0% bid_depth=$16 ask_depth=$118
+23:48:44 | INFO | OVERPRICED: Dogecoin Up or Down - March 19, 4:45PM-5 | YES=0.460 + NO=0.760 = 1.220 | Sapma=+22.0%
+23:48:44 | INFO | SUM_MONITOR: Dogecoin Up or Down - March 19, 4:4 | YES+NO=1.220 dev=+22.0% adj=-0.110 arb=NO
+23:48:44 | INFO | SIDE_DIAG: Dogecoin Up or Down - March 19, 4:45PM-5:00PM | YES_e=-0.0670 NO_e=-0.1530 | no_ask=0.760 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:44 | INFO | OB_DEPTH: Solana Up or Down - March 19, 4:45P | spread=1.8% imb=-0.20 liq=0.93 boost=-0.006 | walls: bid=$153 ask=$190
+23:48:44 | INFO | ARB_OPPORTUNITY: Solana Up or Down - March 19, 4:45PM-5:0 | YES=0.500 + NO=0.420 = 0.920 | Est.Profit=8.7%
+23:48:44 | INFO | SUM_MONITOR: Solana Up or Down - March 19, 4:45P | YES+NO=0.920 dev=-8.0% adj=+0.040 arb=YES
+23:48:44 | INFO | MULTI_EX: Solana Up or Down - March 19, 4:45P | orderflow=-0.698 spread=0.067% → BEARISH boost=-0.0200
+23:48:44 | INFO | ENHANCED_TOTAL: Solana Up or Down - March 19, 4:45P | raw=-0.0200 capped=-0.0200 → prob=0.552
+23:48:44 | INFO | SIDE_DIAG: Solana Up or Down - March 19, 4:45PM-5:00PM E | YES_e=0.0413 NO_e=0.0387 | no_ask=0.420 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:48:44 | INFO | CANDLE_YES_ACTIVATE: Solana Up or Down - March 19, 4:45P 2green → YES (edge=0.0516, price=0.50, pscore=+0.00)
+23:48:44 | INFO | BOUNCE_NO_BLOCK: Solana Up or Down - March 19, 4:45P -- 2 green / patterns=[], NO blocked
+23:48:44 | INFO | TECH_SCORE: Solana Up or Down - March 19, 4:45P score=+0.382 adx=22 obv=+0.369 cmf=+0.060
+23:48:44 | INFO | OB_DEPTH: Bitcoin Up or Down - March 19, 4:45 | spread=4.1% imb=-0.27 liq=0.84 boost=-0.007 | walls: bid=$385 ask=$424
+23:48:44 | INFO | OVERPRICED: Bitcoin Up or Down - March 19, 4:45PM-5: | YES=0.460 + NO=0.710 = 1.170 | Sapma=+17.0%
+23:48:44 | INFO | SUM_MONITOR: Bitcoin Up or Down - March 19, 4:45 | YES+NO=1.170 dev=+17.0% adj=-0.085 arb=NO
+23:48:44 | INFO | MULTI_EX: Bitcoin Up or Down - March 19, 4:45 | orderflow=-0.376 spread=0.012% → BEARISH boost=-0.0188
+23:48:44 | INFO | ENHANCED_TOTAL: Bitcoin Up or Down - March 19, 4:45 | raw=-0.0188 capped=-0.0188 → prob=0.366
+23:48:44 | INFO | SIDE_DIAG: Bitcoin Up or Down - March 19, 4:45PM-5:00PM  | YES_e=-0.0671 NO_e=-0.1029 | no_ask=0.710 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:44 | INFO | CANDLE_PATTERNS: Bitcoin Up or Down - March 19, 4:45 | ['BEARISH_HARAMI'] score=-0.40 bull=0 bear=1
+23:48:45 | INFO | OB_DEPTH: XRP Up or Down - March 19, 4:45PM-5 | spread=4.1% imb=-0.21 liq=0.84 boost=-0.005 | walls: bid=$47 ask=$100
+23:48:45 | INFO | OVERPRICED: XRP Up or Down - March 19, 4:45PM-5:00PM | YES=0.470 + NO=0.750 = 1.220 | Sapma=+22.0%
+23:48:45 | INFO | SUM_MONITOR: XRP Up or Down - March 19, 4:45PM-5 | YES+NO=1.220 dev=+22.0% adj=-0.110 arb=NO
+23:48:45 | INFO | SIDE_DIAG: XRP Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=-0.0621 NO_e=-0.1579 | no_ask=0.750 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:45 | INFO | CANDLE_PATTERNS: XRP Up or Down - March 19, 4:45PM-5 | ['BEARISH_HARAMI'] score=-0.40 bull=0 bear=1
+23:48:45 | INFO | OB_ILLIQUID: Hyperliquid Up or Down - March 19,  | spread=156.0% bid_depth=$243 ask_depth=$14247
+23:48:45 | INFO | OVERPRICED: Hyperliquid Up or Down - March 19, 4:45P | YES=0.640 + NO=0.690 = 1.330 | Sapma=+33.0%
+23:48:45 | INFO | SUM_MONITOR: Hyperliquid Up or Down - March 19,  | YES+NO=1.330 dev=+33.0% adj=-0.165 arb=NO
+23:48:45 | INFO | SIDE_DIAG: Hyperliquid Up or Down - March 19, 4:45PM-5:0 | YES_e=-0.1602 NO_e=-0.1698 | no_ask=0.690 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:45 | INFO | CANDLE_PATTERNS: Hyperliquid Up or Down - March 19,  | ['BULLISH_MARUBOZU'] score=+0.60 bull=1 bear=0
+23:48:45 | INFO | OVERPRICED: Ethereum Up or Down - March 19, 4:45PM-5 | YES=0.470 + NO=0.760 = 1.230 | Sapma=+23.0%
+23:48:45 | INFO | SUM_MONITOR: Ethereum Up or Down - March 19, 4:4 | YES+NO=1.230 dev=+23.0% adj=-0.115 arb=NO
+23:48:45 | INFO | LEAD_LAG: Ethereum Up or Down - March 19, 4:4 | Binance=$2144.30 Bitstamp=$2143.57 spread=+0.0341% → BULLISH boost=+0.0051
+23:48:45 | INFO | MULTI_EX: Ethereum Up or Down - March 19, 4:4 | orderflow=-0.498 spread=0.106% → BEARISH boost=-0.0200
+23:48:45 | INFO | OPTIONS: Ethereum Up or Down - March 19, 4:4 | PCR=0.56 IV=89% → BEARISH boost=-0.0231
+23:48:45 | INFO | ENHANCED_TOTAL: Ethereum Up or Down - March 19, 4:4 | raw=-0.0431 capped=-0.0300 → prob=0.353
+23:48:45 | INFO | SIDE_DIAG: Ethereum Up or Down - March 19, 4:45PM-5:00PM | YES_e=-0.0874 NO_e=-0.1426 | no_ask=0.760 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:45 | INFO | OB_ILLIQUID: BNB Up or Down - March 19, 4:45PM-5 | spread=106.9% bid_depth=$14 ask_depth=$184
+23:48:45 | INFO | OVERPRICED: BNB Up or Down - March 19, 4:45PM-5:00PM | YES=0.460 + NO=0.730 = 1.190 | Sapma=+19.0%
+23:48:45 | INFO | SUM_MONITOR: BNB Up or Down - March 19, 4:45PM-5 | YES+NO=1.190 dev=+19.0% adj=-0.095 arb=NO
+23:48:45 | INFO | LEAD_LAG: BNB Up or Down - March 19, 4:45PM-5 | Binance=$641.91 Bitstamp=$642.39 spread=-0.0753% → BEARISH boost=-0.0113
+23:48:45 | INFO | SIDE_DIAG: BNB Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=-0.0630 NO_e=-0.1270 | no_ask=0.730 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:48:45 | INFO | TECH_SCORE: BNB Up or Down - March 19, 4:45PM-5 score=+0.604 adx=27 obv=+1.000 cmf=+0.775
+23:48:45 | INFO | 0 arbitraj sinyali üretildi.
+23:48:45 | INFO | ==================================================
+23:48:45 | INFO | Sermaye    : $169.00
+23:48:45 | INFO | Unrealized : $-1.94
+23:48:45 | INFO | Toplam PnL : $67.63 (68.0%)
+23:48:45 | INFO | Hedef      : $298 (56.7% tamamlandı)
+23:48:45 | INFO | Açık Poz   : 1
+23:48:45 | INFO | ==================================================
+23:48:45 | INFO | Sonraki döngü 30s sonra...
+23:49:15 | INFO | === Döngü #14: 23:49:15 ===
+23:49:15 | INFO | DYNAMIC_KELLY: W2/L0 → multiplier=1.10
+23:49:19 | INFO | Toplam çekilen: 10000 | Gelecekteki: 7910
+23:49:19 | INFO | 7910 aktif market bulundu.
+23:49:19 | INFO | Filtre sonrası: 7 market arbitraj analizine giriyor.
+23:49:20 | INFO | NO orderbook: 7/7 market zenginleştirildi.
+23:49:34 | INFO | MULTI_EX: 6 coins from 3 exchanges
+23:49:34 | INFO | REGIME: NEUTRAL (str=0.03) | BTC 4h=+0.26% 5m=-0.09% | ETH 4h=+0.15% 5m=-0.14%
+23:49:35 | INFO | OB_ILLIQUID: Dogecoin Up or Down - March 19, 4:4 | spread=180.0% bid_depth=$9 ask_depth=$727
+23:49:35 | INFO | OVERPRICED: Dogecoin Up or Down - March 19, 4:45PM-5 | YES=0.460 + NO=0.800 = 1.260 | Sapma=+26.0%
+23:49:35 | INFO | SUM_MONITOR: Dogecoin Up or Down - March 19, 4:4 | YES+NO=1.260 dev=+26.0% adj=-0.130 arb=NO
+23:49:35 | INFO | LEAD_LAG: Dogecoin Up or Down - March 19, 4:4 | Binance=$0.09 Bitstamp=$0.09 spread=+0.0535% → BULLISH boost=+0.0080
+23:49:35 | INFO | MULTI_EX: Dogecoin Up or Down - March 19, 4:4 | orderflow=+0.667 spread=0.032% → BULLISH boost=+0.0200
+23:49:35 | INFO | ENHANCED_TOTAL: Dogecoin Up or Down - March 19, 4:4 | raw=+0.0200 capped=+0.0200 → prob=0.376
+23:49:35 | INFO | SIDE_DIAG: Dogecoin Up or Down - March 19, 4:45PM-5:00PM | YES_e=-0.0594 NO_e=-0.2006 | no_ask=0.800 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | CANDLE_PATTERNS: Dogecoin Up or Down - March 19, 4:4 | ['BEARISH_SPINNING_TOP'] score=-0.10 bull=0 bear=0
+23:49:35 | INFO | ARB_OPPORTUNITY: Solana Up or Down - March 19, 4:45PM-5:0 | YES=0.500 + NO=0.400 = 0.900 | Est.Profit=11.1%
+23:49:35 | INFO | SUM_MONITOR: Solana Up or Down - March 19, 4:45P | YES+NO=0.900 dev=-10.0% adj=+0.050 arb=YES
+23:49:35 | INFO | SIDE_DIAG: Solana Up or Down - March 19, 4:45PM-5:00PM E | YES_e=0.0735 NO_e=0.0265 | no_ask=0.400 src=REAL_BOOK health=OK | reason=YES_EDGE_DOMINATES
+23:49:35 | INFO | CANDLE_YES_ACTIVATE: Solana Up or Down - March 19, 4:45P 2green → YES (edge=0.0919, price=0.50, pscore=+0.00)
+23:49:35 | INFO | BOUNCE_NO_BLOCK: Solana Up or Down - March 19, 4:45P -- 2 green / patterns=[], NO blocked
+23:49:35 | INFO | TECH_SCORE: Solana Up or Down - March 19, 4:45P score=+0.411 adx=22 obv=+0.382 cmf=+0.062
+23:49:35 | INFO | CAUTIOUS_HOUR: Solana Up or Down - March 19, 4:45PM-5:0 edge=0.082 < 0.120 — 04PM ET needs stronger conviction
+23:49:35 | INFO | OVERPRICED: Bitcoin Up or Down - March 19, 4:45PM-5: | YES=0.460 + NO=0.710 = 1.170 | Sapma=+17.0%
+23:49:35 | INFO | SUM_MONITOR: Bitcoin Up or Down - March 19, 4:45 | YES+NO=1.170 dev=+17.0% adj=-0.085 arb=NO
+23:49:35 | INFO | MULTI_EX: Bitcoin Up or Down - March 19, 4:45 | orderflow=+0.257 spread=0.038% → BULLISH boost=+0.0128
+23:49:35 | INFO | ENHANCED_TOTAL: Bitcoin Up or Down - March 19, 4:45 | raw=+0.0128 capped=+0.0128 → prob=0.407
+23:49:35 | INFO | SIDE_DIAG: Bitcoin Up or Down - March 19, 4:45PM-5:00PM  | YES_e=-0.0343 NO_e=-0.1357 | no_ask=0.710 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | CANDLE_PATTERNS: Bitcoin Up or Down - March 19, 4:45 | ['BEARISH_HARAMI'] score=-0.40 bull=0 bear=1
+23:49:35 | INFO | OVERPRICED: XRP Up or Down - March 19, 4:45PM-5:00PM | YES=0.470 + NO=0.710 = 1.180 | Sapma=+18.0%
+23:49:35 | INFO | SUM_MONITOR: XRP Up or Down - March 19, 4:45PM-5 | YES+NO=1.180 dev=+18.0% adj=-0.090 arb=NO
+23:49:35 | INFO | MULTI_EX: XRP Up or Down - March 19, 4:45PM-5 | orderflow=+0.227 spread=0.051% → BULLISH boost=+0.0114
+23:49:35 | INFO | ENHANCED_TOTAL: XRP Up or Down - March 19, 4:45PM-5 | raw=+0.0114 capped=+0.0114 → prob=0.413
+23:49:35 | INFO | SIDE_DIAG: XRP Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=-0.0392 NO_e=-0.1408 | no_ask=0.710 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | CANDLE_PATTERNS: XRP Up or Down - March 19, 4:45PM-5 | ['BEARISH_HARAMI'] score=-0.40 bull=0 bear=1
+23:49:35 | INFO | OB_ILLIQUID: Hyperliquid Up or Down - March 19,  | spread=180.6% bid_depth=$9 ask_depth=$535
+23:49:35 | INFO | OVERPRICED: Hyperliquid Up or Down - March 19, 4:45P | YES=0.640 + NO=0.950 = 1.590 | Sapma=+59.0%
+23:49:35 | INFO | SUM_MONITOR: Hyperliquid Up or Down - March 19,  | YES+NO=1.590 dev=+59.0% adj=-0.295 arb=NO
+23:49:35 | INFO | SIDE_DIAG: Hyperliquid Up or Down - March 19, 4:45PM-5:0 | YES_e=-0.2660 NO_e=-0.3240 | no_ask=0.950 src=REAL_BOOK health=UNTRADABLE | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | CANDLE_PATTERNS: Hyperliquid Up or Down - March 19,  | ['BULLISH_MARUBOZU'] score=+0.60 bull=1 bear=0
+23:49:35 | INFO | OVERPRICED: Ethereum Up or Down - March 19, 4:45PM-5 | YES=0.470 + NO=0.750 = 1.220 | Sapma=+22.0%
+23:49:35 | INFO | SUM_MONITOR: Ethereum Up or Down - March 19, 4:4 | YES+NO=1.220 dev=+22.0% adj=-0.110 arb=NO
+23:49:35 | INFO | MULTI_EX: Ethereum Up or Down - March 19, 4:4 | orderflow=+0.846 spread=0.081% → BULLISH boost=+0.0200
+23:49:35 | INFO | OPTIONS: Ethereum Up or Down - March 19, 4:4 | PCR=0.56 IV=89% → BEARISH boost=-0.0231
+23:49:35 | INFO | ENHANCED_TOTAL: Ethereum Up or Down - March 19, 4:4 | raw=-0.0031 capped=-0.0031 → prob=0.381
+23:49:35 | INFO | SIDE_DIAG: Ethereum Up or Down - March 19, 4:45PM-5:00PM | YES_e=-0.0655 NO_e=-0.1545 | no_ask=0.750 src=REAL_BOOK health=OK | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | CANDLE_PATTERNS: Ethereum Up or Down - March 19, 4:4 | ['BEARISH_HARAMI'] score=-0.40 bull=0 bear=1
+23:49:35 | INFO | OB_ILLIQUID: BNB Up or Down - March 19, 4:45PM-5 | spread=180.0% bid_depth=$9 ask_depth=$716
+23:49:35 | INFO | OVERPRICED: BNB Up or Down - March 19, 4:45PM-5:00PM | YES=0.460 + NO=0.950 = 1.410 | Sapma=+41.0%
+23:49:35 | INFO | SUM_MONITOR: BNB Up or Down - March 19, 4:45PM-5 | YES+NO=1.410 dev=+41.0% adj=-0.205 arb=NO
+23:49:35 | INFO | LEAD_LAG: BNB Up or Down - March 19, 4:45PM-5 | Binance=$641.99 Bitstamp=$642.39 spread=-0.0629% → BEARISH boost=-0.0094
+23:49:35 | INFO | MULTI_EX: BNB Up or Down - March 19, 4:45PM-5 | orderflow=+0.671 spread=0.466% → BULLISH boost=+0.0200
+23:49:35 | INFO | ENHANCED_TOTAL: BNB Up or Down - March 19, 4:45PM-5 | raw=+0.0200 capped=+0.0200 → prob=0.282
+23:49:35 | INFO | SIDE_DIAG: BNB Up or Down - March 19, 4:45PM-5:00PM ET | YES_e=-0.1342 NO_e=-0.2758 | no_ask=0.950 src=REAL_BOOK health=UNTRADABLE | reason=BOTH_EDGES_NEGATIVE
+23:49:35 | INFO | TECH_SCORE: BNB Up or Down - March 19, 4:45PM-5 score=+0.604 adx=27 obv=+1.000 cmf=+0.775
+23:49:35 | INFO | 0 arbitraj sinyali üretildi.
+23:49:35 | INFO | ==================================================
+23:49:35 | INFO | Sermaye    : $169.00
+23:49:35 | INFO | Unrealized : $-1.05
+23:49:35 | INFO | Toplam PnL : $68.52 (68.9%)
+23:49:35 | INFO | Hedef      : $298 (56.7% tamamlandı)
+23:49:35 | INFO | Açık Poz   : 1
+23:49:35 | INFO | ==================================================
+23:49:35 | INFO | Sonraki döngü 30s sonra...
+23:50:05 | INFO | === Döngü #15: 23:50:05 ===
+23:50:05 | INFO | DYNAMIC_KELLY: W2/L0 → multiplier=1.10
+23:50:09 | INFO | Toplam çekilen: 10000 | Gelecekteki: 7913
+23:50:09 | INFO | 7913 aktif market bulundu.
+23:50:09 | INFO | Filtre sonrası: 14 market arbitraj analizine giriyor.
+23:50:11 | INFO | NO orderbook: 14/14 market zenginleştirildi.
