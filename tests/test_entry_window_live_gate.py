@@ -30,9 +30,9 @@ from control_plane.live_gate import check_live_gate
 # start = 7:10PM ET = 23:10 UTC  (ET+4)
 # end   = 7:15PM ET = 23:15 UTC
 # horizon = 5 minutes
-# Default 5m policy: before=45s, after=90s
-#   window_opens  = 23:09:15 UTC
-#   window_closes = 23:11:30 UTC
+# Default 5m policy: before=600s, after=600s
+#   window_opens  = 23:00:00 UTC
+#   window_closes = 23:20:00 UTC
 QUESTION = "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET"
 MARKET_START_UTC = datetime(2026, 3, 16, 23, 10, 0, tzinfo=timezone.utc)
 POLICY = EntryWindowPolicy()
@@ -133,7 +133,7 @@ def test_within_window_at_start_passes(ctrl_file, readiness_file):
 
 
 def test_within_window_30s_before_start(ctrl_file, readiness_file):
-    """30 seconds before start (inside 45s before-window) → entry_window passes."""
+    """30 seconds before start (inside 600s before-window) → entry_window passes."""
     now = MARKET_START_UTC - timedelta(seconds=30)
 
     result = _gate_at(
@@ -147,7 +147,7 @@ def test_within_window_30s_before_start(ctrl_file, readiness_file):
 
 
 def test_within_window_60s_after_start(ctrl_file, readiness_file):
-    """60 seconds after start (inside 90s after-window) → entry_window passes."""
+    """60 seconds after start (inside 600s after-window) → entry_window passes."""
     now = MARKET_START_UTC + timedelta(seconds=60)
 
     result = _gate_at(
@@ -163,8 +163,8 @@ def test_within_window_60s_after_start(ctrl_file, readiness_file):
 # ── Test 3: too early → entry_window fails, live gate blocked ─────────────────
 
 def test_too_early_blocks_live_gate(ctrl_file, readiness_file):
-    """Time 120s before start (before 45s window opens) → entry_window fails."""
-    now = MARKET_START_UTC - timedelta(seconds=120)
+    """Time 601s before start (before 600s window opens) → entry_window fails."""
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -179,7 +179,7 @@ def test_too_early_blocks_live_gate(ctrl_file, readiness_file):
 
 def test_too_early_rejection_value_in_reason(ctrl_file, readiness_file):
     """entry_window check reason includes TOO_EARLY_FOR_ENTRY_WINDOW enum value."""
-    now = MARKET_START_UTC - timedelta(seconds=120)
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -194,8 +194,8 @@ def test_too_early_rejection_value_in_reason(ctrl_file, readiness_file):
 # ── Test 4: too late → entry_window fails, live gate blocked ──────────────────
 
 def test_too_late_blocks_live_gate(ctrl_file, readiness_file):
-    """Time 200s after start (past 90s after-window) → entry_window fails."""
-    now = MARKET_START_UTC + timedelta(seconds=200)
+    """Time 601s after start (past 600s after-window) → entry_window fails."""
+    now = MARKET_START_UTC + timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -210,7 +210,7 @@ def test_too_late_blocks_live_gate(ctrl_file, readiness_file):
 
 def test_too_late_rejection_value_in_reason(ctrl_file, readiness_file):
     """entry_window check reason includes TOO_LATE_FOR_ENTRY_WINDOW enum value."""
-    now = MARKET_START_UTC + timedelta(seconds=200)
+    now = MARKET_START_UTC + timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -254,7 +254,7 @@ def test_total_checks_count_is_11_with_entry_window(ctrl_file, readiness_file):
 
 def test_total_checks_count_is_11_too_early(ctrl_file, readiness_file):
     """check_live_gate produces exactly 11 checks even when entry_window fails."""
-    now = MARKET_START_UTC - timedelta(seconds=300)
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -269,7 +269,7 @@ def test_total_checks_count_is_11_too_early(ctrl_file, readiness_file):
 
 def test_blockers_contains_too_early_enum_value(ctrl_file, readiness_file):
     """result.blockers includes TOO_EARLY_FOR_ENTRY_WINDOW value when too early."""
-    now = MARKET_START_UTC - timedelta(seconds=300)
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -285,7 +285,7 @@ def test_blockers_contains_too_early_enum_value(ctrl_file, readiness_file):
 
 def test_blockers_contains_too_late_enum_value(ctrl_file, readiness_file):
     """result.blockers includes TOO_LATE_FOR_ENTRY_WINDOW value when too late."""
-    now = MARKET_START_UTC + timedelta(seconds=300)
+    now = MARKET_START_UTC + timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -303,7 +303,7 @@ def test_blockers_contains_too_late_enum_value(ctrl_file, readiness_file):
 
 def test_recheck_after_approval_too_late_uses_approval_delay_rejection(ctrl_file, readiness_file):
     """is_recheck_after_approval=True + too late → APPROVAL_DELAY rejection."""
-    now = MARKET_START_UTC + timedelta(seconds=200)
+    now = MARKET_START_UTC + timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -319,7 +319,7 @@ def test_recheck_after_approval_too_late_uses_approval_delay_rejection(ctrl_file
 
 def test_recheck_after_approval_too_early_uses_approval_delay_rejection(ctrl_file, readiness_file):
     """is_recheck_after_approval=True + too early → APPROVAL_DELAY rejection."""
-    now = MARKET_START_UTC - timedelta(seconds=200)
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -336,8 +336,8 @@ def test_recheck_after_approval_too_early_uses_approval_delay_rejection(ctrl_fil
 # ── Window boundary edge cases ────────────────────────────────────────────────
 
 def test_exactly_at_window_open_boundary_passes(ctrl_file, readiness_file):
-    """Exactly at window open (45s before start) → entry_window passes."""
-    now = MARKET_START_UTC - timedelta(seconds=45)
+    """Exactly at window open (600s before start) → entry_window passes."""
+    now = MARKET_START_UTC - timedelta(seconds=600)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -350,8 +350,8 @@ def test_exactly_at_window_open_boundary_passes(ctrl_file, readiness_file):
 
 
 def test_exactly_at_window_close_boundary_passes(ctrl_file, readiness_file):
-    """Exactly at window close (90s after start) → entry_window passes."""
-    now = MARKET_START_UTC + timedelta(seconds=90)
+    """Exactly at window close (600s after start) → entry_window passes."""
+    now = MARKET_START_UTC + timedelta(seconds=600)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -364,8 +364,8 @@ def test_exactly_at_window_close_boundary_passes(ctrl_file, readiness_file):
 
 
 def test_one_second_before_window_open_fails(ctrl_file, readiness_file):
-    """One second before window open (46s before start) → entry_window fails."""
-    now = MARKET_START_UTC - timedelta(seconds=46)
+    """One second before window open (601s before start) → entry_window fails."""
+    now = MARKET_START_UTC - timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,
@@ -378,8 +378,8 @@ def test_one_second_before_window_open_fails(ctrl_file, readiness_file):
 
 
 def test_one_second_after_window_close_fails(ctrl_file, readiness_file):
-    """One second after window close (91s after start) → entry_window fails."""
-    now = MARKET_START_UTC + timedelta(seconds=91)
+    """One second after window close (601s after start) → entry_window fails."""
+    now = MARKET_START_UTC + timedelta(seconds=601)
 
     result = _gate_at(
         ctrl_file, readiness_file, now,

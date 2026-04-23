@@ -100,8 +100,6 @@ class _Handler(BaseHTTPRequestHandler):
                         loss_streak += 1
                     else:
                         break
-                elif r in ("WIN", "LOSS"):
-                    break
 
             # Read status.json for regime/crypto info
             status = {}

@@ -1,0 +1,14 @@
+{
+  "last_notified_ts": "2026-03-22T12:01:51.404799+00:00",
+  "last_notified_count": 6,
+  "total_notified": 6,
+  "notified_order_ids": [
+    "0xf6932946fbbe19c263d0ef2b3df563060753feba42b4c476c3e097999dcbe0b2",
+    "0x33221abdc87b6c60c24fdc3ab51a910e3f3534d583b01a5c047c13db9a747a97",
+    "0x45db0e3869a5acaf1ffa1f9f0345e17c2fccb7894166a3f01d9f71d950007711",
+    "0xc266cdf58652dc8d353775c7d3cb62f4297860ca624fe7fd4b6b3635c85946c1",
+    "0x1c2f83eea6c677b63c2f4485b3c71886dfe78fb5e0a49e137b72234a049cc01d",
+    "0x7963c050caea32aafcb8e8c26446995b561daf4d637b162f2eefcad7f8e461c1"
+  ],
+  "updated_at": "2026-03-22T12:18:25.019824+00:00"
+}

@@ -3,9 +3,9 @@
 Market used throughout:
     "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET"
     start UTC = 2026-03-16 23:10:00 UTC  (7:10PM ET = UTC-4)
-    5m horizon  → policy: opens 45s before start, closes 90s after start
-    window_opens  = 23:09:15 UTC
-    window_closes = 23:11:30 UTC
+    5m horizon  → policy: opens 600s before start, closes 600s after start
+    window_opens  = 23:00:00 UTC
+    window_closes = 23:20:00 UTC
 """
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ QUESTION = "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET"
 # 2026-03-16 23:10:00 UTC  (start time)
 START_UTC = datetime(2026, 3, 16, 23, 10, 0, tzinfo=timezone.utc)
 
-# 5m policy: 45s before, 90s after
-WINDOW_OPENS = START_UTC - timedelta(seconds=45)   # 23:09:15 UTC
-WINDOW_CLOSES = START_UTC + timedelta(seconds=90)  # 23:11:30 UTC
+# 5m policy: 600s before, 600s after
+WINDOW_OPENS = START_UTC - timedelta(seconds=600)   # 23:00:00 UTC
+WINDOW_CLOSES = START_UTC + timedelta(seconds=600)  # 23:20:00 UTC
 
 
 @pytest.fixture

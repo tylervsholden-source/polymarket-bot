@@ -157,10 +157,10 @@ async def test_full_sim_execution_chain():
             "price": 70000.0,
             "ob_imbalance": 0.4,
             "intervals": {
-                "5m":  {"change_pct": 1.5, "trend_pct": 0.8, "volume_ratio": 3.0, "rsi": 60.0, "momentum": 2},
-                "15m": {"change_pct": 1.5, "trend_pct": 0.8, "volume_ratio": 3.0, "rsi": 60.0, "momentum": 2},
-                "1h":  {"change_pct": 1.5, "trend_pct": 0.8, "volume_ratio": 3.0, "rsi": 60.0, "momentum": 2},
-                "4h":  {"change_pct": 1.5, "trend_pct": 0.8, "volume_ratio": 3.0, "rsi": 60.0, "momentum": 2},
+                "5m":  {"change_pct": 0.50, "trend_pct": 0.9, "volume_ratio": 4.0, "rsi": 65.0, "momentum": 3},
+                "15m": {"change_pct": 0.50, "trend_pct": 0.9, "volume_ratio": 4.0, "rsi": 65.0, "momentum": 3},
+                "1h":  {"change_pct": 0.50, "trend_pct": 0.9, "volume_ratio": 4.0, "rsi": 65.0, "momentum": 3},
+                "4h":  {"change_pct": 0.50, "trend_pct": 0.9, "volume_ratio": 4.0, "rsi": 65.0, "momentum": 3},
             },
         }
     }
@@ -175,8 +175,8 @@ async def test_full_sim_execution_chain():
 
     market = _fake_market(
         "btc-exec-test",
-        "Bitcoin up or down? 12:00PM-1:00PM ET",
-        ask=0.40,
+        "Bitcoin up or down? 12:00PM-12:15PM ET",
+        ask=0.48,
     )
 
     signals = await engine.analyze([market], capital=5.0)

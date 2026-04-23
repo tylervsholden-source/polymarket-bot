@@ -61,6 +61,74 @@ class StoikovExecutor:
             return False
         return abs(inventory) / max_inventory > threshold
 
+    def maker_quotes(
+        self,
+        yes_mid: float,
+        yes_inventory: float,
+        no_inventory: float,
+        volatility: float,
+        time_remaining: float,
+        yes_best_bid: float = 0.0,
+        no_best_bid: float = 0.0,
+    ) -> tuple[float, float, float, float]:
+        """Compute passive bid prices for both YES and NO sides.
+
+        Returns: (yes_bid, yes_size_factor, no_bid, no_size_factor)
+        where size_factor 0.0-1.0 indicates allocation weight per side.
+
+        Strategy: Place bids 1-2 cents above current best bid to get queue
+        priority while staying passive (below ask). This ensures fills happen.
+        Target: YES_bid + NO_bid < 0.95 for guaranteed spread profit.
+        """
+        # ── Practical approach: bid just above current best bid ──
+        # If best_bid available, place 1c above it (but below ask)
+        EDGE_ABOVE_BEST = 0.01  # 1 cent above best bid for priority
+
+        if yes_best_bid > 0:
+            yes_bid = round(yes_best_bid + EDGE_ABOVE_BEST, 2)
+        else:
+            yes_bid = round(max(0.01, yes_mid - 0.03), 2)
+
+        if no_best_bid > 0:
+            no_bid = round(no_best_bid + EDGE_ABOVE_BEST, 2)
+        else:
+            no_mid = 1.0 - yes_mid
+            no_bid = round(max(0.01, no_mid - 0.03), 2)
+
+        # ── Safety: total cost must be < 0.95 for min 5% profit margin ──
+        MAX_TOTAL = 0.95
+        if yes_bid + no_bid > MAX_TOTAL:
+            # Scale both down proportionally
+            scale = MAX_TOTAL / (yes_bid + no_bid)
+            yes_bid = round(yes_bid * scale, 2)
+            no_bid = round(no_bid * scale, 2)
+
+        # ── Min price: don't bid below 0.10 (too far, won't fill) ──
+        if yes_bid < 0.10:
+            yes_bid = 0.0  # skip this side
+        if no_bid < 0.10:
+            no_bid = 0.0  # skip this side
+
+        # ── Inventory skew: reduce size on overweight side ──
+        net_inventory = yes_inventory - no_inventory
+        if net_inventory > 0:
+            yes_factor = max(0.2, 1.0 - net_inventory * 0.1)
+            no_factor = 1.0
+        elif net_inventory < 0:
+            yes_factor = 1.0
+            no_factor = max(0.2, 1.0 + net_inventory * 0.1)
+        else:
+            yes_factor = 1.0
+            no_factor = 1.0
+
+        # Skip sides with zero bid
+        if yes_bid <= 0:
+            yes_factor = 0.0
+        if no_bid <= 0:
+            no_factor = 0.0
+
+        return yes_bid, yes_factor, no_bid, no_factor
+
     def adjusted_entry_price(
         self,
         ask_price: float,

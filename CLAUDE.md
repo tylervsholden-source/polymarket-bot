@@ -37,14 +37,96 @@ polymarket-bot/
     └── strategy.md             ← Trading stratejisi açıklaması
 ```
 
-## Mimari
+## Mimari — Autonomous Multi-Agent Orchestration (v3, Mart 2026)
 
 ```
-ORCHESTRATOR (5dk döngü)
-    ├── signal_agent.py    → Claude AI'a market sorusu gönder → olasılık tahmini al
-    ├── whale_tracker.py   → Son 2 saatin büyük işlemlerini tara
-    ├── kelly_criterion.py → Edge varsa bet büyüklüğünü hesapla
-    └── polymarket_client  → Emri Polymarket CLOB API'ye gönder
+ORCHESTRATOR (adaptif döngü: 60-120sn)
+    │
+    ├── HealthMonitor          → Sistem sağlık kontrolü, hata oranı, backoff
+    │
+    ├── AgentCoordinator.run_cycle()
+    │   │
+    │   ├── PHASE 1: PARALLEL ──────────────────────────
+    │   │   ├── ResearchAgent  → whale + smart_trader + regime + on-chain + sentiment
+    │   │   └── SignalAgent    → 6-model ArbitrageEngine (Bayesian+Edge+Spread+Stoikov+Kelly+MC)
+    │   │
+    │   ├── PHASE 2: MERGE ─────────────────────────────
+    │   │   → Sinyalleri research context ile zenginleştir
+    │   │   → Confluence score hesapla (0-1)
+    │   │   → Risk flag'leri tespit et
+    │   │
+    │   └── PHASE 3: SEQUENTIAL ────────────────────────
+    │       └── ReviewerAgent  → Claude API ile APPROVE / VETO / REDUCE
+    │           (API yoksa → rule-based fallback)
+    │
+    ├── AutonomousDecisionEngine.evaluate()  ← YENİ: Otonom karar motoru
+    │   ├── Risk seviyesi sınıflandırma (LOW/MED/HIGH/CRITICAL)
+    │   ├── Performans bazlı adaptif boyutlandırma
+    │   ├── Loss streak / drawdown koruması
+    │   ├── Volatilite rejimi adaptasyonu
+    │   └── Karar: EXECUTE / EXECUTE_REDUCED / SKIP / DEFER
+    │
+    ├── Execute approved signals → Polymarket CLOB API
+    │
+    └── TradeAnalyzer.analyze_trade()  ← YENİ: Post-trade analiz
+        ├── Root cause analysis (neden kazandı/kaybetti)
+        ├── Sinyal doğruluk kontrolü (whale, regime, smart money)
+        ├── Pattern eşleştirme (10+ bilinen pattern)
+        └── Adaptif parametre önerileri
+```
+
+### Otonom Karar Akışı (v3 — Claude Code auto mode ilhamı)
+```
+Sinyal → AutonomousEngine.evaluate()
+  ├── Performans snapshot güncelle (WR, streak, drawdown)
+  ├── Risk skor hesapla (0-10, çoklu faktör)
+  │     ├── Edge seviyesi
+  │     ├── Yön (YES/NO risk farkı)
+  │     ├── Risk flag sayısı
+  │     ├── Confluence score
+  │     ├── Pozisyon yoğunluğu
+  │     └── Sermaye durumu
+  ├── Adaptif boyut çarpanı belirle
+  │     ├── Loss streak → küçült (×0.25-0.60)
+  │     ├── Win streak → dikkat (×0.85)
+  │     ├── Drawdown → savunma (×0.30-0.40)
+  │     ├── Düşük sermaye → survival (×0.30)
+  │     ├── Yüksek edge bonus (×1.2, max 1.0)
+  │     └── Gece saatleri → düşük likidite (×0.70)
+  └── Final: EXECUTE/REDUCED/SKIP + size_multiplier
+```
+
+### Resilience Katmanı (Bot ASLA Durmaz)
+```
+agents/resilience.py
+├── @resilient              → Async fonksiyonları hata-güvenli yapar
+├── with_retry()            → Exponential backoff ile retry
+├── cycle_guard()           → Döngü timeout koruması
+├── HealthMonitor           → Hata oranı, bellek, backoff hesaplama
+└── infinite_loop()         → Durdurulamaz ana döngü wrapper
+```
+
+### Subagent Dosyaları
+```
+agents/subagents/
+├── __init__.py          ← Package exports
+├── base_agent.py        ← Abstract base (timeout, error handling)
+├── research_agent.py    ← Piyasa araştırma (whale+smart+regime+enhanced)
+├── signal_agent_v2.py   ← Sinyal üretimi (ArbitrageEngine wrapper)
+├── reviewer_agent.py    ← Claude API trade reviewer (APPROVE/VETO/REDUCE)
+└── coordinator.py       ← Hybrid orchestration hub
+
+agents/
+├── autonomous_engine.py ← Otonom karar motoru (risk sınıflandırma + adaptif boyut)
+├── trade_analyzer.py    ← Post-trade analiz + pattern tanıma + öğrenme
+└── resilience.py        ← Bot dayanıklılık katmanı (retry, guard, health)
+```
+
+### .env Ayarları
+```
+ENABLE_RESEARCH_AGENT=true     # Research agent'ı aç/kapa
+ENABLE_REVIEWER_AGENT=true     # Reviewer agent'ı aç/kapa
+REVIEWER_MODEL=claude-sonnet-4-20250514  # Reviewer için model
 ```
 
 ## Temel Kurallar (Değiştirme)

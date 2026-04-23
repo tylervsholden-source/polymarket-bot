@@ -1,0 +1,16 @@
+{
+  "WHALE_ALIGNED_WIN": {
+    "occurrences": 1,
+    "wins": 1,
+    "losses": 0,
+    "total_pnl": 1.5,
+    "avg_pnl": 1.5
+  },
+  "LOW_EDGE_LOSS": {
+    "occurrences": 1008,
+    "wins": 0,
+    "losses": 1008,
+    "total_pnl": -2548.299999999996,
+    "avg_pnl": -2.528075396825393
+  }
+}

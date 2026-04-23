@@ -59,17 +59,24 @@ class EntryWindowPolicy:
     """Complete entry window policy for all horizons."""
     windows_5m: EntryWindowConfig = None  # type: ignore[assignment]
     windows_15m: EntryWindowConfig = None  # type: ignore[assignment]
+    windows_1h: EntryWindowConfig = None  # type: ignore[assignment]
 
     def __post_init__(self):
+        # Entry window genişletildi — sinyal neyse o, zamanlama engellemesin
         if self.windows_5m is None:
             self.windows_5m = EntryWindowConfig(
-                entry_before_start_sec=45,
-                entry_after_start_sec=240,
+                entry_before_start_sec=600,
+                entry_after_start_sec=600,
             )
         if self.windows_15m is None:
             self.windows_15m = EntryWindowConfig(
-                entry_before_start_sec=180,
-                entry_after_start_sec=600,
+                entry_before_start_sec=900,
+                entry_after_start_sec=900,
+            )
+        if self.windows_1h is None:
+            self.windows_1h = EntryWindowConfig(
+                entry_before_start_sec=3600,
+                entry_after_start_sec=3600,
             )
 
     def get_window(self, horizon_minutes: int) -> Optional[EntryWindowConfig]:
@@ -77,6 +84,8 @@ class EntryWindowPolicy:
             return self.windows_5m
         if horizon_minutes == 15:
             return self.windows_15m
+        if horizon_minutes == 60:
+            return self.windows_1h
         return None
 
 
@@ -252,11 +261,13 @@ def check_entry_window(
         horizon_key = 5
     elif horizon <= 20:
         horizon_key = 15
+    elif horizon <= 65:
+        horizon_key = 60
     else:
         return EntryWindowResult(
             passed=False,
             rejection=EntryWindowRejection.ENTRY_WINDOW_UNAVAILABLE,
-            reason=f"No entry window policy for horizon={horizon}m (only 5m/15m supported)",
+            reason=f"No entry window policy for horizon={horizon}m (only 5m/15m/1h supported)",
             market_start_utc=market_start,
             horizon_minutes=horizon,
         )

@@ -1,24 +1,26 @@
 """
-Canlı Terminal Dashboard — Açık Ofis Görünümü
+Canli Terminal Dashboard v2 — Pozisyon & Crypto Odakli
 
-Her ajan kendi "masasında" çalışır:
-  🧠 Signal Agent   |  🐋 Whale Tracker
-  ⚡ BTC Arb Agent  |  🎯 Orchestrator
-         💰 Portföy
-         📋 Son Kararlar
+Layout:
+  [Header]
+  [Crypto Ticker (Binance Feed)]  |  [Orchestrator + Portfolio]
+  [Acik Pozisyonlar Tablosu — YES/NO, entry, current, PnL]
+  [Son Kararlar + Kapanan Trade'ler]
 
-Kullanım:
+Kullanim:
   from core.dashboard import dashboard
-  dashboard.update("signal", status="analiz ediyor", market="BTC Up?")
-  dashboard.add_decision("Signal", "BTC Up?", "BUY", 31.0, 0.58)
+  dashboard.update("orchestrator", cycle=5, scanned=100)
+  dashboard.update_positions(positions_dict)
+  dashboard.update_crypto({"BTC": {"price": 70000, "change_pct": -1.2}, ...})
 """
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from datetime import datetime
 from typing import Any
 
-from rich.columns import Columns
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -27,307 +29,338 @@ from rich.table import Table
 from rich.text import Text
 
 
-# ── Paylaşılan durum ─────────────────────────────────────────────────────────
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_POSITIONS_FILE = os.path.join(_BASE_DIR, "data", "positions.json")
+_STATUS_FILE = os.path.join(_BASE_DIR, "data", "status.json")
 
-_DEFAULT_STATE: dict[str, Any] = {
-    "signal": {
-        "status": "bekliyor",
-        "market": "—",
-        "prob": "—",
-        "conf": "—",
-        "reasoning": "—",
-        "last_at": "—",
-    },
-    "whale": {
-        "status": "izliyor",
-        "market": "—",
-        "direction": "—",
-        "buys": 0,
-        "sells": 0,
-        "volume": 0,
-        "last_at": "—",
-    },
-    "btc_arb": {
-        "btc_price": "—",
-        "last_move_pct": "—",
-        "status": "bekleniyor",
-        "last_trade": "—",
-        "last_at": "—",
-    },
-    "orchestrator": {
-        "cycle": 0,
-        "scanned": 0,
-        "candidates": 0,
-        "open_pos": 0,
-        "max_pos": 5,
-        "next_in": "—",
-        "last_at": "—",
-    },
-    "portfolio": {
-        "capital": 0.0,
-        "initial": 0.0,
-        "open": 0,
-        "wins": 0,
-        "losses": 0,
-    },
-    "onchain": {
-        "alert_level": "NEUTRAL",
-        "message": "İzleniyor",
-        "exchange_netflow_btc": 0.0,
-        "large_transfer_usd": 0.0,
-        "timestamp": "—",
-    },
-    "decisions": [],  # list[dict]
-}
+
+def _coin_from_question(q: str) -> str:
+    """Extract coin name from question like 'Bitcoin Up or Down - March 24, 4:45PM'."""
+    q_lower = q.lower()
+    for coin, name in [
+        ("BTC", "bitcoin"), ("ETH", "ethereum"), ("SOL", "solana"),
+        ("XRP", "xrp"), ("DOGE", "doge"), ("BNB", "bnb"), ("HYPE", "hype"),
+    ]:
+        if name in q_lower or coin.lower() in q_lower:
+            return coin
+    # Non-crypto — show first 20 chars
+    return q[:20]
+
+
+def _time_window(q: str) -> str:
+    """Extract time window like '4:45PM-5:00PM' from question."""
+    import re
+    m = re.search(r'(\d{1,2}:\d{2}[AP]M\s*-\s*\d{1,2}:\d{2}[AP]M)', q, re.IGNORECASE)
+    return m.group(1) if m else ""
 
 
 class Dashboard:
-    """Singleton dashboard — tüm ajanlar bu nesneye yazar."""
+    """Singleton dashboard — tum ajanlar bu nesneye yazar."""
 
     def __init__(self):
-        import copy
-        self.state: dict[str, Any] = copy.deepcopy(_DEFAULT_STATE)
+        self.state: dict[str, Any] = {
+            "orchestrator": {
+                "cycle": 0, "scanned": 0, "candidates": 0,
+                "open_pos": 0, "max_pos": 5, "next_in": "—", "last_at": "—",
+            },
+            "portfolio": {
+                "capital": 0.0, "initial": 0.0, "open": 0, "wins": 0, "losses": 0,
+            },
+            "crypto": {},      # {"BTC": {"price": 70000, "change_pct": -1.2}, ...}
+            "positions": {},   # from positions.json
+            "closed": [],      # from positions.json
+            "decisions": [],
+            "signal": {
+                "status": "bekliyor", "market": "—", "prob": "—",
+                "conf": "—", "reasoning": "—", "last_at": "—",
+            },
+            "whale": {
+                "status": "izliyor", "market": "—", "direction": "—",
+                "buys": 0, "sells": 0, "volume": 0, "last_at": "—",
+            },
+            "btc_arb": {
+                "btc_price": "—", "last_move_pct": "—", "status": "bekleniyor",
+                "last_trade": "—", "last_at": "—",
+            },
+            "onchain": {
+                "alert_level": "NEUTRAL", "message": "Izleniyor",
+                "exchange_netflow_btc": 0.0, "large_transfer_usd": 0.0, "timestamp": "—",
+            },
+            "daily_pnl": 0.0,
+        }
         self._running = False
 
     def update(self, section: str, **kwargs):
-        """Bir masanın verilerini güncelle."""
         if section in self.state:
-            self.state[section].update(kwargs)
-            self.state[section]["last_at"] = datetime.now().strftime("%H:%M:%S")
+            if isinstance(self.state[section], dict):
+                self.state[section].update(kwargs)
+                if "last_at" in self.state[section]:
+                    self.state[section]["last_at"] = datetime.now().strftime("%H:%M:%S")
 
-    def add_decision(
-        self,
-        agent: str,
-        market: str,
-        action: str,
-        size: float,
-        price: float,
-        edge: float = 0.0,
-        result: str = "…",
-    ):
-        """Son kararlar tablosuna satır ekle."""
+    def update_positions(self, positions: dict):
+        self.state["positions"] = positions
+
+    def update_closed(self, closed: list):
+        self.state["closed"] = closed
+
+    def update_crypto(self, data: dict):
+        self.state["crypto"] = data
+
+    def add_decision(self, agent: str, market: str, action: str,
+                     size: float, price: float, edge: float = 0.0, result: str = "…"):
         entry = {
             "time": datetime.now().strftime("%H:%M"),
-            "agent": agent,
-            "market": market[:32],
-            "action": action,
-            "size": size,
-            "price": price,
-            "edge": edge,
-            "result": result,
+            "agent": agent, "market": market[:40], "action": action,
+            "size": size, "price": price, "edge": edge, "result": result,
         }
         self.state["decisions"].insert(0, entry)
-        self.state["decisions"] = self.state["decisions"][:10]
+        self.state["decisions"] = self.state["decisions"][:15]
 
     def update_decision_result(self, market: str, result: str):
-        """Sonuç belli olduğunda güncelle (WIN/LOSS)."""
         for d in self.state["decisions"]:
             if d["market"] in market or market in d["market"]:
                 d["result"] = result
                 break
 
+    def _load_live_data(self):
+        """Read positions.json and status.json for fresh data."""
+        try:
+            with open(_POSITIONS_FILE) as f:
+                pm = json.load(f)
+            self.state["positions"] = pm.get("positions", {})
+            self.state["closed"] = pm.get("closed", [])
+            self.state["portfolio"]["capital"] = pm.get("capital", 0)
+            self.state["daily_pnl"] = pm.get("daily", {}).get("pnl", 0)
+        except Exception:
+            pass
+
+        try:
+            with open(_STATUS_FILE) as f:
+                st = json.load(f)
+            if st.get("crypto"):
+                self.state["crypto"] = st["crypto"]
+        except Exception:
+            pass
+
     # ── Render ────────────────────────────────────────────────────────────────
 
     def _render(self) -> Layout:
+        self._load_live_data()
         s = self.state
         layout = Layout()
 
         layout.split_column(
             Layout(name="header", size=3),
-            Layout(name="desks", size=14),
-            Layout(name="onchain_bar", size=4),
-            Layout(name="portfolio", size=4),
-            Layout(name="decisions"),
+            Layout(name="top_row", size=9),
+            Layout(name="positions"),
+            Layout(name="bottom"),
         )
 
-        layout["desks"].split_row(
-            Layout(name="left"),
-            Layout(name="right"),
+        # Top row: crypto ticker left, orchestrator+portfolio right
+        layout["top_row"].split_row(
+            Layout(name="crypto_panel", ratio=3),
+            Layout(name="status_panel", ratio=2),
         )
-        layout["left"].split_column(
-            Layout(name="signal", size=7),
-            Layout(name="btc_arb", size=7),
-        )
-        layout["right"].split_column(
-            Layout(name="whale", size=7),
-            Layout(name="orch", size=7),
+
+        # Bottom: decisions + closed trades
+        layout["bottom"].split_row(
+            Layout(name="decisions_panel", ratio=3),
+            Layout(name="closed_panel", ratio=2),
         )
 
         # ── Header ────────────────────────────────────────────────────────────
         now = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
-        layout["header"].update(
-            Panel(
-                Text(f"🤖  POLYMARKET AI BOT — CANLI KONTROL ODASI          {now}",
-                     justify="center", style="bold white on dark_blue"),
-                style="bold blue",
-            )
-        )
-
-        # ── Signal Agent ──────────────────────────────────────────────────────
-        sig = s["signal"]
-        status_color = {
-            "analiz ediyor": "yellow",
-            "karar verdi": "green",
-            "bekliyor": "dim",
-        }.get(sig["status"], "white")
-        sig_text = Text()
-        sig_text.append(f"  Durum      : ", style="dim")
-        sig_text.append(f"{sig['status']}\n", style=status_color)
-        sig_text.append(f"  Market     : ", style="dim")
-        sig_text.append(f"{sig['market']}\n", style="cyan")
-        sig_text.append(f"  AI Prob    : ", style="dim")
-        sig_text.append(f"{sig['prob']}\n", style="green bold")
-        sig_text.append(f"  Güven      : ", style="dim")
-        conf_color = {"HIGH": "green", "MEDIUM": "yellow", "LOW": "red"}.get(str(sig["conf"]), "white")
-        sig_text.append(f"{sig['conf']}\n", style=conf_color)
-        sig_text.append(f"  Gerekçe    : ", style="dim")
-        sig_text.append(f"{str(sig['reasoning'])[:45]}\n", style="italic white")
-        sig_text.append(f"  Son güncelleme: {sig['last_at']}", style="dim")
-        layout["signal"].update(Panel(sig_text, title="🧠  Signal Agent", border_style="green"))
-
-        # ── Whale Tracker ─────────────────────────────────────────────────────
-        wh = s["whale"]
-        dir_color = {"BULLISH": "green", "BEARISH": "red", "BUY": "green", "SELL": "red"}.get(
-            str(wh["direction"]), "white"
-        )
-        wh_text = Text()
-        wh_text.append(f"  Durum      : ", style="dim")
-        wh_text.append(f"{wh['status']}\n", style="yellow")
-        wh_text.append(f"  Market     : ", style="dim")
-        wh_text.append(f"{wh['market']}\n", style="cyan")
-        wh_text.append(f"  Yön        : ", style="dim")
-        wh_text.append(f"{wh['direction']}\n", style=f"bold {dir_color}")
-        wh_text.append(f"  Büyük Alım : ", style="dim")
-        wh_text.append(f"{wh['buys']}\n", style="green")
-        wh_text.append(f"  Büyük Satış: ", style="dim")
-        wh_text.append(f"{wh['sells']}\n", style="red")
-        wh_text.append(f"  Hacim      : ", style="dim")
-        wh_text.append(f"${float(wh['volume']):,.0f}\n" if wh['volume'] != "—" else "—\n", style="white")
-        layout["whale"].update(Panel(wh_text, title="🐋  Whale Tracker", border_style="cyan"))
-
-        # ── BTC Arb Agent ─────────────────────────────────────────────────────
-        ba = s["btc_arb"]
-        arb_status_color = {"TETİKLENDİ": "yellow bold", "EMİR VERİLDİ": "green bold", "bekleniyor": "dim"}.get(
-            str(ba["status"]), "white"
-        )
-        ba_text = Text()
-        ba_text.append(f"  BTC Fiyat  : ", style="dim")
-        price_str = f"${float(ba['btc_price']):,.0f}" if ba["btc_price"] != "—" else "—"
-        ba_text.append(f"{price_str}\n", style="white bold")
-        ba_text.append(f"  Son Hareket: ", style="dim")
-        move = ba["last_move_pct"]
-        if move != "—" and move != 0:
-            move_f = float(move)
-            move_color = "green" if move_f > 0 else "red"
-            ba_text.append(f"%{move_f:+.2f}\n", style=f"bold {move_color}")
-        else:
-            ba_text.append("—\n", style="dim")
-        ba_text.append(f"  Durum      : ", style="dim")
-        ba_text.append(f"{ba['status']}\n", style=arb_status_color)
-        ba_text.append(f"  Son İşlem  : ", style="dim")
-        ba_text.append(f"{ba['last_trade']}\n", style="cyan")
-        ba_text.append(f"  Son güncelleme: {ba['last_at']}", style="dim")
-        layout["btc_arb"].update(Panel(ba_text, title="⚡  BTC Arb Agent", border_style="yellow"))
-
-        # ── Orchestrator ──────────────────────────────────────────────────────
-        oc = s["orchestrator"]
-        oc_text = Text()
-        oc_text.append(f"  Döngü #    : ", style="dim")
-        oc_text.append(f"{oc['cycle']}\n", style="white bold")
-        oc_text.append(f"  Taranan    : ", style="dim")
-        oc_text.append(f"{oc['scanned']} market\n", style="white")
-        oc_text.append(f"  AI analizine: ", style="dim")
-        oc_text.append(f"{oc['candidates']} market\n", style="cyan")
-        oc_text.append(f"  Pozisyon   : ", style="dim")
-        open_p = oc["open_pos"]
-        max_p = oc["max_pos"]
-        pos_color = "green" if open_p < max_p else "red"
-        oc_text.append(f"{open_p}/{max_p}\n", style=f"bold {pos_color}")
-        oc_text.append(f"  Sonraki    : ", style="dim")
-        oc_text.append(f"{oc['next_in']}\n", style="white")
-        layout["orch"].update(Panel(oc_text, title="🎯  Orchestrator", border_style="magenta"))
-
-        # ── Onchain Alert Bar ─────────────────────────────────────────────────
-        oc = s["onchain"]
-        alert_colors = {
-            "DANGER":  "bold white on red",
-            "BEARISH": "bold red",
-            "BULLISH": "bold green",
-            "NEUTRAL": "dim",
-        }
-        alert_level = str(oc.get("alert_level", "NEUTRAL"))
-        alert_style = alert_colors.get(alert_level, "white")
-        alert_icon = {"DANGER": "🚨", "BEARISH": "🔴", "BULLISH": "🟢", "NEUTRAL": "🟡"}.get(alert_level, "⚪")
-
-        netflow = float(oc.get("exchange_netflow_btc", 0))
-        net_str = f"{netflow:+,.0f} BTC" if netflow != 0 else "—"
-        max_tx = float(oc.get("large_transfer_usd", 0))
-        max_tx_str = f"${max_tx/1e6:.1f}M" if max_tx >= 1_000_000 else ("$" + f"{max_tx:,.0f}" if max_tx > 0 else "—")
-
-        oc_text = Text(justify="left")
-        oc_text.append(f"  {alert_icon} On-Chain Durum: ", style="dim")
-        oc_text.append(f"{alert_level}  ", style=alert_style)
-        oc_text.append(f"  Mesaj: ", style="dim")
-        oc_text.append(f"{oc.get('message', '—')}  ", style="white")
-        oc_text.append(f"  Exchange Netflow: ", style="dim")
-        netflow_color = "red" if netflow > 500 else ("green" if netflow < -500 else "white")
-        oc_text.append(f"{net_str}  ", style=netflow_color)
-        oc_text.append(f"  En büyük transfer: ", style="dim")
-        oc_text.append(f"{max_tx_str}  ", style="yellow" if max_tx >= 100_000_000 else "white")
-        oc_text.append(f"  Son kontrol: {oc.get('timestamp', '—')}", style="dim")
-
-        layout["onchain_bar"].update(
-            Panel(oc_text, title="🔗  On-Chain Whale Monitor", border_style="red" if alert_level == "DANGER" else "dim white")
-        )
-
-        # ── Portfolio ─────────────────────────────────────────────────────────
         pf = s["portfolio"]
         cap = float(pf["capital"])
-        ini = float(pf["initial"]) or cap
-        pnl = cap - ini
-        pnl_pct = (pnl / ini * 100) if ini > 0 else 0
-        pnl_color = "green" if pnl >= 0 else "red"
-        pnl_sign = "+" if pnl >= 0 else ""
+        daily = float(s.get("daily_pnl", 0))
+        daily_color = "green" if daily >= 0 else "red"
+        daily_sign = "+" if daily >= 0 else ""
 
-        pf_text = Text(justify="center")
-        pf_text.append(f"  Sermaye: ", style="dim")
-        pf_text.append(f"${cap:,.2f}  ", style="white bold")
-        pf_text.append(f"  PnL: ", style="dim")
-        pf_text.append(f"{pnl_sign}${pnl:,.2f} ({pnl_sign}{pnl_pct:.1f}%)  ", style=f"bold {pnl_color}")
-        pf_text.append(f"  Açık Pozisyon: ", style="dim")
-        pf_text.append(f"{pf['open']}  ", style="cyan")
-        pf_text.append(f"  Kazanılan: ", style="dim")
-        pf_text.append(f"{pf['wins']}  ", style="green")
-        pf_text.append(f"  Kaybedilen: ", style="dim")
-        pf_text.append(f"{pf['losses']}", style="red")
+        # Count wins/losses from closed
+        wins = sum(1 for c in s.get("closed", []) if c.get("result") == "WIN")
+        losses = sum(1 for c in s.get("closed", []) if c.get("result") == "LOSS")
 
-        layout["portfolio"].update(
-            Panel(pf_text, title="💰  Portföy", border_style="white")
+        header_text = Text(justify="center")
+        header_text.append(f"  POLYMARKET TRADING BOT  ", style="bold white on dark_blue")
+        header_text.append(f"  {now}  ", style="white")
+        header_text.append(f"  Sermaye: ", style="dim")
+        header_text.append(f"${cap:,.2f}", style="white bold")
+        header_text.append(f"  Gunluk: ", style="dim")
+        header_text.append(f"{daily_sign}${daily:,.2f}", style=f"bold {daily_color}")
+        header_text.append(f"  W/L: ", style="dim")
+        header_text.append(f"{wins}", style="green bold")
+        header_text.append(f"/", style="dim")
+        header_text.append(f"{losses}", style="red bold")
+
+        layout["header"].update(Panel(header_text, style="bold blue"))
+
+        # ── Crypto Ticker ─────────────────────────────────────────────────────
+        crypto = s.get("crypto", {})
+        crypto_tbl = Table(show_header=True, header_style="bold cyan", expand=True,
+                           show_edge=False, pad_edge=False)
+        crypto_tbl.add_column("Coin", width=6, style="bold white")
+        crypto_tbl.add_column("Fiyat", width=12, justify="right")
+        crypto_tbl.add_column("%24h", width=8, justify="right")
+        crypto_tbl.add_column("Sinyal", width=10, justify="center")
+
+        for coin in ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"]:
+            data = crypto.get(coin, {})
+            price = data.get("price", 0)
+            change = data.get("change_pct", 0)
+            if price == 0:
+                crypto_tbl.add_row(coin, "—", "—", "—")
+                continue
+            change_color = "green" if change >= 0 else "red"
+            change_sign = "+" if change >= 0 else ""
+
+            # Signal based on change
+            if abs(change) < 0.3:
+                signal = "[dim]FLAT[/dim]"
+            elif change > 1.5:
+                signal = "[green bold]STRONG UP[/green bold]"
+            elif change > 0:
+                signal = "[green]UP[/green]"
+            elif change < -1.5:
+                signal = "[red bold]STRONG DN[/red bold]"
+            else:
+                signal = "[red]DOWN[/red]"
+
+            price_str = f"${price:,.2f}" if price >= 1 else f"${price:.6f}"
+            crypto_tbl.add_row(
+                f"[bold]{coin}[/bold]",
+                f"[white bold]{price_str}[/white bold]",
+                f"[{change_color}]{change_sign}{change:.2f}%[/{change_color}]",
+                signal,
+            )
+
+        layout["crypto_panel"].update(
+            Panel(crypto_tbl, title="Binance Feed - Canli Fiyatlar", border_style="cyan")
+        )
+
+        # ── Status Panel (Orchestrator + Info) ────────────────────────────────
+        oc = s["orchestrator"]
+        positions = s.get("positions", {})
+        dir_count = sum(1 for p in positions.values() if p.get("strategy") == "directional")
+        bond_count = sum(1 for p in positions.values() if p.get("strategy") == "bond")
+
+        status_text = Text()
+        status_text.append(f"  Dongu    : ", style="dim")
+        status_text.append(f"#{oc['cycle']}\n", style="white bold")
+        status_text.append(f"  Taranan  : ", style="dim")
+        status_text.append(f"{oc['scanned']} market\n", style="white")
+        status_text.append(f"  Aday     : ", style="dim")
+        status_text.append(f"{oc['candidates']} market\n", style="cyan")
+        status_text.append(f"  Sonraki  : ", style="dim")
+        status_text.append(f"{oc['next_in']}\n", style="yellow")
+        status_text.append(f"  Pozisyon : ", style="dim")
+        status_text.append(f"{dir_count} dir", style="green bold")
+        status_text.append(f" + ", style="dim")
+        status_text.append(f"{bond_count} bond\n", style="yellow")
+        # Total unrealized PnL
+        total_upnl = sum(float(p.get("unrealized_pnl", 0)) for p in positions.values())
+        upnl_color = "green" if total_upnl >= 0 else "red"
+        upnl_sign = "+" if total_upnl >= 0 else ""
+        status_text.append(f"  Unr. PnL : ", style="dim")
+        status_text.append(f"{upnl_sign}${total_upnl:,.2f}", style=f"bold {upnl_color}")
+
+        layout["status_panel"].update(
+            Panel(status_text, title="Orchestrator", border_style="magenta")
+        )
+
+        # ── Open Positions Table ──────────────────────────────────────────────
+        pos_tbl = Table(show_header=True, header_style="bold white", expand=True,
+                        show_edge=False, row_styles=["", "dim"])
+        pos_tbl.add_column("#", width=3, justify="right")
+        pos_tbl.add_column("Coin", width=8)
+        pos_tbl.add_column("Yon", width=5, justify="center")
+        pos_tbl.add_column("Strateji", width=10)
+        pos_tbl.add_column("Giris", width=8, justify="right")
+        pos_tbl.add_column("Simdi", width=8, justify="right")
+        pos_tbl.add_column("Tutar", width=8, justify="right")
+        pos_tbl.add_column("Deger", width=8, justify="right")
+        pos_tbl.add_column("PnL", width=10, justify="right")
+        pos_tbl.add_column("Pencere", width=18)
+
+        sorted_positions = sorted(
+            positions.items(),
+            key=lambda x: x[1].get("created_at", ""),
+            reverse=True,
+        )
+
+        for i, (mid, pos) in enumerate(sorted_positions, 1):
+            q = pos.get("question", "")
+            coin = _coin_from_question(q)
+            outcome = pos.get("outcome", "?")
+            strategy = pos.get("strategy", "?")
+            entry_p = float(pos.get("entry_price", 0))
+            current_p = float(pos.get("current_price", 0))
+            amount = float(pos.get("amount", 0))
+            value = float(pos.get("current_value", amount))
+            upnl = float(pos.get("unrealized_pnl", 0))
+            window = _time_window(q)
+
+            # Direction color
+            if outcome == "YES":
+                dir_style = "[green bold]YES[/green bold]"
+            else:
+                dir_style = "[red bold]NO[/red bold]"
+
+            # Strategy style
+            strat_style = "[yellow]bond[/yellow]" if strategy == "bond" else "[cyan]direct[/cyan]"
+
+            # PnL color
+            pnl_color = "green" if upnl >= 0 else "red"
+            pnl_sign = "+" if upnl >= 0 else ""
+            pnl_pct = ((upnl / amount) * 100) if amount > 0 else 0
+            pnl_str = f"[{pnl_color} bold]{pnl_sign}${upnl:.2f} ({pnl_sign}{pnl_pct:.0f}%)[/{pnl_color} bold]"
+
+            # Current price change indicator
+            if current_p > entry_p:
+                price_style = f"[green]{current_p:.3f}[/green]"
+            elif current_p < entry_p:
+                price_style = f"[red]{current_p:.3f}[/red]"
+            else:
+                price_style = f"[white]{current_p:.3f}[/white]"
+
+            pos_tbl.add_row(
+                str(i),
+                f"[bold]{coin}[/bold]",
+                dir_style,
+                strat_style,
+                f"{entry_p:.3f}",
+                price_style,
+                f"${amount:.2f}",
+                f"${value:.2f}",
+                pnl_str,
+                window or "—",
+            )
+
+        if not positions:
+            pos_tbl.add_row("—", "—", "—", "—", "—", "—", "—", "—", "[dim]Pozisyon yok[/dim]", "—")
+
+        layout["positions"].update(
+            Panel(pos_tbl, title=f"Acik Pozisyonlar ({len(positions)})", border_style="green")
         )
 
         # ── Recent Decisions ──────────────────────────────────────────────────
-        tbl = Table(show_header=True, header_style="bold dim", expand=True, show_edge=False)
-        tbl.add_column("Saat", width=6)
-        tbl.add_column("Ajan", width=10)
-        tbl.add_column("Market", min_width=30)
-        tbl.add_column("İşlem", width=6)
-        tbl.add_column("$Büyüklük", width=10, justify="right")
-        tbl.add_column("Fiyat", width=7, justify="right")
-        tbl.add_column("Edge", width=7, justify="right")
-        tbl.add_column("Sonuç", width=8)
+        dec_tbl = Table(show_header=True, header_style="bold dim", expand=True, show_edge=False)
+        dec_tbl.add_column("Saat", width=6)
+        dec_tbl.add_column("Market", min_width=20)
+        dec_tbl.add_column("Yon", width=5, justify="center")
+        dec_tbl.add_column("$", width=6, justify="right")
+        dec_tbl.add_column("Fiyat", width=7, justify="right")
+        dec_tbl.add_column("Edge", width=7, justify="right")
+        dec_tbl.add_column("Sonuc", width=8)
 
-        for d in s["decisions"]:
-            result = d["result"]
-            result_style = {
-                "WIN": "green bold", "LOSS": "red bold",
-                "…": "dim", "EMİR": "yellow",
-            }.get(result, "white")
+        for d in s["decisions"][:8]:
+            result = d.get("result", "…")
+            result_style = {"WIN": "green bold", "LOSS": "red bold", "…": "dim", "EMIR": "yellow"}.get(result, "white")
             edge_f = float(d.get("edge", 0))
-            tbl.add_row(
+            action = d.get("action", "?")
+            dec_tbl.add_row(
                 d["time"],
-                d["agent"],
                 d["market"],
-                f"[cyan]{d['action']}[/cyan]",
+                f"[cyan]{action}[/cyan]",
                 f"${d['size']:.1f}",
                 f"{d['price']:.3f}",
                 f"[{'green' if edge_f >= 0 else 'red'}]{edge_f:+.3f}[/]",
@@ -335,10 +368,47 @@ class Dashboard:
             )
 
         if not s["decisions"]:
-            tbl.add_row("—", "—", "Henüz karar alınmadı", "—", "—", "—", "—", "—")
+            dec_tbl.add_row("—", "[dim]Henuz karar alinmadi[/dim]", "—", "—", "—", "—", "—")
 
-        layout["decisions"].update(
-            Panel(tbl, title="📋  Son Kararlar", border_style="blue")
+        layout["decisions_panel"].update(
+            Panel(dec_tbl, title="Son Kararlar", border_style="blue")
+        )
+
+        # ── Closed Trades ─────────────────────────────────────────────────────
+        closed = s.get("closed", [])
+        cl_tbl = Table(show_header=True, header_style="bold dim", expand=True, show_edge=False)
+        cl_tbl.add_column("Coin", width=6)
+        cl_tbl.add_column("Yon", width=5, justify="center")
+        cl_tbl.add_column("Giris", width=7, justify="right")
+        cl_tbl.add_column("PnL", width=10, justify="right")
+        cl_tbl.add_column("Sonuc", width=8, justify="center")
+
+        for c in reversed(closed[-8:]):
+            q = c.get("question", "")
+            coin = _coin_from_question(q)
+            outcome = c.get("outcome", "?")
+            entry_p = float(c.get("entry_price", 0))
+            pnl = float(c.get("pnl", 0))
+            result = c.get("result", "?")
+
+            dir_style = "[green]YES[/green]" if outcome == "YES" else "[red]NO[/red]"
+            pnl_color = "green" if pnl >= 0 else "red"
+            pnl_sign = "+" if pnl >= 0 else ""
+            res_style = "green bold" if result == "WIN" else "red bold"
+
+            cl_tbl.add_row(
+                f"[bold]{coin}[/bold]",
+                dir_style,
+                f"{entry_p:.3f}",
+                f"[{pnl_color} bold]{pnl_sign}${pnl:.2f}[/{pnl_color} bold]",
+                f"[{res_style}]{result}[/{res_style}]",
+            )
+
+        if not closed:
+            cl_tbl.add_row("—", "—", "—", "[dim]—[/dim]", "[dim]—[/dim]")
+
+        layout["closed_panel"].update(
+            Panel(cl_tbl, title=f"Kapanan ({wins}W/{losses}L)", border_style="yellow")
         )
 
         return layout
@@ -346,7 +416,6 @@ class Dashboard:
     # ── Async run loop ────────────────────────────────────────────────────────
 
     async def run(self):
-        """Dashboard'u canlı olarak göster (asyncio task olarak çalışır)."""
         self._running = True
         console = Console()
         with Live(
@@ -363,5 +432,18 @@ class Dashboard:
         self._running = False
 
 
-# Singleton — tüm modüller bunu import eder
+# Singleton
 dashboard = Dashboard()
+
+
+if __name__ == "__main__":
+    import signal
+    import sys
+
+    def _stop(sig, frame):
+        dashboard.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _stop)
+    print("Dashboard baslatiliyor... (Ctrl+C ile kapat)")
+    asyncio.run(dashboard.run())

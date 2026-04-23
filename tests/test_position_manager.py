@@ -56,7 +56,7 @@ def test_daily_stop_loss_not_triggered(pm):
 def test_daily_stop_loss_triggered(pm):
     from datetime import datetime, timezone
     pm.data["daily"]["date"] = str(datetime.now(timezone.utc).date())
-    pm.data["daily"]["pnl"] = -160.0  # -%16
+    pm.data["daily"]["pnl"] = -200.0  # day_start=1200, loss=200/1200=16.7%
     assert pm.daily_loss_exceeded(0.15) is True
 
 

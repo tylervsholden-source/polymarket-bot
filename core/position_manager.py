@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-import aiohttp
+import httpx
 from loguru import logger
 
 # Spot-based resolution: coin adından Bitstamp pair'e
@@ -24,36 +24,70 @@ _COIN_TO_PAIR = {
 DATA_FILE = Path("data/positions.json")
 LOCK_FILE = Path("data/positions.lock")
 
+# Bond positions user manually cancelled — never re-add these
+_IGNORED_MARKETS = {
+    "0xf2f0cf8b7aa90c53fbd56439782d1828a2315c8d21890f4a2804a61720985cea",  # Denmark PM
+    "0x6b66bec6760a8ece84e99ce987f53e13d3fd94b25147c1442026899ae45ad765",  # Valorant esports
+    "0xc75d669ed6a786a32ba770bebea3e10a8bc54652d7d739a20f84d1c174eb6928",  # Peaky Blinders
+}
+
 
 @contextmanager
 def _file_lock(lock_path: Path = LOCK_FILE, timeout: float = 5.0):
-    """Cross-platform file lock using atomic file creation."""
+    """File lock using fcntl.flock (Linux) with O_CREAT|O_EXCL fallback (Windows).
+
+    fcntl.flock: OS otomatik temizler (process ölürse lock kalkmaz).
+    Eski O_CREAT|O_EXCL yöntemi stale lock sorununa neden oluyordu.
+    """
+    import sys
     lock_path.parent.mkdir(exist_ok=True)
-    deadline = _time.monotonic() + timeout
     fd = None
     try:
-        while True:
-            try:
-                fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                break
-            except FileExistsError:
-                if _time.monotonic() > deadline:
-                    # Stale lock — force acquire
-                    try:
-                        lock_path.unlink()
-                    except OSError:
-                        pass
+        if sys.platform != "win32":
+            import fcntl
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY)
+            deadline = _time.monotonic() + timeout
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except (OSError, BlockingIOError):
+                    if _time.monotonic() > deadline:
+                        fcntl.flock(fd, fcntl.LOCK_EX)  # blocking acquire
+                        break
+                    _time.sleep(0.05)
+            yield
+        else:
+            # Windows fallback: eski O_CREAT|O_EXCL yöntemi
+            deadline = _time.monotonic() + timeout
+            while True:
+                try:
                     fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                     break
-                _time.sleep(0.05)
-        yield
+                except FileExistsError:
+                    if _time.monotonic() > deadline:
+                        try:
+                            lock_path.unlink()
+                        except OSError:
+                            pass
+                        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                        break
+                    _time.sleep(0.05)
+            yield
     finally:
         if fd is not None:
-            os.close(fd)  # type: ignore[arg-type]
-        try:
-            lock_path.unlink()
-        except OSError:
-            pass
+            if sys.platform != "win32":
+                import fcntl
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            os.close(fd)
+            if sys.platform == "win32":
+                try:
+                    lock_path.unlink()
+                except OSError:
+                    pass
 
 
 class PositionManager:
@@ -80,18 +114,64 @@ class PositionManager:
             with open(DATA_FILE, "w") as f:
                 json.dump(self.data, f, indent=2)
 
+    # ── Capital Pool System ──
+    # Splits capital into maker/bond/directional pools for hybrid strategy.
+    # Pool ratios are configurable. PnL returns to the originating pool.
+
+    DEFAULT_POOLS = {"maker": 0.00, "bond": 0.00, "directional": 1.00}  # DIRECTIONAL ONLY mode
+
+    def _get_pool_ratios(self) -> dict[str, float]:
+        """Get pool allocation ratios from env or defaults."""
+        return {
+            "maker": float(os.getenv("MAKER_CAPITAL_PCT", self.DEFAULT_POOLS["maker"])),
+            "bond": float(os.getenv("BOND_CAPITAL_PCT", self.DEFAULT_POOLS["bond"])),
+            "directional": float(os.getenv("DIRECTIONAL_CAPITAL_PCT", self.DEFAULT_POOLS["directional"])),
+        }
+
+    def pool_total(self, pool: str) -> float:
+        """Total capital allocated to a pool (before locking)."""
+        ratios = self._get_pool_ratios()
+        return self.data["capital"] * ratios.get(pool, 0.0)
+
+    def pool_locked(self, pool: str) -> float:
+        """Capital locked in open positions for a specific strategy pool."""
+        return sum(
+            p["amount"] for p in self.data["positions"].values()
+            if p.get("strategy", "directional") == pool
+        )
+
+    def pool_available(self, pool: str) -> float:
+        """Available capital in a specific strategy pool."""
+        return max(0.0, self.pool_total(pool) - self.pool_locked(pool))
+
     def available_capital(self) -> float:
         """Free cash = total capital minus cost of open positions."""
         locked = sum(p["amount"] for p in self.data["positions"].values())
         return max(0, self.data["capital"] - locked)
 
+    def locked_capital(self) -> float:
+        """Total capital locked in open positions."""
+        return sum(p["amount"] for p in self.data["positions"].values())
+
     def open_position_count(self) -> int:
         return len(self.data["positions"])
+
+    def pool_position_count(self, pool: str) -> int:
+        """Count of open positions in a specific pool."""
+        return sum(
+            1 for p in self.data["positions"].values()
+            if p.get("strategy", "directional") == pool
+        )
 
     def has_position(self, market_id: str) -> bool:
         return market_id in self.data["positions"]
 
-    def add_position(self, market_id: str, order: dict, question: str):
+    def add_position(self, market_id: str, order: dict, question: str,
+                     strategy: str = "directional"):
+        if market_id in _IGNORED_MARKETS:
+            logger.debug(f"IGNORED: {question[:40]} (blacklisted bond)")
+            return
+        from datetime import datetime, timezone
         self.data["positions"][market_id] = {
             "order_id": order["order_id"],
             "question": question,
@@ -100,18 +180,22 @@ class PositionManager:
             "entry_price": order["price"],
             "status": order["status"],
             "token_id": order.get("token_id", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "strategy": strategy,
         }
         self._save()
-        logger.info(f"Pozisyon eklendi: {question[:50]}")
+        logger.info(f"Pozisyon eklendi [{strategy}]: {question[:50]}")
 
     def daily_loss_exceeded(self, threshold: float) -> bool:
         today = str(datetime.now(timezone.utc).date())
         if self.data["daily"]["date"] != today:
             self.data["daily"] = {"date": today, "pnl": 0}
             self._save()
-        if self.initial_capital <= 0:
-            return False
-        loss_pct = abs(min(0, self.data["daily"]["pnl"])) / self.initial_capital
+        # Günün başındaki sermaye = şu anki capital - bugünkü PnL
+        day_start_capital = self.data["capital"] - self.data["daily"]["pnl"]
+        if day_start_capital <= 0:
+            return True  # Sermaye sıfır/negatif → trade yapma
+        loss_pct = abs(min(0, self.data["daily"]["pnl"])) / day_start_capital
         return loss_pct >= threshold
 
     async def update_positions(self, client):
@@ -122,6 +206,11 @@ class PositionManager:
         - Dolmuş (MATCHED) emir + market expired → resolution'a göre WIN/LOSS
         """
         now = datetime.now(timezone.utc)
+        # Remove ignored markets if they snuck back in
+        for mid in list(self.data["positions"]):
+            if mid in _IGNORED_MARKETS:
+                del self.data["positions"][mid]
+                self._save()
         for market_id in list(self.data["positions"]):
             pos = self.data["positions"][market_id]
             market = await client.get_market(market_id, gamma_id=pos.get("gamma_id"))
@@ -159,12 +248,15 @@ class PositionManager:
                         end_h += 12
                     elif end_ampm == "AM" and end_h == 12:
                         end_h = 0
-                    # Use proper timezone (handles EDT/EST automatically)
                     from zoneinfo import ZoneInfo
                     now_et = datetime.now(ZoneInfo("America/New_York"))
                     market_end_min = end_h * 60 + end_m
                     now_min = now_et.hour * 60 + now_et.minute
-                    if now_min >= market_end_min + 1:  # 1 dakika margin
+                    # Midnight crossing fix: fark negatifse gün geçişi var
+                    diff = now_min - market_end_min
+                    if diff < -720:  # 12 saatten fazla fark = gece yarısı geçişi
+                        diff += 1440
+                    if 0 < diff and diff < 720:  # max 12 saat sonra expired say
                         market_expired = True
                         logger.info(f"TIME_EXPIRED: {question[:50]} (end={end_h}:{end_m:02d} ET, now={now_et.hour}:{now_et.minute:02d} ET)")
 
@@ -189,7 +281,11 @@ class PositionManager:
                     market_end_mins = end_hour * 60 + end_min
                     now_mins = now_et.hour * 60 + now_et.minute
                     # Market ended if current time > end time + 1 min buffer
-                    market_ended = (now_mins - market_end_mins) >= 1
+                    # Midnight crossing fix: negatif fark = gece yarısı geçişi
+                    _diff = now_mins - market_end_mins
+                    if _diff < -720:
+                        _diff += 1440
+                    market_ended = (0 < _diff < 720)
 
                 if not market_ended:
                     # Market still active — keep position open, check via CLOB token
@@ -205,56 +301,117 @@ class PositionManager:
                     logger.debug(f"Gamma API miss — market still open: {question[:50]}")
                     continue
 
-                # Market ended — resolve via spot price first, then CLOB fallback
+                # Market ended — resolve via CLOB API tokens.winner (tek güvenilir kaynak)
                 if order_filled:
                     resolution = None
                     outcome = pos.get("outcome", "YES").upper()
 
-                    # 1) Spot-based resolution (Bitstamp) — en güvenilir
-                    try:
-                        spot_result = await self._spot_based_resolution(question)
-                        if spot_result:
-                            resolution = spot_result
-                            logger.info(f"SPOT_RESOLUTION (no-gamma): {question[:50]} → {spot_result}")
-                    except Exception as e:
-                        logger.debug(f"Spot resolution failed (no-gamma): {e}")
+                    # 1) CLOB API tokens.winner (resmi Polymarket sonucu)
+                    if resolution is None and market_id:
+                        try:
+                            import requests as _req
+                            _clob_resp = _req.get(
+                                f"https://clob.polymarket.com/markets/{market_id}",
+                                timeout=10,
+                            )
+                            if _clob_resp.status_code == 200:
+                                _clob_data = _clob_resp.json()
+                                for _tok in _clob_data.get("tokens", []):
+                                    if _tok.get("winner") is True:
+                                        _outcome = (_tok.get("outcome") or "").upper()
+                                        if _outcome in ("UP", "YES"):
+                                            resolution = "YES"
+                                        elif _outcome in ("DOWN", "NO"):
+                                            resolution = "NO"
+                                        logger.info(
+                                            f"CLOB_WINNER_RESOLVE: {question[:50]} → "
+                                            f"winner={_outcome} resolution={resolution}"
+                                        )
+                                        break
+                        except Exception as _e:
+                            logger.debug(f"CLOB winner check failed: {_e}")
 
-                    # 2) CLOB token orderbook fallback
+                    # 2) FALLBACK: CLOB Token endpoint (daha hızlı)
                     if resolution is None:
                         token_id = pos.get("token_id", "")
-                        if token_id and hasattr(client, '_clob') and client._clob:
+                        if token_id:
                             try:
-                                book = client._clob.get_order_book(token_id)
-                                bid = float(book.get("bids", [{}])[0].get("price", 0) if book.get("bids") else 0)
-                                if bid > 0.85:
-                                    resolution = "WIN_DIRECT"
-                                elif bid < 0.15:
-                                    resolution = "LOSS_DIRECT"
-                            except Exception:
-                                pass
+                                import requests as _req2
+                                _tok_resp = _req2.get(
+                                    f"https://clob.polymarket.com/token/{token_id}",
+                                    timeout=5,
+                                )
+                                if _tok_resp.status_code == 200:
+                                    _tok_data = _tok_resp.json()
+                                    if _tok_data.get("winner") is True:
+                                        resolution = outcome  # bu token kazandı
+                                        logger.info(f"TOKEN_ENDPOINT_RESOLVE: {question[:50]} → winner=THIS_TOKEN → {outcome}")
+                                    elif _tok_data.get("winner") is False:
+                                        resolution = "NO" if outcome == "YES" else "YES"
+                                        logger.info(f"TOKEN_ENDPOINT_RESOLVE: {question[:50]} → loser=THIS_TOKEN → {resolution}")
+                            except Exception as _e2:
+                                logger.debug(f"Token endpoint check failed: {_e2}")
 
-                    # 3) Apply resolution
-                    if resolution == "WIN_DIRECT":
-                        logger.info(f"CLOB token resolution → WIN: {question[:50]}")
-                        self._close_position(market_id, 1.0)
-                    elif resolution == "LOSS_DIRECT":
-                        logger.info(f"CLOB token resolution → LOSS: {question[:50]}")
-                        self._close_position(market_id, 0.0)
-                    elif resolution == "YES":
-                        # UP won — YES holders win
+                    # 3) FALLBACK: Orderbook çöküşü tespiti (SADECE market bittikten sonra)
+                    # OB_COLLAPSE_RESOLVE DEVRE DIŞI — orderbook kapandıktan sonra
+                    # temizleniyor, YES_ask=0 "DOWN" anlamına gelmiyor!
+                    # Binance kontrolü: gerçek sonuçlar TERS kaydediliyordu.
+                    # Sadece CLOB winner ile resolve et.
+
+                    # 4) Apply resolution
+                    if resolution == "YES":
                         close_price = 1.0 if outcome == "YES" else 0.0
                         result_str = "WIN" if close_price == 1.0 else "LOSS"
-                        logger.info(f"SPOT resolved UP → {outcome} = {result_str}: {question[:50]}")
+                        logger.info(f"RESOLVED UP → {outcome} = {result_str}: {question[:50]}")
                         self._close_position(market_id, close_price)
                     elif resolution == "NO":
-                        # DOWN won — NO holders win
                         close_price = 0.0 if outcome == "YES" else 1.0
                         result_str = "WIN" if close_price == 1.0 else "LOSS"
-                        logger.info(f"SPOT resolved DOWN → {outcome} = {result_str}: {question[:50]}")
+                        logger.info(f"RESOLVED DOWN → {outcome} = {result_str}: {question[:50]}")
                         self._close_position(market_id, close_price)
                     else:
-                        logger.warning(f"UNRESOLVED: {question[:50]} — spot+CLOB both failed, keeping position open")
-                        # DON'T close as LOSS — keep open and retry next cycle
+                        # Hiçbir yöntem çalışmadı — timeout kontrolü
+                        created = pos.get("created_at", "")
+                        age_minutes = 0
+                        if created:
+                            try:
+                                created_dt = datetime.fromisoformat(created)
+                                if created_dt.tzinfo is None:
+                                    created_dt = created_dt.replace(tzinfo=timezone.utc)
+                                age_minutes = (now - created_dt).total_seconds() / 60
+                            except Exception:
+                                pass
+                        if age_minutes > 45:
+                            # 45dk sonra hâlâ resolve olmadıysa → last_price heuristic dene
+                            _last_price = pos.get("current_price")
+                            if _last_price is not None and _last_price > 0.80:
+                                # Token price >0.80 → büyük ihtimalle bu token kazandı
+                                logger.warning(
+                                    f"TIMEOUT_HEURISTIC_WIN ({age_minutes:.0f}dk): {question[:50]} — "
+                                    f"last_price={_last_price:.2f}>0.80 → treating as WIN"
+                                )
+                                self._close_position(market_id, 1.0)
+                            elif _last_price is not None and _last_price < 0.20:
+                                # Token price <0.20 → büyük ihtimalle bu token kaybetti
+                                logger.warning(
+                                    f"TIMEOUT_HEURISTIC_LOSS ({age_minutes:.0f}dk): {question[:50]} — "
+                                    f"last_price={_last_price:.2f}<0.20 → treating as LOSS"
+                                )
+                                self._close_position(market_id, 0.0)
+                            else:
+                                # Fiyat belirsiz → NEUTRAL kapat (slot aç)
+                                logger.warning(
+                                    f"FORCE_CLOSE_TIMEOUT ({age_minutes:.0f}dk): {question[:50]} — "
+                                    f"CLOB+Token hepsi başarısız, last_price={_last_price} → NEUTRAL"
+                                )
+                                self._close_position_neutral(market_id)
+                        elif age_minutes > 10:
+                            logger.warning(
+                                f"STALE_UNRESOLVED ({age_minutes:.0f}dk): {question[:50]} — "
+                                f"CLOB resolution bekleniyor"
+                            )
+                        else:
+                            logger.info(f"WAITING_RESOLUTION: {question[:50]} — CLOB winner bekleniyor ({age_minutes:.0f}dk)")
                 else:
                     logger.info(f"Market ended, emir dolmamış → NEUTRAL: {question[:50]}")
                     self._close_position_neutral(market_id)
@@ -275,32 +432,76 @@ class PositionManager:
                 # Emir doldu — resolution'a göre WIN/LOSS
                 resolution = self._get_resolution_outcome(market)
 
-                # Polymarket resolution bilinmiyorsa → Bitstamp spot ile anında karar ver
-                if resolution is None:
-                    question = pos.get("question", "")
+                # CLOB API tokens.winner (resmi Polymarket sonucu)
+                if resolution is None and market_id:
                     try:
-                        resolution = await self._spot_based_resolution(question)
-                        if resolution:
-                            logger.info(f"SPOT_RESOLUTION: {question[:50]} → {resolution} (Bitstamp)")
-                    except Exception as e:
-                        logger.debug(f"Spot resolution failed: {e}")
+                        import requests as _req
+                        _clob_resp = _req.get(
+                            f"https://clob.polymarket.com/markets/{market_id}",
+                            timeout=10,
+                        )
+                        if _clob_resp.status_code == 200:
+                            _clob_data = _clob_resp.json()
+                            for _tok in _clob_data.get("tokens", []):
+                                if _tok.get("winner") is True:
+                                    _outcome = (_tok.get("outcome") or "").upper()
+                                    if _outcome in ("UP", "YES"):
+                                        resolution = "YES"
+                                    elif _outcome in ("DOWN", "NO"):
+                                        resolution = "NO"
+                                    logger.info(
+                                        f"CLOB_WINNER_RESOLVE: {pos.get('question','')[:50]} -> "
+                                        f"winner={_outcome} resolution={resolution}"
+                                    )
+                                    break
+                    except Exception as _e:
+                        logger.debug(f"CLOB winner check failed: {_e}")
 
                 if resolution == "YES":
                     close_price = 1.0 if outcome == "YES" else 0.0
+                    result_str = "WIN" if close_price == 1.0 else "LOSS"
+                    logger.info(f"RESOLVED UP → {outcome} = {result_str}: {pos.get('question','')[:50]}")
+                    self._close_position(market_id, close_price)
                 elif resolution == "NO":
                     close_price = 0.0 if outcome == "YES" else 1.0
+                    result_str = "WIN" if close_price == 1.0 else "LOSS"
+                    logger.info(f"RESOLVED DOWN → {outcome} = {result_str}: {pos.get('question','')[:50]}")
+                    self._close_position(market_id, close_price)
                 else:
-                    # Her iki yöntem de başarısız — orderbook fallback
-                    if outcome == "NO":
-                        no_tid = (market or {}).get("no_token_id")
-                        no_book = client.get_orderbook(no_tid) if no_tid else None
-                        if no_book and no_book["best_bid"] > 0:
-                            close_price = no_book["best_bid"]
+                    # Resolution bilinmiyor — pozisyonu açık tut, sonraki döngüde CLOB tekrar dene
+                    created = pos.get("created_at", "")
+                    age_minutes = 0
+                    if created:
+                        try:
+                            created_dt = datetime.fromisoformat(created)
+                            if created_dt.tzinfo is None:
+                                created_dt = created_dt.replace(tzinfo=timezone.utc)
+                            age_minutes = (now - created_dt).total_seconds() / 60
+                        except Exception:
+                            pass
+                    if age_minutes > 45:
+                        # 45dk sonra hâlâ resolve olmadıysa → last_price heuristic dene
+                        _last_price = pos.get("current_price")
+                        if _last_price is not None and _last_price > 0.80:
+                            logger.warning(
+                                f"TIMEOUT_HEURISTIC_WIN ({age_minutes:.0f}dk): {pos.get('question','')[:50]} — "
+                                f"last_price={_last_price:.2f}>0.80 → treating as WIN"
+                            )
+                            self._close_position(market_id, 1.0)
+                        elif _last_price is not None and _last_price < 0.20:
+                            logger.warning(
+                                f"TIMEOUT_HEURISTIC_LOSS ({age_minutes:.0f}dk): {pos.get('question','')[:50]} — "
+                                f"last_price={_last_price:.2f}<0.20 → treating as LOSS"
+                            )
+                            self._close_position(market_id, 0.0)
                         else:
-                            close_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else 0.0
+                            logger.warning(
+                                f"FORCE_CLOSE_TIMEOUT ({age_minutes:.0f}dk): {pos.get('question','')[:50]} — "
+                                f"last_price={_last_price} → NEUTRAL"
+                            )
+                            self._close_position_neutral(market_id)
                     else:
-                        close_price = float(market.get("best_bid", 0) or 0)
-                self._close_position(market_id, close_price)
+                        logger.info(f"WAITING_RESOLUTION: {pos.get('question','')[:50]} — CLOB winner bekleniyor ({age_minutes:.0f}dk)")
                 continue
 
             # Token fiyatı: YES için YES bid, NO için gerçek NO orderbook
@@ -380,10 +581,8 @@ class PositionManager:
     def _get_resolution_outcome(market: dict) -> str | None:
         """Market resolution sonucunu döner: 'YES', 'NO', veya None (bilinmiyor).
 
-        Gamma API resolved market'lerde şu alanları döndürebilir:
-        - outcome: "Yes"/"No"/"Up"/"Down"
-        - resolution: "Yes"/"No"
-        - resolutionSource / winner
+        SADECE Gamma API'nin resmi resolution alanlarını kontrol eder.
+        bid/ask tahmini KALDIRILDI — güvenilmez ve yanlış P&L'e sebep oluyor.
         """
         for field in ("outcome", "resolution", "winner"):
             val = (market.get(field) or "").strip().lower()
@@ -391,140 +590,26 @@ class PositionManager:
                 return "YES"
             if val in ("no", "down", "0", "false"):
                 return "NO"
-        # best_ask yaklaşımı: resolved markette ask ~1.0 ise YES kazandı
-        ask = float(market.get("best_ask", 0) or 0)
-        bid = float(market.get("best_bid", 0) or 0)
-        if ask >= 0.95 or bid >= 0.95:
-            return "YES"
-        if ask <= 0.05 and bid <= 0.05:
-            return "NO"
+        # bid/ask tahmini KALDIRILDI — Polymarket'in resmi resolution'ını bekle
+        # Eski kod ask>=0.95 → YES, bid<=0.05 → NO yapıyordu ama
+        # resolved olmamış marketlerde bu yanlış sonuç veriyordu
         return None
 
     @staticmethod
     async def _spot_based_resolution(question: str) -> str | None:
-        """Bitstamp spot fiyatıyla UP/DOWN kararı ver.
+        """DEVRE DIŞI — Bitstamp spot resolution güvenilmez.
 
-        "Bitcoin Up or Down - March 19, 4:45AM-5:00AM ET" gibi market adından
-        coin ve zaman aralığını parse edip, o zaman penceresindeki open vs close karşılaştırır.
-        Returns 'YES' (UP) or 'NO' (DOWN/FLAT) or None (belirlenemedi).
+        Bu fonksiyon Polymarket'in resmi resolution'ıyla uyuşmuyordu.
+        752 yanlış resolution kaydına sebep oldu. Artık sadece CLOB
+        tokens.winner kullanılıyor. Bu metod None döner = pozisyon açık kalır,
+        sonraki döngüde CLOB tekrar denenir.
+
+        Eski davranış: Bitstamp OHLCV ile open/close karşılaştırıp UP/DOWN
+        kararı veriyordu — ama Polymarket oracle'ı farklı fiyat kaynağı ve
+        farklı timestamp kullanıyor, bu yüzden sonuçlar uyuşmuyordu.
         """
-        q = question.lower()
-
-        # Coin bul
-        pair = None
-        for coin_name, bitstamp_pair in _COIN_TO_PAIR.items():
-            if coin_name in q:
-                pair = bitstamp_pair
-                break
-        if not pair:
-            return None
-
-        # Zaman aralığını parse et: "March 19, 4:45AM-5:00AM ET"
-        time_match = re.search(
-            r'(\w+ \d+),?\s+(\d{1,2}):(\d{2})(AM|PM)\s*-\s*(\d{1,2}):(\d{2})(AM|PM)\s*ET',
-            question, re.IGNORECASE
-        )
-        if not time_match:
-            return None
-
-        # Start time ET → UTC
-        start_h = int(time_match.group(2))
-        start_m = int(time_match.group(3))
-        start_ampm = time_match.group(4).upper()
-        if start_ampm == "PM" and start_h != 12:
-            start_h += 12
-        elif start_ampm == "AM" and start_h == 12:
-            start_h = 0
-        # Proper timezone conversion (handles EDT/EST automatically)
-        from zoneinfo import ZoneInfo
-        _et_offset = datetime.now(ZoneInfo("America/New_York")).utcoffset()
-        _et_hours = int(_et_offset.total_seconds() // 3600) if _et_offset else -4
-        start_utc_h = (start_h - _et_hours) % 24
-
-        # End time ET → UTC
-        end_h = int(time_match.group(5))
-        end_m = int(time_match.group(6))
-        end_ampm = time_match.group(7).upper()
-        if end_ampm == "PM" and end_h != 12:
-            end_h += 12
-        elif end_ampm == "AM" and end_h == 12:
-            end_h = 0
-        end_utc_h = (end_h - _et_hours) % 24
-
-        now = datetime.now(timezone.utc)
-        market_end_minutes = end_utc_h * 60 + end_m
-        now_minutes = now.hour * 60 + now.minute
-        if now_minutes < market_end_minutes:
-            return None  # Market henüz kapanmamış
-
-        # Market window uzunluğu (dakika)
-        window_minutes = (end_utc_h * 60 + end_m) - (start_utc_h * 60 + start_m)
-        if window_minutes <= 0:
-            window_minutes += 24 * 60
-
-        # Bitstamp OHLCV ile doğru zaman penceresini çek
-        try:
-            async with aiohttp.ClientSession() as session:
-                ohlcv_url = f"https://www.bitstamp.net/api/v2/ohlc/{pair}/"
-                # 60s mumlar ile kesin window hesabı
-                # window_minutes * 2 kadar mum çek (yeterli kapsam)
-                step = 60  # 1 dakikalık mumlar
-                limit = max(window_minutes * 3, 30)  # yeterli kapsam
-                params = {"step": step, "limit": limit}
-                async with session.get(ohlcv_url, params=params,
-                                       timeout=aiohttp.ClientTimeout(total=8)) as resp:
-                    if resp.status != 200:
-                        logger.debug(f"Bitstamp OHLCV failed: status={resp.status}")
-                        return None
-                    ohlcv_data = await resp.json()
-                    candles = ohlcv_data.get("data", {}).get("ohlc", [])
-                    if not candles:
-                        return None
-
-                    # Market window start/end timestamp (UTC)
-                    today = now.date()
-                    from datetime import timedelta
-                    start_ts = datetime(today.year, today.month, today.day,
-                                        start_utc_h, start_m, tzinfo=timezone.utc).timestamp()
-                    end_ts = datetime(today.year, today.month, today.day,
-                                      end_utc_h, end_m, tzinfo=timezone.utc).timestamp()
-
-                    # Window içindeki mumları filtrele
-                    window_candles = []
-                    for c in candles:
-                        ts = float(c.get("timestamp", 0))
-                        if start_ts <= ts < end_ts:
-                            window_candles.append(c)
-
-                    if window_candles:
-                        window_open = float(window_candles[0]["open"])
-                        window_close = float(window_candles[-1]["close"])
-                    elif len(candles) >= 2:
-                        # Fallback: son mumları kullan (timestamp filter çalışmadıysa)
-                        n_candles = max(1, window_minutes)
-                        relevant = candles[-n_candles:] if len(candles) >= n_candles else candles
-                        window_open = float(relevant[0]["open"])
-                        window_close = float(relevant[-1]["close"])
-                    else:
-                        return None
-
-                    if window_close > window_open:
-                        logger.info(
-                            f"SPOT_RESOLVE: {question[:50]} → UP "
-                            f"(open={window_open:.2f}, close={window_close:.2f}, "
-                            f"Δ={((window_close/window_open)-1)*100:+.3f}%)"
-                        )
-                        return "YES"
-                    else:
-                        logger.info(
-                            f"SPOT_RESOLVE: {question[:50]} → DOWN/FLAT "
-                            f"(open={window_open:.2f}, close={window_close:.2f}, "
-                            f"Δ={((window_close/window_open)-1)*100:+.3f}%)"
-                        )
-                        return "NO"
-        except Exception as e:
-            logger.debug(f"Spot resolution hatası: {e}")
-            return None
+        logger.debug(f"SPOT_RESOLUTION_DISABLED: {question[:50]} — sadece CLOB winner güvenilir")
+        return None
 
     def _close_position_neutral(self, market_id: str):
         """Dolmamış emir — USDC iade edildi, PnL = 0."""
@@ -570,7 +655,15 @@ class PositionManager:
         self.data["positions"].pop(market_id)
         amount = pos["amount"]
         entry = pos["entry_price"]
-        shares = amount / entry if entry > 0 else 0
+        if entry <= 0:
+            logger.error(f"INVALID entry_price={entry} for {market_id} — closing as NEUTRAL to prevent phantom loss")
+            pos["close_price"] = 0
+            pos["pnl"] = 0.0
+            pos["payout"] = 0.0
+            pos["result"] = "NEUTRAL"
+            self.data["closed"].append(pos)
+            return
+        shares = amount / entry
         payout = shares * token_close_price
         pnl = payout - amount
 
@@ -578,14 +671,26 @@ class PositionManager:
         pos["pnl"] = round(pnl, 2)
         pos["payout"] = round(payout, 2)
         pos["result"] = "WIN" if pnl > 0 else ("NEUTRAL" if pnl == 0 else "LOSS")
+        # CLOB-verified flag: bu trade CLOB tokens.winner ile resolve edildi
+        pos["pnl_verified"] = True
+        pos["resolved_at"] = datetime.now(timezone.utc).isoformat()
 
         # Sermayeyi sadece PnL kadar güncelle — principal zaten locked olarak sayılıyordu
         self.data["capital"] += pnl
         self.data["daily"]["pnl"] += pnl
         self.data["closed"].append(pos)
+
+        # CLOB-verified WR tracker
+        verified_trades = [t for t in self.data["closed"] if t.get("pnl_verified") is True]
+        v_wins = sum(1 for t in verified_trades if t["result"] == "WIN")
+        v_losses = sum(1 for t in verified_trades if t["result"] == "LOSS")
+        v_total = v_wins + v_losses
+        v_wr = (v_wins / v_total * 100) if v_total > 0 else 0
+
         logger.info(
             f"Pozisyon kapatıldı: {pos['question'][:40]} | "
-            f"{pos['result']} | PnL: ${pnl:+.2f}"
+            f"{pos['result']} | PnL: ${pnl:+.2f} | "
+            f"VERIFIED_WR: {v_wins}W/{v_losses}L = {v_wr:.1f}% ({v_total} trades)"
         )
 
     def print_status(self):

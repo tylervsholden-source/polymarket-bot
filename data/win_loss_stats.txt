@@ -1,0 +1,8 @@
+Total Wins: 258
+Wins by outcome: {'YES': 205, 'NO': 53}
+Total Losses: 179
+Losses by outcome: {'UP': 1, 'NO': 90, 'YES': 88}
+Avg Win YES entry: 0.547
+Avg Win NO entry: 0.448
+Avg Loss YES entry: 0.513
+Avg Loss NO entry: 0.416

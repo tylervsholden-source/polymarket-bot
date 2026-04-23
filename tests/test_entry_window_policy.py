@@ -22,7 +22,7 @@ UTC = timezone.utc
 QUESTION_5M = "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET"
 QUESTION_15M = "Bitcoin Up or Down - March 16, 7:00PM-7:15PM ET"
 QUESTION_NO_TIME = "Will the Fed raise rates in 2026?"
-QUESTION_30M = "Bitcoin Up or Down - March 16, 7:00PM-7:30PM ET"
+QUESTION_30M = "Bitcoin Up or Down - March 16, 7:00PM-9:00PM ET"
 
 # 5m start: 2026-03-16 23:10:00 UTC  (ET = UTC-4, so 7:10PM ET -> 23:10 UTC)
 START_5M = datetime(2026, 3, 16, 23, 10, 0, tzinfo=UTC)
@@ -57,7 +57,7 @@ def test_parse_missing_start_time_returns_none():
 
 
 def test_5m_within_window_passes():
-    # 10 seconds before start — well inside [45s before, 90s after]
+    # 10 seconds before start — well inside [600s before, 600s after]
     now = datetime(2026, 3, 16, 23, 9, 50, tzinfo=UTC)
     result = check_entry_window(QUESTION_5M, now_utc=now)
     assert result.passed is True
@@ -71,8 +71,8 @@ def test_5m_within_window_passes():
 
 
 def test_5m_too_early_rejected():
-    # 2 minutes before start — outside the 45s-before window
-    now = datetime(2026, 3, 16, 23, 8, 0, tzinfo=UTC)
+    # 11 minutes before start — outside the 600s-before window
+    now = datetime(2026, 3, 16, 22, 59, 0, tzinfo=UTC)
     result = check_entry_window(QUESTION_5M, now_utc=now)
     assert result.passed is False
     assert result.rejection == EntryWindowRejection.TOO_EARLY_FOR_ENTRY_WINDOW
@@ -84,8 +84,8 @@ def test_5m_too_early_rejected():
 
 
 def test_5m_too_late_rejected():
-    # 3 minutes after start — outside the 90s-after window
-    now = datetime(2026, 3, 16, 23, 13, 0, tzinfo=UTC)
+    # 11 minutes after start — outside the 600s-after window
+    now = datetime(2026, 3, 16, 23, 21, 0, tzinfo=UTC)
     result = check_entry_window(QUESTION_5M, now_utc=now)
     assert result.passed is False
     assert result.rejection == EntryWindowRejection.TOO_LATE_FOR_ENTRY_WINDOW
@@ -97,7 +97,7 @@ def test_5m_too_late_rejected():
 
 
 def test_15m_within_window_passes():
-    # 30 seconds before start — inside [60s before, 180s after]
+    # 30 seconds before start — inside [900s before, 900s after]
     now = datetime(2026, 3, 16, 22, 59, 30, tzinfo=UTC)
     result = check_entry_window(QUESTION_15M, now_utc=now)
     assert result.passed is True
@@ -111,8 +111,8 @@ def test_15m_within_window_passes():
 
 
 def test_15m_too_early_rejected():
-    # 2 minutes before start — outside the 60s-before window
-    now = datetime(2026, 3, 16, 22, 58, 0, tzinfo=UTC)
+    # 16 minutes before start — outside the 900s-before window
+    now = datetime(2026, 3, 16, 22, 44, 0, tzinfo=UTC)
     result = check_entry_window(QUESTION_15M, now_utc=now)
     assert result.passed is False
     assert result.rejection == EntryWindowRejection.TOO_EARLY_FOR_ENTRY_WINDOW
@@ -124,8 +124,8 @@ def test_15m_too_early_rejected():
 
 
 def test_15m_too_late_rejected():
-    # 4 minutes after start — outside the 180s-after window
-    now = datetime(2026, 3, 16, 23, 4, 0, tzinfo=UTC)
+    # 16 minutes after start — outside the 900s-after window
+    now = datetime(2026, 3, 16, 23, 16, 0, tzinfo=UTC)
     result = check_entry_window(QUESTION_15M, now_utc=now)
     assert result.passed is False
     assert result.rejection == EntryWindowRejection.TOO_LATE_FOR_ENTRY_WINDOW
@@ -166,7 +166,7 @@ def test_custom_policy_overrides_defaults():
         windows_5m=EntryWindowConfig(entry_before_start_sec=10, entry_after_start_sec=20),
         windows_15m=EntryWindowConfig(entry_before_start_sec=60, entry_after_start_sec=180),
     )
-    # 30 seconds before start → would pass default (45s), fails custom (10s)
+    # 30 seconds before start → would pass default (600s), fails custom (10s)
     now = datetime(2026, 3, 16, 23, 9, 30, tzinfo=UTC)
     result = check_entry_window(QUESTION_5M, now_utc=now, policy=custom_policy)
     assert result.passed is False
@@ -179,7 +179,7 @@ def test_custom_policy_overrides_defaults():
 
 
 # ---------------------------------------------------------------------------
-# 11. Window bounds — 5m: opens 45s before, closes 90s after start
+# 11. Window bounds — 5m: opens 600s before, closes 600s after start
 # ---------------------------------------------------------------------------
 
 
@@ -187,8 +187,8 @@ def test_5m_window_bounds_computed_correctly():
     now = datetime(2026, 3, 16, 23, 9, 50, tzinfo=UTC)
     result = check_entry_window(QUESTION_5M, now_utc=now)
 
-    expected_opens = datetime(2026, 3, 16, 23, 9, 15, tzinfo=UTC)   # 23:10 - 45s
-    expected_closes = datetime(2026, 3, 16, 23, 11, 30, tzinfo=UTC)  # 23:10 + 90s
+    expected_opens = datetime(2026, 3, 16, 23, 0, 0, tzinfo=UTC)    # 23:10 - 600s
+    expected_closes = datetime(2026, 3, 16, 23, 20, 0, tzinfo=UTC)  # 23:10 + 600s
 
     assert result.window_opens_at == expected_opens
     assert result.window_closes_at == expected_closes
@@ -196,7 +196,7 @@ def test_5m_window_bounds_computed_correctly():
 
 
 # ---------------------------------------------------------------------------
-# 12. Window bounds — 15m: opens 60s before, closes 180s after start
+# 12. Window bounds — 15m: opens 900s before, closes 900s after start
 # ---------------------------------------------------------------------------
 
 
@@ -204,8 +204,8 @@ def test_15m_window_bounds_computed_correctly():
     now = datetime(2026, 3, 16, 22, 59, 30, tzinfo=UTC)
     result = check_entry_window(QUESTION_15M, now_utc=now)
 
-    expected_opens = datetime(2026, 3, 16, 22, 59, 0, tzinfo=UTC)   # 23:00 - 60s
-    expected_closes = datetime(2026, 3, 16, 23, 3, 0, tzinfo=UTC)   # 23:00 + 180s
+    expected_opens = datetime(2026, 3, 16, 22, 45, 0, tzinfo=UTC)   # 23:00 - 900s
+    expected_closes = datetime(2026, 3, 16, 23, 15, 0, tzinfo=UTC)  # 23:00 + 900s
 
     assert result.window_opens_at == expected_opens
     assert result.window_closes_at == expected_closes
@@ -231,9 +231,9 @@ def test_seconds_to_start_populated():
 
 
 def test_approval_delay_pushed_out_of_window():
-    # now is 95 seconds after start — beyond 90s window
+    # now is 605 seconds after start — beyond 600s window
     # when this is a recheck after approval, expect specific rejection
-    now = datetime(2026, 3, 16, 23, 11, 35, tzinfo=UTC)
+    now = datetime(2026, 3, 16, 23, 20, 5, tzinfo=UTC)
     result = check_entry_window(
         QUESTION_5M, now_utc=now, is_recheck_after_approval=True
     )
@@ -247,7 +247,7 @@ def test_approval_delay_pushed_out_of_window():
 
 
 def test_default_policy_values():
-    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_5m.entry_before_start_sec == 45
-    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_5m.entry_after_start_sec == 90
-    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_before_start_sec == 60
-    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_after_start_sec == 180
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_5m.entry_before_start_sec == 600
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_5m.entry_after_start_sec == 600
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_before_start_sec == 900
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_after_start_sec == 900

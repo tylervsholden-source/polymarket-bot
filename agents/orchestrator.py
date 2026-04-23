@@ -4,7 +4,10 @@ Orchestrator: Ana döngü koordinatörü.
 Claude AI signal kaldırıldı — Bayesian estimator spot fiyat bazlı sinyal üretir.
 """
 import asyncio
+import importlib
+import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from loguru import logger
@@ -42,6 +45,18 @@ from control_plane.entry_window_guard import (
     DEFAULT_ENTRY_WINDOW_POLICY,
     check_entry_window,
 )
+from agents.subagents.coordinator import AgentCoordinator
+from agents.subagents.reviewer_agent import ReviewVerdict
+from agents.whale_tracker import WhaleTracker
+from agents.latency_arb import LatencyArbEngine, LatencyArbConfig
+from strategies.walk_forward import WalkForwardValidator
+from strategies.maker_engine import MakerEngine
+from strategies.bond_scanner import BondScanner
+
+# ── Autonomous Engine & Trade Analyzer ──
+from agents.autonomous_engine import AutonomousDecisionEngine, ActionType
+from agents.trade_analyzer import TradeAnalyzer
+from agents.resilience import resilient, with_retry, cycle_guard, HealthMonitor
 
 
 class Orchestrator:
@@ -62,7 +77,28 @@ class Orchestrator:
             clob_client=self.client._clob,
         )
 
-        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", 5))
+        # ── SUBAGENT COORDINATOR ──────────────────────────────────────
+        # Multi-agent orchestration: Research + Signal (parallel) → Review (sequential)
+        _enhanced = None
+        try:
+            from agents.enhanced_signals import EnhancedSignals
+            _enhanced = EnhancedSignals(http_session=self.client.session)
+        except Exception:
+            pass
+
+        self.coordinator = AgentCoordinator(
+            binance_feed=self.binance_feed,
+            arb_engine=self.arb_engine,
+            smart_tracker=self.smart_trader,
+            whale_tracker_cls=WhaleTracker,
+            enhanced_signals=_enhanced,
+            reviewer_model=os.getenv("REVIEWER_MODEL", "claude-sonnet-4-20250514"),
+            enable_research=os.getenv("ENABLE_RESEARCH_AGENT", "true").lower() == "true",
+            enable_review=os.getenv("ENABLE_REVIEWER_AGENT", "false").lower() == "true",
+        )
+        logger.info("Subagent Coordinator initialized (Research + Signal + Reviewer)")
+
+        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", 7))  # PIVOT: raised to 7 (2 dir + 5 maker)
         self.min_edge = float(os.getenv("MIN_EDGE_THRESHOLD", 0.08))
         self.daily_stop_loss = float(os.getenv("DAILY_STOP_LOSS_PCT", 0.15))
         # Tüm zaman dilimlerine izin ver: 5m, 15m, 1h, 4h
@@ -81,18 +117,18 @@ class Orchestrator:
 
         self._cycle_count: int = 0
         # Rate limiter: saatte max N emir (INC-2026-03-15 dersi)
-        self._max_orders_per_hour = int(os.getenv("MAX_ORDERS_PER_HOUR", 3))
+        self._max_orders_per_hour = int(os.getenv("MAX_ORDERS_PER_HOUR", 6))
         self._order_timestamps: list[float] = []  # son emirlerin epoch zamanları (1 saatlik pencere)
 
         # Pozisyon boyut limitleri
-        self._min_bet = float(os.getenv("MIN_BET_SIZE", 2.0))
-        self._max_bet = float(os.getenv("MAX_BET_SIZE", 5.0))
-        self._max_total_exposure = float(os.getenv("MAX_TOTAL_EXPOSURE", 50.0))
+        self._min_bet = float(os.getenv("MIN_BET_SIZE", 3.0))
+        self._max_bet = float(os.getenv("MAX_BET_SIZE", 8.0))
+        self._max_total_exposure = float(os.getenv("MAX_TOTAL_EXPOSURE", 40.0))
 
         # Loss streak koruması — ardışık kayıplardan sonra durakla
         self._consecutive_losses: int = 0
-        self._max_consecutive_losses: int = 5   # 5 ardışık kayıp → cooldown (was 7, data: max streak=10, 26.5% DD)
-        self._loss_cooldown_seconds: int = 900  # 15 dakika cooldown
+        self._max_consecutive_losses: int = 3   # 3 ardışık kayıp → cooldown (mantıklı)
+        self._loss_cooldown_seconds: int = 600  # 10 dk cooldown — sakinleş, düşün
         self._loss_cooldown_until: float = 0.0  # epoch — bu zamana kadar trade yapma
 
         # Shadow journal — rotates daily, records all evaluated candidates
@@ -101,6 +137,21 @@ class Orchestrator:
         self._shadow_run_id: str = str(uuid.uuid4())
 
         self._process_lock = process_lock
+
+        # ── Latency Arb (sinyal kaynağı olarak) ──
+        self.latency_arb = LatencyArbEngine(
+            client=self.client,
+            position_manager=self.position_manager,
+            process_lock=process_lock,
+            config=LatencyArbConfig(
+                bet_size=self._min_bet,
+                max_open_positions=self.max_open_positions,
+                min_capital=self._min_bet,
+            ),
+        )
+        # Latency arb'ı arb engine'e sinyal kaynağı olarak bağla
+        self.arb_engine.latency_arb = self.latency_arb
+        logger.info("LatencyArbEngine initialized (signal source → Bayesian boost)")
 
         # ── Sim position tracking ──
         self._sim_trades: list[dict] = []
@@ -117,32 +168,202 @@ class Orchestrator:
         # Son kayıp olan slot'tan sonra 1 slot bekle (dead cat bounce pattern)
         self._last_loss_slots: set[str] = set()  # kayıp olan slotlar
 
+        # ── OPT-7: Consecutive WIN guard ──
+        # Aynı coin'de 2+ ardışık NO WIN → bounce riski yüksek → half-kelly
+        # 3+ ardışık NO WIN → skip (SOL 5:25 bounce pattern)
+        self._consecutive_wins_per_coin: dict[str, int] = {}  # {"SOL": 3, "BTC": 1, ...}
+
+        # ── Walk-Forward Validation ──
+        # Monitor model drift: compare train vs test performance
+        self._walk_forward = WalkForwardValidator(train_window=50, test_window=20)
+
+        # ── Hybrid Strategy Engines ──
+        self._maker_enabled = os.getenv("MAKER_ENABLED", "false").lower() == "true"  # KAPALI
+        self._bond_enabled = os.getenv("BOND_ENABLED", "false").lower() == "true"  # KAPALI
+        self._directional_enabled = os.getenv("DIRECTIONAL_ENABLED", "true").lower() == "true"  # SADECE directional
+        self._maker_engine = MakerEngine() if self._maker_enabled else None
+        self._bond_scanner = BondScanner() if self._bond_enabled else None
+
+        # ── AUTONOMOUS ENGINE + TRADE ANALYZER + HEALTH MONITOR ──
+        self.autonomous_engine = AutonomousDecisionEngine()
+        self.trade_analyzer = TradeAnalyzer()
+        self._health_monitor = HealthMonitor()
+        self._last_analyzed_count: int = 0  # Analiz edilen son closed trade index'i
+        logger.info("AutonomousEngine + TradeAnalyzer + HealthMonitor initialized")
+
         logger.info("Orchestrator baslatildi — Arbitrage Engine (6+4 model) aktif.")
         logger.info("  + OrderbookAnalyzer, SumMonitor, TopTraderSignal, KalshiArb")
+
+    def _sync_open_orders_from_clob(self):
+        """Restart duplicate order koruması.
+
+        CLOB API'den açık emirleri çek. Önceki instance'ın yerleştirdiği
+        emirler varsa position_manager ve reentry_guard'a yükle.
+        Bu sayede aynı markete tekrar giriş yapılmaz.
+        """
+        try:
+            open_orders = self.client.get_open_orders()
+            if not open_orders:
+                logger.info("CLOB_SYNC: Açık emir yok, temiz başlangıç.")
+                return
+
+            synced = 0
+            for order in open_orders:
+                market_id = order.get("market") or order.get("asset_id", "")
+                if not market_id:
+                    continue
+
+                # Zaten position_manager'da varsa atla
+                if self.position_manager.has_position(market_id):
+                    continue
+
+                # Reentry guard'a ekle — bu markete tekrar girilmesin
+                self._reentry_guard.mark_traded(market_id)
+
+                # Position olarak da ekle (capital tracking için)
+                price = float(order.get("price", 0) or 0)
+                size = float(order.get("original_size", 0) or order.get("size", 0) or 0)
+                amount = round(price * size, 4) if price and size else 0
+                status = (order.get("status") or "").upper()
+
+                if status == "MATCHED" and amount > 0:
+                    self.position_manager.add_position(
+                        market_id,
+                        {
+                            "order_id": order.get("id", market_id),
+                            "outcome": "YES",  # CLOB doesn't expose side easily
+                            "amount": amount,
+                            "price": price,
+                            "status": "matched",
+                        },
+                        question=f"[CLOB_SYNC] {market_id[:40]}",
+                    )
+                    synced += 1
+                    logger.warning(
+                        f"CLOB_SYNC: Önceki instance emri yüklendi — "
+                        f"market={market_id[:40]} amount=${amount:.2f} price={price}"
+                    )
+
+            if synced:
+                logger.warning(f"CLOB_SYNC: {synced} eski emir position_manager'a eklendi.")
+            else:
+                logger.info(f"CLOB_SYNC: {len(open_orders)} açık emir var ama hepsi zaten takipte.")
+        except Exception as e:
+            logger.error(f"CLOB_SYNC hatası (devam ediliyor): {e}")
+
+    def _check_hot_reload(self):
+        """control.json'da reload_engine=true ise tüm strateji modüllerini yeniden yükle."""
+        try:
+            import json
+            ctrl_path = os.path.join("data", "control.json")
+            with open(ctrl_path) as f:
+                ctrl = json.load(f)
+            if ctrl.get("reload_engine"):
+                # Reload dependency chain: edge_model → arbitrage_engine
+                import strategies.edge_model as _em_mod
+                importlib.reload(_em_mod)
+                logger.warning("HOT_RELOAD: edge_model yeniden yüklendi!")
+
+                import strategies.arbitrage_engine as _ae_mod
+                importlib.reload(_ae_mod)
+                from strategies.arbitrage_engine import ArbitrageEngine as _AE
+                self.arb_engine = _AE(
+                    http_session=self.client.session,
+                    binance_feed=self.binance_feed,
+                    smart_trader_tracker=self.smart_trader,
+                    top_trader=self.top_trader,
+                    kalshi_arb=self.kalshi_arb,
+                    clob_client=self.client._clob,
+                )
+                ctrl["reload_engine"] = False
+                with open(ctrl_path, "w") as f:
+                    json.dump(ctrl, f)
+                logger.warning("HOT_RELOAD: ArbitrageEngine + EdgeModel yeniden yüklendi!")
+        except Exception as e:
+            logger.error(f"HOT_RELOAD HATASI — eski engine devam ediyor: {e}")
 
     async def run(self):
         asyncio.create_task(market_watcher.run())
         asyncio.create_task(self._live_data_loop())
+        # ── Latency Arb arka plan başlat ──
+        try:
+            await self.latency_arb.start()
+        except Exception as e:
+            logger.warning(f"LatencyArb start failed: {e}")
         await self._sync_real_balance()
+        # ── Restart duplicate order koruması ──
+        # CLOB'dan açık emirleri çek, position_manager + reentry_guard'a yükle.
+        # Önceki instance'ın yerleştirdiği emirler böylece tekrar girilmez.
+        self._sync_open_orders_from_clob()
         while True:
+            cycle_start = time.time()
+            had_error = False
             try:
-                # Refresh top trader & kalshi data (5dk cache, non-blocking)
-                try:
-                    await self.top_trader.refresh()
-                except Exception as _e:
-                    logger.debug(f"TopTrader refresh: {_e}")
-                try:
-                    await self.kalshi_arb.refresh()
-                except Exception as _e:
-                    logger.debug(f"KalshiArb refresh: {_e}")
-                await self._cycle()
+                async with cycle_guard("main_cycle", timeout=max(self.interval * 3, 180)):
+                    self._check_hot_reload()
+                    # Refresh top trader & kalshi data (5dk cache, non-blocking)
+                    try:
+                        await self.top_trader.refresh()
+                    except Exception as _e:
+                        logger.debug(f"TopTrader refresh: {_e}")
+                    try:
+                        await self.kalshi_arb.refresh()
+                    except Exception as _e:
+                        logger.debug(f"KalshiArb refresh: {_e}")
+                    await self._cycle()
+
+                    # ── POST-CYCLE: Yeni kapanan trade'leri analiz et ──
+                    self._analyze_new_closed_trades()
+
+            except asyncio.CancelledError:
+                logger.info("Orchestrator döngüsü iptal edildi — kapatılıyor.")
+                break
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt — kapatılıyor.")
+                break
             except Exception as e:
-                logger.error(f"Döngü hatası: {e}")
-            # Her 10 döngüde bir CLOB bakiyesini senkronize et
+                had_error = True
+                logger.error(f"Döngü hatası (devam ediyor): {e}")
+
+            # Health monitor güncelle
+            cycle_ms = (time.time() - cycle_start) * 1000
+            self._health_monitor.record_cycle(cycle_ms, had_error)
+
+            # Her döngüde CLOB bakiyesini senkronize et (1 API call/30s = düşük yük)
+            await self._sync_real_balance()
+
+            # Adaptif bekleme: hata durumunda backoff
+            backoff = self._health_monitor.should_backoff()
+            wait_time = self.interval + backoff
+            if backoff > 0:
+                logger.warning(f"HEALTH_BACKOFF: +{backoff:.0f}s (ardışık hatalar)")
+
+            # AutonomousEngine adaptif interval
+            adaptive = self.autonomous_engine.get_adaptive_params()
+            if adaptive.get("cycle_interval_seconds", self.interval) != self.interval:
+                wait_time = adaptive["cycle_interval_seconds"] + backoff
+                logger.info(f"ADAPTIVE_INTERVAL: {wait_time:.0f}s (aggression={adaptive['aggression']})")
+
+            # Her 10 döngüde sağlık raporu
             if self._cycle_count % 10 == 0:
-                await self._sync_real_balance()
-            logger.info(f"Sonraki döngü {self.interval}s sonra...")
-            await asyncio.sleep(self.interval)
+                health = self._health_monitor.get_health()
+                engine_stats = self.autonomous_engine.get_stats()
+                analyzer_stats = self.trade_analyzer.get_stats()
+                logger.info(
+                    f"HEALTH: {health['status']} | cycles={health['total_cycles']} "
+                    f"err_rate={health['error_rate']} | "
+                    f"AUTO: decisions={engine_stats['session_decisions']} "
+                    f"exec={engine_stats['session_executes']} skip={engine_stats['session_skips']} | "
+                    f"ANALYZER: analyzed={analyzer_stats['total_analyzed']} "
+                    f"patterns={analyzer_stats['pattern_count']}"
+                )
+                # Pattern önerileri varsa logla
+                recs = self.trade_analyzer.get_recommendations()
+                for rec in recs:
+                    logger.info(f"  📊 RECOMMENDATION: {rec}")
+
+            logger.info(f"Sonraki döngü {wait_time:.0f}s sonra...")
+            await asyncio.sleep(wait_time)
 
     async def _cycle(self):
         if not self._is_live_trading() and not self._is_simulation_running():
@@ -151,32 +372,100 @@ class Orchestrator:
 
         self._cycle_count += 1
         # Order timestamps: 1 saatten eski kayıtları temizle
-        import time as _t
-        _cutoff = _t.time() - 3600
+        _cutoff = time.time() - 3600
         self._order_timestamps = [t for t in self._order_timestamps if t > _cutoff]
         logger.info(f"=== Döngü #{self._cycle_count}: {datetime.now().strftime('%H:%M:%S')} ===")
+
+        # DISABLED: Binance resolution YANLIŞ SONUÇ VERİYOR
+        # Binance kline boundary ≠ Polymarket market window → yanlış WIN/LOSS
+        # Örnek: HYPE 9:50-9:55 → Polymarket DOWN (-0.12%) ama Binance UP (+0.11%)
+        # Artık SADECE CLOB API tokens.winner kullanılıyor (position_manager.update_positions)
+        # await self._check_binance_resolutions()  # KALDIRILDI — CLOB resolution güvenilir
 
         # Sim modda: önce açık sim trade'leri kontrol et
         if self._is_simulation_running() and self._sim_trades:
             await self._check_sim_resolutions()
 
-        if self.position_manager.daily_loss_exceeded(self.daily_stop_loss) and self._is_live_trading():
-            logger.warning("Günlük stop-loss tetiklendi. Bot bugün durdu.")
-            _sw.update(running=True, capital=self.position_manager.available_capital(), cycle=self._cycle_count)
-            _sw.save()
-            return
+        # ── WATCHDOG: CLOB BAKİYE KORUMASI ──────────────────────────
+        # Her döngüde CLOB bakiye değişimini takip et.
+        # Saatlik kayıp $15'ı aşarsa → botu durdur (live trading kapat).
+        # Günlük kayıp $30'u aşarsa → botu durdur.
+        WATCHDOG_HOURLY_LOSS_LIMIT = 15.0   # max $15 saatlik kayıp
+        WATCHDOG_DAILY_LOSS_LIMIT = 30.0    # max $30 günlük kayıp
+        WATCHDOG_SESSION_START_KEY = "_watchdog_session_start"
+
+        try:
+            current_balance = self.position_manager.data.get("capital", 0)
+            now_ts = time.time()
+
+            # Session başlangıç bakiyesini kaydet (bot ilk çalıştığında)
+            if not hasattr(self, WATCHDOG_SESSION_START_KEY):
+                setattr(self, WATCHDOG_SESSION_START_KEY, current_balance)
+                self._watchdog_hourly_ref = current_balance
+                self._watchdog_hourly_ts = now_ts
+                self._watchdog_daily_ref = current_balance
+                self._watchdog_daily_ts = now_ts
+                logger.info(f"WATCHDOG_INIT: session_start=${current_balance:.2f}")
+
+            # Saatlik referansı güncelle (her 60dk)
+            if now_ts - self._watchdog_hourly_ts > 3600:
+                self._watchdog_hourly_ref = current_balance
+                self._watchdog_hourly_ts = now_ts
+
+            # Günlük referansı güncelle (her 24 saat)
+            if now_ts - self._watchdog_daily_ts > 86400:
+                self._watchdog_daily_ref = current_balance
+                self._watchdog_daily_ts = now_ts
+
+            hourly_loss = self._watchdog_hourly_ref - current_balance
+            daily_loss = self._watchdog_daily_ref - current_balance
+
+            # WATCHDOG DISABLED — bot cash bitene kadar durmayacak
+            if hourly_loss > WATCHDOG_HOURLY_LOSS_LIMIT:
+                logger.warning(
+                    f"WATCHDOG (LOG ONLY): Saatlik kayıp ${hourly_loss:.2f} > "
+                    f"${WATCHDOG_HOURLY_LOSS_LIMIT:.2f} — devam ediyor"
+                )
+
+            if daily_loss > WATCHDOG_DAILY_LOSS_LIMIT:
+                logger.warning(
+                    f"WATCHDOG (LOG ONLY): Günlük kayıp ${daily_loss:.2f} > "
+                    f"${WATCHDOG_DAILY_LOSS_LIMIT:.2f} — devam ediyor"
+                )
+
+            # Her 5 döngüde durum raporu
+            if self._cycle_count % 5 == 0:
+                logger.info(
+                    f"WATCHDOG: balance=${current_balance:.2f} | "
+                    f"hourly_loss=${hourly_loss:+.2f}/{WATCHDOG_HOURLY_LOSS_LIMIT} | "
+                    f"daily_loss=${daily_loss:+.2f}/{WATCHDOG_DAILY_LOSS_LIMIT}"
+                )
+        except Exception as wd_e:
+            logger.debug(f"Watchdog check error: {wd_e}")
 
         # ── Loss streak koruması: son kapanışlardan streak hesapla ──
         self._update_loss_streak()
         # ── Dynamic Kelly: streak multiplier güncelle ──
         closed_trades = self.position_manager.data.get("closed", [])
         self.arb_engine.kelly.update_streak(closed_trades)
-        if _t.time() < self._loss_cooldown_until:
-            remaining = int(self._loss_cooldown_until - _t.time())
-            logger.warning(f"Loss streak cooldown aktif ({self._consecutive_losses} kayıp). {remaining}s kaldı.")
-            _sw.update(running=True, capital=self.position_manager.available_capital(), cycle=self._cycle_count)
-            _sw.save()
-            return
+
+        # ── Walk-Forward Validation ──
+        wf_result = self._walk_forward.validate(closed_trades)
+        if wf_result["recommendation"] == "STOP":
+            logger.warning(f"WALK_FORWARD: STOP recommendation! test_WR={wf_result['test_wr']:.1%}")
+            # Don't stop entirely, just severely reduce sizes (handled via confidence_multiplier)
+
+        # CIRCUIT_BREAKER devre dışı — kullanıcı talebi (2026-03-21)
+        # if _t.time() < self._loss_cooldown_until:
+        #     remaining = int(self._loss_cooldown_until - _t.time())
+        #     logger.warning(f"Loss streak cooldown aktif ({self._consecutive_losses} kayıp). {remaining}s kaldı.")
+        #     _sw.update(running=True, capital=self.position_manager.available_capital(), cycle=self._cycle_count)
+        #     _sw.save()
+        #     return
+
+        # Resolution check — max pozisyon kontrolünden ÖNCE çalışmalı
+        # Yoksa pozisyonlar resolve olmadan bot kilitlenir
+        await self.position_manager.update_positions(self.client)
 
         open_count: int = self.position_manager.open_position_count()
         if open_count >= self.max_open_positions and self._is_live_trading():
@@ -238,37 +527,79 @@ class Orchestrator:
         if no_enriched:
             logger.info(f"NO orderbook: {no_enriched}/{len(candidates)} market zenginleştirildi.")
 
-        # Arbitrage Engine — 6 model çalıştır
-        signals = await self.arb_engine.analyze(candidates, capital)
-        logger.info(f"{len(signals)} arbitraj sinyali üretildi.")
+        # ═══════════════════════════════════════════════════════════════
+        # MULTI-AGENT PIPELINE
+        # Phase 1: Research + Signal (PARALLEL)
+        # Phase 2: Merge (enrich signals with research)
+        # Phase 3: Review (SEQUENTIAL — Claude API veto/approve)
+        # ═══════════════════════════════════════════════════════════════
+        coord_result = await self.coordinator.run_cycle(
+            candidates=candidates,
+            capital=capital,
+        )
+        logger.info(f"[COORDINATOR]\n{coord_result.summary()}")
 
-        # ── MAX COINS PER PERIOD ─────────────────────────────────────────
-        # Lesson #21: All coins move together (correlation ~100%).
-        # 5 coins in same period = 5x risk, 1x information.
-        # Limit to best 2 coins per time slot to reduce correlated risk.
-        # OPT-2: Trend-aware coin limit.
-        # Flat market: 1 coin (correlation = pure risk duplication)
-        # Trending market (BEARISH/BULLISH): 2 coins (ride the wave)
-        _regime_name = self.arb_engine._current_regime.get("regime", "NEUTRAL")
-        _coin_limit = 2 if _regime_name in ("BEARISH", "BULLISH") else 1
-        signals = self._limit_coins_per_period(signals, max_per_period=_coin_limit)
+        # COIN_LIMIT + Consensus filter uygulanır (coordinator sonrası)
+        all_signals = coord_result.signal_result.signals if coord_result.signal_result else []
 
-        # ── Crypto Consensus Filter ──────────────────────────────────────────
-        # Aynı zaman diliminde çoğunluk yönüne aykırı sinyalleri filtrele.
-        # Kripto marketler yüksek korelasyonlu — çoğunluk UP ise NO bet riskli.
-        signals = self._apply_consensus_filter(signals)
-
-        # Shadow journal — tüm adayları kaydet (EXECUTE + REJECT)
-        ctrl = self._read_control()
-        intended_size = float(ctrl.get("min_bet", 20.0))
-        self._record_shadow_decisions(candidates, signals, intended_size)
-
-        # Dashboard'dan min_bet oku — kullanıcının seçtiği miktar (1/5/10/20$)
+        # Shadow journal — tüm adayları kaydet
         ctrl = self._read_control()
         min_bet_override = float(ctrl.get("min_bet", 1.0))
+        _raw_for_journal = []
+        for es in all_signals:
+            _raw_for_journal.append(type('_S', (), {
+                'market': es.market, 'direction': es.direction,
+                'bayesian_prob': es.bayesian_prob, 'market_price': es.market_price,
+                'edge': es.edge, 'entry_price': es.entry_price,
+                'size': es.size, 'z_score': es.z_score,
+                'signal_type': es.signal_type, 'reasoning': es.reasoning,
+                'token_id': es.token_id, 'side_diagnostics': es.side_diagnostics,
+            })())
+        self._record_shadow_decisions(candidates, _raw_for_journal, min_bet_override)
 
-        for signal in signals:
+        # ── COIN_LIMIT: max 5 coin/slot ──
+        all_signals = self._limit_coins_per_period(all_signals, max_per_period=5)
+
+        # Apply COIN_LIMIT to approved_signals too (BUG FIX: execution loop
+        # was using coord_result.approved_signals which bypassed COIN_LIMIT)
+        allowed_market_ids = {s.market.get("condition_id") for s in all_signals}
+        coord_result.approved_signals = [
+            (sig, dec) for sig, dec in coord_result.approved_signals
+            if sig.market.get("condition_id") in allowed_market_ids
+        ]
+
+        # ── TOPLAM RİSK LİMİTİ ──────────────────────────────────────────
+        try:
+            locked = self.position_manager.locked_capital()
+        except AttributeError:
+            locked = sum(
+                p.get("amount", 0)
+                for p in self.position_manager.data.get("positions", {}).values()
+            )
+        # Bond positions don't count against directional risk budget
+        bond_locked = sum(
+            p.get("amount", 0)
+            for p in self.position_manager.data.get("positions", {}).values()
+            if p.get("strategy") == "bond"
+        )
+        directional_locked = locked - bond_locked
+        max_risk = min(capital * 0.18, 20.0)
+        remaining_risk = max(0.0, max_risk - directional_locked)
+        cycle_budget = remaining_risk
+        cycle_spent = 0.0
+
+        # ── EXECUTE APPROVED SIGNALS (coordinator-reviewed + autonomous engine) ──
+        # Edge varsa her zaman girebilir — max_open_positions (5) yeterli koruma
+        MAX_DIRECTIONAL = 2  # PIVOT: reduced from 5 — maker gets most capital
+        directional_count = self.position_manager.pool_position_count("directional")
+        for signal, review_decision in coord_result.approved_signals:
             if open_count >= self.max_open_positions:
+                break
+            if directional_count >= MAX_DIRECTIONAL:
+                logger.info(f"DIRECTIONAL_CAP: Max {MAX_DIRECTIONAL} directional position(s) reached, skipping.")
+                break
+            if cycle_spent >= cycle_budget:
+                logger.info(f"CYCLE_CAP: Döngü bütçesi doldu (${cycle_spent:.2f}/${cycle_budget:.2f})")
                 break
 
             market = signal.market
@@ -279,6 +610,36 @@ class Orchestrator:
             if self._reentry_guard.is_blocked(market_id):
                 continue
 
+            # ═══════════════════════════════════════════════════════════
+            # AUTONOMOUS DECISION ENGINE — risk analizi + adaptif boyut
+            # Bot asla durmaz: SKIP bile sadece bu trade'i atlar, döngü devam eder
+            # ═══════════════════════════════════════════════════════════
+            try:
+                auto_decision = self.autonomous_engine.evaluate(
+                    signal=signal,
+                    review_decision=review_decision,
+                    capital=capital,
+                    open_count=open_count,
+                    max_positions=self.max_open_positions,
+                    closed_trades=closed_trades,
+                )
+                logger.info(
+                    f"[AUTONOMOUS] {market['question'][:40]} → {auto_decision.summary()}"
+                )
+
+                if not auto_decision.should_execute:
+                    logger.info(
+                        f"[AUTONOMOUS] SKIP: {market['question'][:40]} | "
+                        f"Reason: {' | '.join(auto_decision.reasoning)}"
+                    )
+                    continue
+
+                # Otonom boyut çarpanı uygula
+                _auto_size_mult = auto_decision.size_multiplier
+            except Exception as auto_err:
+                logger.warning(f"[AUTONOMOUS] Engine error (devam ediyor): {auto_err}")
+                _auto_size_mult = 1.0  # Hata durumunda normal boyut
+
             # Bayesian güven filtresi KALDIRILDI:
             # Edge-first direction selection in arbitrage_engine already handles this.
             # This filter was killing 21%+ edge NO trades because prob=0.51 → eff=0.49 < 0.51.
@@ -286,11 +647,62 @@ class Orchestrator:
 
             # BTC min edge kaldırıldı — 0.25 erişilemez eşikti, normal min_edge yeterli
 
+            # ── OPT-7: CONSECUTIVE_WIN_GUARD ──────────────────────────
+            # Aynı coin'de 3+ ardışık NO WIN → bounce riski → SKIP
+            # 2 ardışık NO WIN → half-kelly
+            _coin = self._shadow_detect_asset(market.get("question", ""))
+            _coin_streak = self._consecutive_wins_per_coin.get(_coin, 0)
+            if _coin_streak >= 3 and signal.direction == "NO":
+                logger.warning(
+                    f"CONSEC_WIN_GUARD: {_coin} {_coin_streak} ardışık NO WIN → SKIP "
+                    f"(bounce riski) | {market['question'][:50]}"
+                )
+                continue
+
             # Bet size: Kelly belirler, min/max cap uygula
             if signal.size <= 0:
                 logger.debug(f"Kelly=0, atlanıyor: {market['question'][:50]}")
                 continue
-            bet_size = max(self._min_bet, min(self._max_bet, signal.size))
+            # ── WATCHDOG: HARD BET SIZE CAP ──────────────────────────────
+            # MUTLAK LİMİT: Tek bir trade ASLA $5'dan fazla olamaz.
+            # Capital %5 cap da uygulanır ama $5 hard cap her durumda geçerli.
+            HARD_MAX_BET = 4.0  # max $4 per trade
+
+            # Dynamic min/max bet: scale with capital
+            # Low capital (<$20): allow up to 80% of capital per trade (survival mode)
+            # Normal capital: max 3% per trade
+            if capital < 20:
+                _cap_pct = 0.80  # survival mode — $5 capital → max $4 bet
+                _min_pct = 0.40
+            else:
+                _cap_pct = 0.12  # MANTIKLI: $71 → max ~$8.5/trade
+                _min_pct = 0.04  # min ~$3 per trade
+            _effective_min = max(1.0, min(self._min_bet, capital * _min_pct))
+            _effective_max = min(self._max_bet, capital * _cap_pct, HARD_MAX_BET)
+            if _effective_max < 1.0:
+                logger.warning(f"Capital too low for any trade: ${capital:.2f}")
+                break
+            bet_size = max(_effective_min, min(_effective_max, signal.size))
+
+            # ── AUTONOMOUS ENGINE SIZE ADJUSTMENT ──
+            if _auto_size_mult < 1.0:
+                original_bet = bet_size
+                bet_size = max(_effective_min, bet_size * _auto_size_mult)
+                logger.info(
+                    f"[AUTONOMOUS] Size adjust: ${original_bet:.2f} × {_auto_size_mult:.2f} "
+                    f"= ${bet_size:.2f}"
+                )
+
+            # ── Walk-Forward Confidence Adjustment ──
+            wf_mult = self._walk_forward.last_check.get("confidence_multiplier", 1.0)
+            if wf_mult < 1.0:
+                bet_size *= wf_mult
+                logger.info(f"WALK_FORWARD: bet_size adjusted by {wf_mult:.2f} → ${bet_size:.2f}")
+
+            # Final hard cap — hiçbir koşulda aşılmaz
+            if bet_size > HARD_MAX_BET:
+                logger.warning(f"HARD_CAP: ${bet_size:.2f} → ${HARD_MAX_BET:.2f} (max bet limit)")
+                bet_size = HARD_MAX_BET
             # Capital sufficiency: aynı cycle'da 2+ order → capital tükendi mi?
             if bet_size > capital:
                 logger.info(f"Yetersiz capital: ${capital:.2f} < ${bet_size:.2f}, atlıyorum.")
@@ -302,8 +714,7 @@ class Orchestrator:
             # BTC 3:20 market: edge=+0.20 at candle_sec=3, gone by candle_sec=65.
             # New: allow entry from second 3 onwards (API needs ~3s to process).
             # Late filter: still skip last 20s (edge fully eroded).
-            import time as _ct
-            candle_sec = int(_ct.time()) % 300
+            candle_sec = int(time.time()) % 300
             if candle_sec > 280:
                 logger.debug(
                     f"Mum zamanlaması: {candle_sec}sn > 280sn (son 20sn), "
@@ -312,10 +723,10 @@ class Orchestrator:
                 continue
 
             logger.info(
-                f"SİNYAL [{signal.signal_type}]: {market['question'][:55]} | "
-                f"Bayesian={signal.bayesian_prob:.3f} | Fiyat={signal.market_price:.3f} | "
-                f"Edge={signal.edge:.3f} | Z={signal.z_score:.1f} | ${bet_size:.2f} | "
-                f"candle_sec={candle_sec}s"
+                f"SİNYAL [{signal.signal_type}] [{review_decision.verdict.value}]: "
+                f"{market['question'][:50]} | "
+                f"Edge={signal.edge:.3f} | Confluence={signal.confluence_score:.2f} | "
+                f"${bet_size:.2f} | Reviewer: {review_decision.reasoning[:80]}"
             )
 
             _sw.add_decision(
@@ -324,9 +735,9 @@ class Orchestrator:
                 prob=signal.bayesian_prob,
                 price=signal.market_price,
                 edge=signal.edge,
-                confidence="HIGH" if signal.edge > 0.06 else "MEDIUM",
+                confidence="HIGH" if signal.confluence_score > 0.6 else "MEDIUM",
                 action="ORDER" if self._is_live_trading() else "SIM_BUY",
-                reasoning=signal.reasoning,
+                reasoning=f"[{review_decision.verdict.value}] {signal.reasoning}",
                 size=bet_size,
             )
 
@@ -337,10 +748,11 @@ class Orchestrator:
                     else market.get("no_token_id")
                 )
 
-                # Toplam exposure kontrolü
+                # Toplam exposure kontrolü (bond positions excluded)
                 existing_exposure = sum(
                     p.get("amount", 0)
                     for p in self.position_manager.data.get("positions", {}).values()
+                    if p.get("strategy") != "bond"
                 )
                 if existing_exposure + bet_size > self._max_total_exposure:
                     logger.info(
@@ -349,6 +761,8 @@ class Orchestrator:
                     )
                     continue
 
+                # ORCH_NO_BLOCK kaldırıldı — sinyal neyse o
+
                 # ── 11-NOKTA LİVE GATE KONTROLÜ (sadece canlı modda) ──
                 if self._is_live_trading():
                     end_iso = market.get("end_date_iso", "")
@@ -356,7 +770,7 @@ class Orchestrator:
                         process_lock=self._process_lock,
                         control_file="data/control.json",
                         readiness_file="data/readiness_verdict.json",
-                        daily_loss_exceeded=self.position_manager.daily_loss_exceeded(self.daily_stop_loss),
+                        daily_loss_exceeded=False,  # devre dışı — kullanıcı talebi (2026-03-21)
                         open_position_count=open_count,
                         max_open_positions=self.max_open_positions,
                         order_timestamps=self._order_timestamps,
@@ -377,6 +791,35 @@ class Orchestrator:
                         logger.warning(f"LiveGate ENGELLEDİ: {market['question'][:50]} | {blockers}")
                         continue
 
+                # ── FRESH_PRICE_ABORT ──────────────────────────────────
+                # Ders #32: sinyal fiyatı ≠ execution fiyatı. Stale sinyale güvenme.
+                # Execution anında taze fiyat al, kayma > edge'in %60'ı → iptal.
+                try:
+                    _fresh = await self.client.get_market(market_id)
+                    if _fresh:
+                        _fresh_ask = float(_fresh.get("best_ask", 0) or 0)
+                        if _fresh_ask > 0 and signal.direction == "YES":
+                            _slippage = abs(_fresh_ask - signal.entry_price)
+                            if _slippage > signal.edge * 0.60:
+                                logger.warning(
+                                    f"FRESH_PRICE_ABORT: {market['question'][:40]} | "
+                                    f"stale={signal.entry_price:.3f} fresh={_fresh_ask:.3f} "
+                                    f"slip={_slippage:.3f} > edge*0.6={signal.edge*0.60:.3f}"
+                                )
+                                continue
+                        _fresh_no_ask = float(_fresh.get("no_best_ask", 0) or 0)
+                        if _fresh_no_ask > 0 and signal.direction == "NO":
+                            _slippage = abs(_fresh_no_ask - signal.entry_price)
+                            if _slippage > signal.edge * 0.60:
+                                logger.warning(
+                                    f"FRESH_PRICE_ABORT: {market['question'][:40]} | "
+                                    f"stale={signal.entry_price:.3f} fresh={_fresh_no_ask:.3f} "
+                                    f"slip={_slippage:.3f} > edge*0.6={signal.edge*0.60:.3f}"
+                                )
+                                continue
+                except Exception as e:
+                    logger.debug(f"Fresh price fetch failed: {e}")
+
                 # ── DOĞRUDAN EMİR VER (onay kuyruğu bypass) ──
                 order = await self.client.place_order(
                     market_id=market_id,
@@ -387,16 +830,17 @@ class Orchestrator:
                     question=market.get("question", ""),
                 )
                 if order:
-                    import time as _time
-                    self._order_timestamps.append(_time.time())
+                    self._order_timestamps.append(time.time())
                     order["outcome"] = signal.direction
                     order["token_id"] = token_id or ""
                     self.position_manager.add_position(market_id, order, market["question"])
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1
                     capital -= bet_size
+                    cycle_spent += bet_size
                     logger.success(
-                        f"EMİR VERİLDİ: {market['question'][:50]} | "
+                        f"EMİR VERİLDİ [{review_decision.verdict.value}]: "
+                        f"{market['question'][:50]} | "
                         f"${bet_size:.2f} @ {signal.entry_price:.4f}"
                     )
                 else:
@@ -416,7 +860,6 @@ class Orchestrator:
                 # ── Sim position tracking: aynı markete tekrar girme ──
                 total_sim = len(self._sim_trades) + len(self._sim_results)
                 if market_id not in self._sim_seen_markets and total_sim < self._sim_target:
-                    import time as _st
                     self._sim_seen_markets.add(market_id)
                     sim_entry = {
                         "market_id": market_id,
@@ -427,13 +870,17 @@ class Orchestrator:
                         "edge": signal.edge,
                         "size": signal.size,
                         "yes_token_id": market.get("yes_token_id"),
-                        "ts": _st.time(),
+                        "reviewer_verdict": review_decision.verdict.value,
+                        "confluence_score": signal.confluence_score,
+                        "risk_flags": signal.risk_flags,
+                        "ts": time.time(),
                     }
                     self._sim_trades.append(sim_entry)
                     logger.success(
                         f"[SIM #{total_sim + 1}/{self._sim_target}] "
+                        f"[{review_decision.verdict.value}] "
                         f"{signal.direction} {market['question'][:50]} | "
-                        f"Edge={signal.edge:.3f} Bayesian={signal.bayesian_prob:.3f} ${signal.size:.2f}"
+                        f"Edge={signal.edge:.3f} Confluence={signal.confluence_score:.2f} ${signal.size:.2f}"
                     )
                 else:
                     logger.info(f"[SIM] {market['question'][:50]} | ${signal.size:.2f}")
@@ -454,6 +901,44 @@ class Orchestrator:
         # ── Süresi dolmuş bekleyen emirleri temizle ──
         _cleanup_expired_orders()
 
+        # ── Latency Arb stats log ──
+        if self.latency_arb._running and self._cycle_count % 10 == 0:
+            stats = self.latency_arb.get_stats()
+            if stats.get("spikes_detected", 0) > 0:
+                logger.info(
+                    f"LATENCY_ARB_STATS: spikes={stats['spikes_detected']} "
+                    f"orders={stats['orders_placed']} skipped={stats['orders_skipped']}"
+                )
+
+        # ═══════════════════════════════════════════════════════════════
+        # HYBRID STRATEGIES: Maker + Bond (alongside directional above)
+        # ═══════════════════════════════════════════════════════════════
+
+        # Phase A: Market Making — refresh two-sided quotes (every cycle)
+        if self._maker_enabled and self._maker_engine and self._is_live_trading():
+            try:
+                maker_capital = self.position_manager.pool_available("maker")
+                # Use ALL markets (not just candidates) — maker needs wider selection
+                maker_stats = await self._maker_engine.refresh_quotes(
+                    markets=markets if markets else [],
+                    capital=maker_capital,
+                    client=self.client,
+                )
+                if maker_stats.get("placed", 0) > 0:
+                    logger.info(
+                        f"MAKER_CYCLE: placed={maker_stats['placed']} "
+                        f"cancelled={maker_stats['cancelled']} capital=${maker_capital:.2f}"
+                    )
+            except Exception as maker_err:
+                logger.error(f"MAKER_CYCLE error: {maker_err}")
+
+        # Phase B: Bond scan — every 5th cycle (~5 min)
+        if self._bond_enabled and self._bond_scanner and self._cycle_count % 5 == 0:
+            try:
+                await self._bond_cycle()
+            except Exception as bond_err:
+                logger.error(f"BOND_CYCLE error: {bond_err}")
+
         await self._finalize_cycle(markets, candidates)
 
     async def _execute_approved_orders(self):
@@ -470,9 +955,14 @@ class Orchestrator:
         _lock = self._process_lock
         capital = self.position_manager.available_capital()
         open_count = self.position_manager.open_position_count()
-        daily_stop = self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
+        daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
 
         for order_req in approved:
+            # Re-fetch capital/open_count per order (stale after previous execution)
+            capital = self.position_manager.available_capital()
+            open_count = self.position_manager.open_position_count()
+            daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
+
             market_id = order_req.get("market_id", "")
             token_id = order_req.get("token_id", "")
             amount = order_req.get("amount", 0)
@@ -532,8 +1022,7 @@ class Orchestrator:
                 question=question,
             )
             if order:
-                import time as _time
-                self._order_timestamps.append(_time.time())
+                self._order_timestamps.append(time.time())
                 order["outcome"] = direction
                 self.position_manager.add_position(market_id, order, question)
                 self._reentry_guard.mark_traded(market_id)
@@ -550,6 +1039,117 @@ class Orchestrator:
 
             _mark_order_executed(order_req["id"])
 
+    async def _bond_cycle(self):
+        """Scan ALL markets for high-probability bond opportunities."""
+        bond_capital = self.position_manager.pool_available("bond")
+        bond_positions = self.position_manager.pool_position_count("bond")
+
+        if bond_capital < 3.0:
+            logger.debug(f"BOND: Insufficient capital (${bond_capital:.2f})")
+            return
+        if bond_positions >= self._bond_scanner.MAX_POSITIONS:
+            logger.debug(f"BOND: Max positions reached ({bond_positions})")
+            return
+
+        opportunities = await self._bond_scanner.scan(self.client)
+        if not opportunities:
+            logger.info("BOND_SCAN: No opportunities found")
+            return
+
+        placed = 0
+        for opp in opportunities:
+            if bond_capital < 3.0:
+                break
+            if bond_positions >= self._bond_scanner.MAX_POSITIONS:
+                break
+
+            # Skip if already have position in this market
+            if self.position_manager.has_position(opp.condition_id):
+                continue
+            if self._reentry_guard.is_blocked(opp.condition_id):
+                continue
+
+            # Size: max $10 per bond, max 40% of remaining bond capital
+            bet_size = min(10.0, bond_capital * 0.40)
+            if bet_size < 3.0:
+                break
+
+            # Place order (use passive — no price bump for bonds)
+            order_result = await self.client.place_passive_order(
+                token_id=opp.token_id,
+                price=opp.price,
+                size=round(bet_size / opp.price, 2),
+                question=f"BOND_{opp.side}: {opp.question[:50]}",
+            )
+
+            if order_result and order_result.get("order_id"):
+                # Register as position
+                self.position_manager.add_position(
+                    opp.condition_id,
+                    {
+                        "order_id": order_result["order_id"],
+                        "outcome": opp.side,
+                        "amount": order_result.get("amount", bet_size),
+                        "price": opp.price,
+                        "status": order_result.get("status", "LIVE"),
+                        "token_id": opp.token_id,
+                    },
+                    question=opp.question,
+                    strategy="bond",
+                )
+                self._reentry_guard.mark_traded(opp.condition_id)
+                bond_capital -= bet_size
+                bond_positions += 1
+                placed += 1
+                logger.success(
+                    f"BOND_ORDER: {opp.question[:50]} | {opp.side} @ {opp.price:.3f} | "
+                    f"yield={opp.expected_yield:.1%} | ${bet_size:.2f} | "
+                    f"resolve in {opp.days_to_resolve:.1f}d"
+                )
+
+        if placed:
+            logger.info(f"BOND_CYCLE: {placed} bond(s) placed, remaining=${bond_capital:.2f}")
+
+    def _analyze_new_closed_trades(self):
+        """Yeni kapanan trade'leri analiz et — bot durmadan çalışır."""
+        try:
+            closed_trades = self.position_manager.data.get("closed", [])
+            new_count = len(closed_trades) - self._last_analyzed_count
+
+            if new_count <= 0:
+                return
+
+            # Sadece yeni kapananları analiz et
+            new_trades = closed_trades[self._last_analyzed_count:]
+            for trade in new_trades:
+                try:
+                    analysis = self.trade_analyzer.analyze_trade(
+                        trade=trade,
+                        signal_data=trade,  # Trade data sinyal bilgilerini de içerir
+                        all_closed=closed_trades,
+                    )
+                    logger.info(
+                        f"[TRADE_ANALYSIS] {analysis.summary()}"
+                    )
+                    for lesson in analysis.lessons:
+                        logger.info(f"  📝 {lesson}")
+                except Exception as e:
+                    logger.debug(f"[TRADE_ANALYSIS] Single trade analysis error: {e}")
+
+            self._last_analyzed_count = len(closed_trades)
+
+            # Her 5 trade'de pattern raporu
+            if self._last_analyzed_count > 0 and self._last_analyzed_count % 5 == 0:
+                report = self.trade_analyzer.get_pattern_report()
+                if report:
+                    logger.info(f"[PATTERN_REPORT] {json.dumps(report, indent=2)}")
+                recs = self.trade_analyzer.get_recommendations()
+                for rec in recs:
+                    logger.info(f"  📊 {rec}")
+
+        except Exception as e:
+            logger.debug(f"[TRADE_ANALYSIS] Batch analysis error (devam ediyor): {e}")
+
     async def _finalize_cycle(self, markets: list, candidates: list):
         """Pozisyonları güncelle, dashboard yaz."""
         open_before = set(self.position_manager.data.get("positions", {}).keys())
@@ -564,6 +1164,15 @@ class Orchestrator:
         await self._fetch_crypto_prices()
         _sw.update_indices(market_watcher._data)
         pm_data = self.position_manager.data
+        # Spot fiyatları: açık pozisyonların coin'leri için Binance cache'den çek
+        _spot_prices = {}
+        for _pos in pm_data.get("positions", {}).values():
+            _coin = self._shadow_detect_asset(_pos.get("question", ""))
+            _sym = _coin + "USDT" if _coin != "UNKNOWN" else ""
+            if _sym and _sym not in _spot_prices:
+                _cached = self.binance_feed._cache.get(_sym, {})
+                if _cached.get("price"):
+                    _spot_prices[_coin] = round(_cached["price"], 4)
         _sw.update(
             running=True,
             capital=self.position_manager.available_capital(),
@@ -577,6 +1186,7 @@ class Orchestrator:
             positions=pm_data.get("positions", {}),
             closed=pm_data.get("closed", []),
             signal_mode="arbitrage",
+            spot_prices=_spot_prices,
         )
         _sw.save()
 
@@ -600,6 +1210,8 @@ class Orchestrator:
         from zoneinfo import ZoneInfo
         now_et = datetime.now(ZoneInfo("America/New_York"))
         today_str = now_et.strftime("%B %d").replace(" 0", " ")  # "March 15" ET format
+        # SAAT FİLTRESİ: Kaldırıldı (maker stratejisi 7/24 çalışmalı)
+
         result = []
         for m in markets:
             question = m.get("question", "")
@@ -609,28 +1221,27 @@ class Orchestrator:
             # Sadece bugünün marketleri (March 16 gibi)
             if today_str.lower() not in q_lower:
                 continue
-            # 5m ve 15m marketleri kabul et
+            # SADECE 5m ve 15m marketler — 1h/4h YASAK
             horizon = self._parse_horizon_minutes(question)
             if horizon not in (5, 15):
                 continue
-            # Kapanışa max 15dk kalan marketler (30dk+ uzaktakilere dokunma)
+            # Kapanışa max 20dk kalan marketler (15m marketler için yeterli)
             mins_left = self._minutes_to_market_end(question)
-            if mins_left is None or mins_left <= 0 or mins_left > 15:
+            if mins_left is None or mins_left <= 0 or mins_left > 20:
                 continue
-            # Entry window uyumu: market başlamamışsa entry_before_start kadar tolerans
-            # 5m market before_start=0 → sadece başlamış marketler (mins_left <= horizon)
-            # 15m market before_start=180s=3dk → mins_left <= horizon+3
-            _ew_cfg = self._entry_window_policy.get_window(horizon)
-            if _ew_cfg:
-                _max_mins = horizon + (_ew_cfg.entry_before_start_sec / 60)
-                if mins_left > _max_mins:
-                    continue
+            # Entry window kaba filtre: çok uzak marketleri ele
+            # Detaylı kontrol check_entry_window() tarafından yapılıyor
+            # Pre-filter cömert olmalı — 5m: başlangıca 5dk, 15m: başlangıca 5dk
+            mins_to_start = mins_left - horizon
+            if mins_to_start > 5:  # 5dk'dan fazla uzaktaysa atla
+                continue
             h = self._hours_to_close(m)
             if h is None or h <= 0 or h > self.max_hours or h < self.min_hours:
                 continue
-            # Fiyat filtresi: 0.05 - 0.95 arası
+            # Fiyat filtresi: 0.40 - 0.75 arası (kaliteli bölge)
+            # <0.40: WR=%26.5 (para kaybediyor), >0.75: az veri ama WR yüksek, riskli
             price = float(m.get("best_ask", 0) or 0)
-            if not (0.05 <= price <= 0.95):
+            if not (0.40 <= price <= 0.75):
                 continue
             result.append(m)
         return result
@@ -676,13 +1287,7 @@ class Orchestrator:
 
         filtered = []
         for slot, group in slots.items():
-            # OPT-6: Loss slot cooldown — kayıp slot'tan sonraki slot'u atla
-            if self._last_loss_slots and self._is_adjacent_to_loss_slot(slot):
-                logger.info(
-                    f"LOSS_COOLDOWN: {slot} | blocked — adjacent to loss slot "
-                    f"({', '.join(self._last_loss_slots)})"
-                )
-                continue
+            # LOSS_COOLDOWN kaldırıldı — sinyal neyse o
 
             # Kalan kapasite = max - zaten açık olan
             already_open = existing_slot_count.get(slot, 0)
@@ -838,6 +1443,128 @@ class Orchestrator:
             diff += 24 * 60
         return diff
 
+    # ── COIN → Binance symbol mapping ──
+    _COIN_TO_BINANCE = {
+        "bitcoin": "BTCUSDT", "btc": "BTCUSDT",
+        "ethereum": "ETHUSDT", "eth": "ETHUSDT",
+        "solana": "SOLUSDT", "sol": "SOLUSDT",
+        "xrp": "XRPUSDT",
+        "dogecoin": "DOGEUSDT", "doge": "DOGEUSDT",
+        "bnb": "BNBUSDT",
+        "hype": "HYPERUSDT", "hyperliquid": "HYPERUSDT",
+    }
+
+    async def _check_binance_resolutions(self):
+        """Açık canlı pozisyonları Binance fiyatıyla resolve et.
+
+        Market end_time geçtiyse → Binance kline'dan open/close karşılaştır
+        → UP veya DOWN belirle → pozisyonu WIN/LOSS olarak kapat.
+        Polymarket resolution beklemeye GEREK YOK.
+        """
+        from control_plane.entry_window_guard import parse_market_times
+        from datetime import timedelta as _td
+        import re
+        import requests as _req
+
+        now_utc = datetime.now(timezone.utc)
+        positions = dict(self.position_manager.data.get("positions", {}))
+        if not positions:
+            return
+
+        for mid, pos in positions.items():
+            question = pos.get("question", "")
+            order_id = pos.get("order_id", "")
+
+            # Sim emirleri atla
+            if order_id.startswith("SIM-"):
+                continue
+
+            # Market zamanlarını parse et
+            start_utc, end_utc = parse_market_times(question)
+            if not start_utc or not end_utc:
+                continue
+
+            # Market henüz bitmemişse atla
+            # 60s buffer — Binance kline kapanması için bekle
+            if now_utc < end_utc + _td(seconds=60):
+                continue
+
+            # Coin ismini question'dan çıkar
+            coin_match = re.match(r'^(\w+)', question.lower())
+            if not coin_match:
+                continue
+            coin_name = coin_match.group(1)
+            binance_symbol = self._COIN_TO_BINANCE.get(coin_name)
+            if not binance_symbol:
+                continue
+
+            # Binance kline çek — market window'undaki fiyatı al
+            try:
+                horizon_ms = int((end_utc - start_utc).total_seconds() * 1000)
+                start_ms = int(start_utc.timestamp() * 1000)
+                end_ms = int(end_utc.timestamp() * 1000)
+
+                # Kline interval: market süresine göre
+                horizon_min = int((end_utc - start_utc).total_seconds() / 60)
+                if horizon_min <= 5:
+                    interval = "5m"
+                elif horizon_min <= 15:
+                    interval = "15m"
+                else:
+                    interval = "1h"
+
+                url = (
+                    f"https://api.binance.com/api/v3/klines"
+                    f"?symbol={binance_symbol}&interval={interval}"
+                    f"&startTime={start_ms}&endTime={end_ms}&limit=5"
+                )
+                resp = _req.get(url, timeout=10)
+                if resp.status_code != 200:
+                    logger.warning(f"BINANCE_RESOLVE: {binance_symbol} API error {resp.status_code}")
+                    continue
+
+                klines = resp.json()
+                if not klines:
+                    logger.warning(f"BINANCE_RESOLVE: {binance_symbol} no klines for window")
+                    continue
+
+                # SADECE ilk kline — market penceresiyle eşleşen tek kline
+                # Binance endTime inclusive → 2. kline (sonraki pencere) de dönebilir
+                open_price = float(klines[0][1])
+                close_price = float(klines[0][4])
+                change_pct = ((close_price - open_price) / open_price) * 100
+
+                if close_price > open_price:
+                    actual_winner = "YES"  # UP
+                else:
+                    actual_winner = "NO"   # DOWN (eşitlik dahil)
+
+                direction = pos.get("outcome", "")
+                won = (direction == actual_winner)
+
+                # Pozisyonu kapat
+                if won:
+                    # WIN: token_close_price = 1.0 (tam payout)
+                    self.position_manager._close_position(mid, 1.0)
+                else:
+                    # LOSS: token_close_price = 0.0
+                    self.position_manager._close_position(mid, 0.0)
+
+                result = "WIN" if won else "LOSS"
+                pnl = pos["amount"] / pos["entry_price"] - pos["amount"] if won else -pos["amount"]
+
+                logger.info(
+                    f"BINANCE_RESOLVE: {question[:50]} | "
+                    f"{direction} → {actual_winner} (Binance {change_pct:+.3f}%) | "
+                    f"{result} | ${open_price:.2f}→${close_price:.2f}"
+                )
+
+            except Exception as e:
+                logger.warning(f"BINANCE_RESOLVE error ({question[:30]}): {e}")
+                continue
+
+        self.position_manager._save()
+
     async def _check_sim_resolutions(self):
         """Sim trade'lerin market'lerini kontrol et — resolve olduysa WIN/LOSS belirle.
 
@@ -849,13 +1576,12 @@ class Orchestrator:
         NOT: Gamma API resolution KALDIRILDI — conditionId mismatch yüzünden
         yanlış market dönüyor ve hep YES diyor (Lesson #20).
         """
-        import time as _t
         if not self._sim_trades:
             return
 
         still_open = []
         for trade in self._sim_trades:
-            elapsed = _t.time() - trade["ts"]
+            elapsed = time.time() - trade["ts"]
             if elapsed < 300:  # 5dk'dan az — henüz resolve olmamış olabilir
                 still_open.append(trade)
                 continue
@@ -975,7 +1701,6 @@ class Orchestrator:
 
     def _update_loss_streak(self):
         """Son kapanan trade'lerden ardışık kayıp sayısını güncelle."""
-        import time as _t
         closed = self.position_manager.data.get("closed", [])
         # Son 10 kapanışı ters sırada kontrol et
         streak = 0
@@ -987,18 +1712,37 @@ class Orchestrator:
                 break  # WIN veya NEUTRAL streak'i kırar
         prev_streak = self._consecutive_losses
         self._consecutive_losses = streak
-        # Yeni streak tetiklendiğinde cooldown başlat (tekrar tetikleme için streak artmalı)
-        if streak >= self._max_consecutive_losses and streak > prev_streak:
-            self._loss_cooldown_until = _t.time() + self._loss_cooldown_seconds
-            logger.warning(
-                f"CIRCUIT_BREAKER: {streak} ardışık kayıp → "
-                f"{self._loss_cooldown_seconds}s ({self._loss_cooldown_seconds // 60}dk) cooldown başladı"
-            )
+        # CIRCUIT_BREAKER tamamen kaldırıldı — kullanıcı talebi
+        if streak >= self._max_consecutive_losses:
+            logger.info(f"CIRCUIT_BREAKER_INFO: {streak} ardışık kayıp (cooldown YOK)")
 
-        # OPT-6: Canlı modda da loss slot tracking — son 5 kapanıştan LOSS olanları kaydet
+        # OPT-7: Consecutive WIN per coin — bounce guard
+        # Her coin için son trade'lerden geriye doğru ardışık NO WIN say
+        self._consecutive_wins_per_coin.clear()
+        _coin_done: set[str] = set()  # streak kırılan coin'ler
+        for trade in reversed(closed[-30:]):
+            _q = trade.get("question", "") or ""
+            _coin = self._shadow_detect_asset(_q)
+            if not _coin or _coin in _coin_done:
+                continue
+            if trade.get("result") == "WIN" and trade.get("direction", "").upper() == "NO":
+                self._consecutive_wins_per_coin[_coin] = self._consecutive_wins_per_coin.get(_coin, 0) + 1
+            else:
+                _coin_done.add(_coin)  # Bu coin'in streak'i kırıldı
+        _active_guards = {k: v for k, v in self._consecutive_wins_per_coin.items() if v >= 2}
+        if _active_guards:
+            logger.info(f"CONSEC_WIN_TRACKER: {_active_guards}")
+
+        # OPT-6: Loss slot tracking — sadece bugünkü kayıpları say
+        # Question'dan tarihi çek, bugünle karşılaştır
         self._last_loss_slots.clear()
-        for trade in closed[-5:]:
+        from zoneinfo import ZoneInfo as _ZI
+        _today_et = datetime.now(_ZI("America/New_York")).strftime("%B %d").replace(" 0", " ")
+        for trade in closed[-20:]:
             _q = trade.get("question", "") or trade.get("market_slug", "")
+            # Sadece bugünün trade'leri (question'da "March 21" gibi tarih var)
+            if _today_et not in _q:
+                continue
             _slot = self._extract_time_slot(_q)
             if trade.get("result") == "LOSS" and _slot:
                 self._last_loss_slots.add(_slot)
@@ -1105,45 +1849,62 @@ class Orchestrator:
     # ------------------------------------------------------------------ #
 
     async def _sync_real_balance(self):
-        """Polymarket bakiyesi + açık pozisyonları senkronize et.
+        """CLOB bakiyesini al ve capital'i güncelle.
 
-        CLOB balance = serbest USDC (açık emirler zaten düşülmüş).
-        capital = CLOB balance + açık pozisyonlarda kilitli miktar.
-        Bu sayede available_capital = capital - locked = CLOB balance (doğru).
+        CLOB bakiyesi TEK GERÇEK KAYNAK (source of truth).
+        position_manager'ın P&L hesabı güvenilmez olduğu kanıtlandı:
+        - Spot-based resolution %99 trade'de yanlış WIN/LOSS kaydetti
+        - 752 yanlış resolution → $670 tracking hatası
+
+        Yeni mantık: capital = CLOB balance + locked (açık pozisyonlar)
         """
         try:
             balance = self.client.get_real_balance()
-            if balance >= 0:
-                locked = sum(
-                    p.get("amount", 0)
-                    for p in self.position_manager.data.get("positions", {}).values()
+            if balance < 0:
+                return
+
+            # locked = sadece henüz resolve OLMAMIŞ pozisyonlar
+            # Süresi geçmiş marketlerin payout'u zaten CLOB bakiyeye yansımış,
+            # bunları locked'a dahil etmek double-count yapar.
+            from datetime import datetime, timezone
+            now_utc = datetime.now(timezone.utc)
+            locked = 0.0
+            for p in self.position_manager.data.get("positions", {}).values():
+                amt = p.get("amount", 0)
+                # Market end time'ı parse et
+                question = p.get("question", "")
+                try:
+                    from control_plane.entry_window_guard import parse_market_times
+                    _, end_utc = parse_market_times(question)
+                    if end_utc and now_utc > end_utc:
+                        # Market süresi geçmiş — payout CLOB'a düşmüş olabilir
+                        # locked'a EKLEMİYORUZ
+                        continue
+                except Exception:
+                    pass
+                locked += amt
+            new_capital = balance + locked
+            old_capital = self.position_manager.data.get("capital", 0)
+
+            # Capital'i güncelle
+            self.position_manager.data["capital"] = round(new_capital, 4)
+            self.position_manager._save()
+
+            # Fark büyükse uyar
+            diff = abs(new_capital - old_capital)
+            if diff > 0.5:
+                logger.warning(
+                    f"CAPITAL_SYNC: ${old_capital:.4f} → ${new_capital:.4f} "
+                    f"(CLOB=${balance:.4f} + locked=${locked:.4f})"
                 )
-                new_capital = balance + locked
-                prev = self.position_manager.data.get("capital", 0)
-                self.position_manager.data["capital"] = new_capital
-                self.position_manager._save()
-                drift = abs(prev - new_capital)
-                if drift > 0.01:
-                    logger.warning(
-                        f"Sermaye guncellendi: ${prev:.4f} → ${new_capital:.4f} "
-                        f"(CLOB=${balance:.4f} + locked=${locked:.4f})"
-                    )
-                    # Large drift → journal it for audit trail
-                    if drift > 1.0:
-                        self.client._journal_trade({
-                            "event": "CAPITAL_DRIFT",
-                            "prev_capital": round(prev, 4),
-                            "new_capital": round(new_capital, 4),
-                            "clob_balance": round(balance, 4),
-                            "locked": round(locked, 4),
-                            "drift": round(drift, 4),
-                        })
-                else:
-                    logger.info(f"Polymarket bakiyesi senkronize: ${balance:.4f} (capital=${new_capital:.4f})")
+            else:
+                logger.info(f"CLOB bakiye: ${balance:.4f} | capital=${new_capital:.4f}")
+
         except Exception as e:
             logger.warning(f"Bakiye sync hatasi: {e}")
 
-        # Polymarket'taki açık pozisyonları çek ve bot'a ekle
+        # Polymarket data API pozisyon sync'i DEVRE DIŞI.
+        return
         try:
             wallet = os.getenv("POLYMARKET_WALLET_ADDRESS", "")
             if not wallet:
@@ -1218,6 +1979,16 @@ class Orchestrator:
                 # Simülasyon emirlerini atla
                 if order_id.startswith("SIM-"):
                     continue
+                # Yeni pozisyonları atla — API gecikmesi yüzünden henüz görünmeyebilir
+                created = pos.get("created_at", "")
+                if created:
+                    try:
+                        from datetime import datetime, timezone
+                        age = (datetime.now(timezone.utc) - datetime.fromisoformat(created)).total_seconds()
+                        if age < 120:  # 2 dakikadan genç → ghost değil, API gecikmesi
+                            continue
+                    except Exception:
+                        pass
                 # SYNCED pozisyonlar zaten Polymarket'tan geldi — gerçek kontrol yap
                 if mid not in polymarket_condition_ids:
                     ghost_ids.append(mid)

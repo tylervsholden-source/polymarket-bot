@@ -112,6 +112,11 @@ class BinanceFeed:
         self._spx_change_pct: float = 0.0
         self._spx_price: float = 0.0
         self._spx_last_fetch: float = 0.0
+        # ── Long/Short Ratio (Binance Futures) ──────────────────────────────
+        self._ls_ratio_data: dict[str, dict] = {}   # symbol → {ratio, long%, short%, top_ratio, top_long%, top_short%}
+        self._ls_ratio_last_fetch: float = 0.0
+        # ── Real-time Price History (lag prevention) ────────────────────────
+        self._price_history: dict[str, list] = {}   # symbol → [(timestamp, price), ...]
 
     # CoinGecko coin ID mapping
     _COINGECKO_IDS: dict[str, str] = {
@@ -397,6 +402,125 @@ class BinanceFeed:
             "count": count,
         }
 
+    # ── Long/Short Ratio (Binance Futures — free, no API key) ────────────────
+    async def _fetch_long_short_ratio(self, symbols: set[str]) -> None:
+        """Fetch global + top trader long/short ratio (cached 60s).
+
+        Endpoints (no auth required):
+        - /futures/data/globalLongShortAccountRatio  — all traders
+        - /futures/data/topLongShortPositionRatio    — top 20% by position
+        """
+        import time as _time
+        now = _time.time()
+        if now - self._ls_ratio_last_fetch < 60:
+            return
+        self._ls_ratio_last_fetch = now
+
+        _DATA_BASE = "https://fapi.binance.com/futures/data"
+
+        for sym in symbols:
+            if sym not in self._FUTURES_SYMBOLS:
+                continue
+            try:
+                global_resp, top_resp = await asyncio.gather(
+                    self.session.get(
+                        f"{_DATA_BASE}/globalLongShortAccountRatio",
+                        params={"symbol": sym, "period": "5m", "limit": 1},
+                    ),
+                    self.session.get(
+                        f"{_DATA_BASE}/topLongShortPositionRatio",
+                        params={"symbol": sym, "period": "5m", "limit": 1},
+                    ),
+                    return_exceptions=True,
+                )
+
+                g_ratio = 1.0
+                g_long = 0.5
+                g_short = 0.5
+                if not isinstance(global_resp, Exception) and global_resp.status_code == 200:
+                    gdata = global_resp.json()
+                    if gdata:
+                        g_ratio = float(gdata[0].get("longShortRatio", 1.0))
+                        g_long = float(gdata[0].get("longAccount", 0.5))
+                        g_short = float(gdata[0].get("shortAccount", 0.5))
+
+                t_ratio = 1.0
+                t_long = 0.5
+                t_short = 0.5
+                if not isinstance(top_resp, Exception) and top_resp.status_code == 200:
+                    tdata = top_resp.json()
+                    if tdata:
+                        t_ratio = float(tdata[0].get("longShortRatio", 1.0))
+                        t_long = float(tdata[0].get("longAccount", 0.5))
+                        t_short = float(tdata[0].get("shortAccount", 0.5))
+
+                self._ls_ratio_data[sym] = {
+                    "global_ratio": g_ratio,
+                    "global_long_pct": g_long,
+                    "global_short_pct": g_short,
+                    "top_ratio": t_ratio,
+                    "top_long_pct": t_long,
+                    "top_short_pct": t_short,
+                }
+            except Exception as e:
+                logger.debug(f"L/S ratio fetch failed for {sym}: {e}")
+
+    def get_long_short_signal(self, symbol: str) -> dict:
+        """Long/Short ratio → contrarian + smart money signal.
+
+        Logic:
+        - Global ratio: contrarian — crowd too long → bearish, too short → bullish
+        - Top trader ratio: follow — smart money long → bullish, short → bearish
+        - Combined: if both agree → strong signal, if conflict → weak/neutral
+
+        Returns:
+            {
+                "global_ratio": float, "top_ratio": float,
+                "crowd_signal": str, "smart_signal": str,
+                "boost": float (-0.02 to +0.02),
+            }
+        """
+        data = self._ls_ratio_data.get(symbol, {})
+        if not data:
+            return {"global_ratio": 1.0, "top_ratio": 1.0,
+                    "crowd_signal": "NEUTRAL", "smart_signal": "NEUTRAL",
+                    "boost": 0.0}
+
+        g_ratio = data["global_ratio"]
+        t_ratio = data["top_ratio"]
+
+        # Crowd signal (contrarian): ratio > 1.2 = crowded long → bearish
+        crowd_signal = "NEUTRAL"
+        crowd_boost = 0.0
+        if g_ratio > 1.2:       # 55%+ long → contrarian bearish
+            crowd_signal = "BEARISH"
+            crowd_boost = -min(0.015, (g_ratio - 1.0) * 0.01)
+        elif g_ratio < 0.83:    # 55%+ short → contrarian bullish
+            crowd_signal = "BULLISH"
+            crowd_boost = min(0.015, (1.0 - g_ratio) * 0.01)
+
+        # Smart money signal (follow): top traders long → bullish
+        smart_signal = "NEUTRAL"
+        smart_boost = 0.0
+        if t_ratio > 1.15:      # top traders 53%+ long → follow bullish
+            smart_signal = "BULLISH"
+            smart_boost = min(0.01, (t_ratio - 1.0) * 0.01)
+        elif t_ratio < 0.87:    # top traders 53%+ short → follow bearish
+            smart_signal = "BEARISH"
+            smart_boost = -min(0.01, (1.0 - t_ratio) * 0.01)
+
+        # Combined: crowd contrarian + smart money follow
+        boost = round(crowd_boost + smart_boost, 4)
+        boost = max(-0.02, min(0.02, boost))  # cap ±0.02
+
+        return {
+            "global_ratio": round(g_ratio, 3),
+            "top_ratio": round(t_ratio, 3),
+            "crowd_signal": crowd_signal,
+            "smart_signal": smart_signal,
+            "boost": boost,
+        }
+
     # ── S&P 500 Correlation ──────────────────────────────────────────────────
     async def _fetch_spx(self) -> None:
         """Fetch S&P 500 intraday change (cached 2 min). Uses Yahoo Finance."""
@@ -565,6 +689,7 @@ class BinanceFeed:
             self._fetch_binance_spot_prices(symbols),
             self._fetch_funding_oi(symbols),
             self._fetch_liquidations(symbols),
+            self._fetch_long_short_ratio(symbols),
             self._fetch_spx(),
             self.enhanced.refresh(symbols),  # multi-exchange, options, whale, social
         ]
@@ -607,6 +732,19 @@ class BinanceFeed:
                     ws_price = _wp
             final_price = ws_price if ws_price > 0 else (consensus if consensus > 0 else bitstamp_price)
 
+            # ── Record price history for lag prevention ─────────────────
+            if final_price > 0:
+                import time as _t
+                now_ts = _t.time()
+                if symbol not in self._price_history:
+                    self._price_history[symbol] = []
+                self._price_history[symbol].append((now_ts, final_price))
+                # Keep only last 5 minutes of history
+                cutoff = now_ts - 300
+                self._price_history[symbol] = [
+                    (ts, p) for ts, p in self._price_history[symbol] if ts > cutoff
+                ]
+
             self._cache[symbol] = {
                 "price": final_price,
                 "bitstamp_price": bitstamp_price,
@@ -631,7 +769,20 @@ class BinanceFeed:
         except Exception as e:
             logger.debug(f"CryptoFeed._fetch_symbol {symbol}: {e}")
 
+    # Bitstamp interval (seconds) → Binance kline interval string
+    _BINANCE_INTERVAL_MAP: dict[str, str] = {
+        "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h",
+    }
+
     async def _fetch_klines(self, pair: str, interval: str) -> list | None:
+        # Try Bitstamp first
+        result = await self._fetch_klines_bitstamp(pair, interval)
+        if result:
+            return result
+        # Fallback: Binance Spot (for coins not on Bitstamp, e.g. HYPE)
+        return await self._fetch_klines_binance(pair, interval)
+
+    async def _fetch_klines_bitstamp(self, pair: str, interval: str) -> list | None:
         try:
             step = _STEPS[interval]
             resp = await self.session.get(
@@ -647,7 +798,33 @@ class BinanceFeed:
                     for c in data
                 ]
         except Exception as e:
-            logger.debug(f"CryptoFeed._fetch_klines {pair}/{interval}: {e}")
+            logger.debug(f"CryptoFeed._fetch_klines_bitstamp {pair}/{interval}: {e}")
+        return None
+
+    async def _fetch_klines_binance(self, pair: str, interval: str) -> list | None:
+        """Fallback: Binance Spot klines for coins not on Bitstamp (e.g. HYPE)."""
+        try:
+            # pair is bitstamp format (e.g. "hypeusd") → convert to Binance (e.g. "HYPEUSDT")
+            _reverse_map = {v: k for k, v in _SYMBOL_MAP.items()}
+            binance_sym = _reverse_map.get(pair)
+            if not binance_sym:
+                return None
+            bn_interval = self._BINANCE_INTERVAL_MAP.get(interval)
+            if not bn_interval:
+                return None
+            resp = await self.session.get(
+                f"{self._BINANCE_SPOT_BASE}/klines",
+                params={"symbol": binance_sym, "interval": bn_interval, "limit": KLINES_LIMIT},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Binance format: [[open_time, open, high, low, close, volume, ...]]
+                return [
+                    [str(c[0]), c[1], c[2], c[3], c[4], c[5]]
+                    for c in data
+                ]
+        except Exception as e:
+            logger.debug(f"CryptoFeed._fetch_klines_binance {pair}/{interval}: {e}")
         return None
 
     async def _fetch_ob(self, pair: str) -> float:
@@ -697,6 +874,12 @@ class BinanceFeed:
         # Son N mumun toplam yönsel değişim (trend)
         n = min(4, len(closes) - 1)
         trend_pct = ((closes[-1] - closes[-n-1]) / closes[-n-1] * 100) if closes[-n-1] > 0 else 0.0
+
+        # ── MACRO TREND: Son 15 mumun toplam yönsel değişim ──────────────
+        # Dead cat bounce koruması: 5 yeşil mum olsa bile 15 mum düşüşteyse
+        # büyük trend hala bearish → YES girişi bloklanmalı.
+        macro_n = min(15, len(closes) - 1)
+        macro_trend_pct = ((closes[-1] - closes[-macro_n-1]) / closes[-macro_n-1] * 100) if macro_n > 0 and closes[-macro_n-1] > 0 else 0.0
 
         # Hacim oranı: güncel mum / son N mum ortalaması
         avg_vol = sum(volumes[:-1]) / max(len(volumes) - 1, 1)
@@ -774,9 +957,28 @@ class BinanceFeed:
             if pre_bounce_streak >= 4:
                 bounce_signal = True
 
+        # ── BULLISH EXHAUSTION DETECTION ──────────────────────────────
+        # 2-3+ ardışık yeşil mum + yüklü kümülatif hareket = tükenme.
+        # Piyasa "çok yükseldi" → mean reversion (pullback) olasılığı yüksek.
+        # Bu NO trade için ideal giriş noktası.
+        bullish_exhaustion = False
+        bullish_exhaustion_magnitude = 0.0
+        if consecutive_bullish >= 2:
+            # Yeşil mumların gövde büyüklüklerini topla (% cinsinden)
+            for i in range(len(closes) - 1,
+                           max(0, len(closes) - 1 - consecutive_bullish), -1):
+                if i > 0 and closes[i] > opens[i]:
+                    bullish_exhaustion_magnitude += (
+                        (closes[i] - opens[i]) / opens[i] * 100
+                    )
+            # 0.30%+ kümülatif hareket = anlamlı tükenme (5dk crypto'da)
+            if bullish_exhaustion_magnitude >= 0.30:
+                bullish_exhaustion = True
+
         result = {
             "change_pct": round(change_pct, 4),
             "trend_pct": round(trend_pct, 4),
+            "macro_trend_pct": round(macro_trend_pct, 4),
             "volume_ratio": round(vol_ratio, 3),
             "rsi": round(rsi, 1),
             "momentum": momentum,
@@ -810,6 +1012,9 @@ class BinanceFeed:
             "consecutive_bullish": consecutive_bullish,
             "bounce_signal": bounce_signal,
             "pre_bounce_streak": pre_bounce_streak,
+            # Bullish exhaustion (2-3+ green candles, significant cum. move)
+            "bullish_exhaustion": bullish_exhaustion,
+            "bullish_exhaustion_magnitude": round(bullish_exhaustion_magnitude, 4),
             # ── NEW: ta library indicators ──
             **self._calc_ta_indicators(highs, lows, closes, volumes),
             # ── GARCH volatility forecast ──
@@ -1282,7 +1487,8 @@ class BinanceFeed:
             "ob_imbalance": cached.get("ob_imbalance", 0.0),
             "change_pct":   iv_data.get("change_pct", 0.0),
             "trend_pct":    iv_data.get("trend_pct", 0.0),
-            "volume_ratio": iv_data.get("volume_ratio", 0.0),
+            "macro_trend_pct": iv_data.get("macro_trend_pct", 0.0),
+            "volume_ratio": iv_data.get("volume_ratio", 1.0),
             "rsi":          iv_data.get("rsi", 50.0),
             "momentum":     iv_data.get("momentum", 0),
             "macd_hist":    iv_data.get("macd_hist", 0.0),
@@ -1423,6 +1629,20 @@ class BinanceFeed:
         # Eski 1.0 divider her şeyi 1.00'a satüre ediyordu (nüans kaybı)
         strength = min(1.0, abs(combined) / 2.5)
 
+        # ── 4H VOLUME DIP BOUNCE (56.76% bounce probability) ──
+        # Quant: 4h bearish candle + volume > 2x avg = capitulation → bounce
+        _4h_vol_bounce = False
+        _btc_cached = self._cache.get("BTCUSDT", {})
+        _btc_4h_iv = _btc_cached.get("intervals", {}).get("4h", {})
+        _btc_4h_vol_ratio = _btc_4h_iv.get("volume_ratio", 1.0)
+        _btc_4h_change = _btc_4h_iv.get("change_pct", 0.0)
+        if _btc_4h_vol_ratio > 2.0 and _btc_4h_change < -0.3:
+            _4h_vol_bounce = True
+            logger.info(
+                f"4H_VOL_DIP_BOUNCE: BTC 4h vol={_btc_4h_vol_ratio:.1f}x "
+                f"chg={_btc_4h_change:+.2f}% → bounce signal active"
+            )
+
         logger.info(
             f"REGIME: {regime} (str={strength:.2f}) | "
             f"BTC 4h={btc_4h_pct:+.2f}% 5m={btc_5m_pct:+.2f}% | "
@@ -1436,6 +1656,7 @@ class BinanceFeed:
             "btc_5m_pct": btc_5m_pct,
             "eth_5m_pct": eth_5m_pct,
             "strength": float(f"{strength:.3f}"),
+            "4h_vol_bounce": _4h_vol_bounce,
         }
 
     async def close(self) -> None:
@@ -1518,6 +1739,25 @@ class BinanceFeed:
             "details": tf_changes,
             "boost": round(boost, 4),
         }
+
+    def get_recent_change(self, symbol: str, seconds: int = 60) -> float:
+        """Return price change % over last N seconds. 0.0 if insufficient data."""
+        import time as _t
+        history = self._price_history.get(symbol, [])
+        if len(history) < 2:
+            return 0.0
+        now_ts = _t.time()
+        cutoff = now_ts - seconds
+        # Find oldest price within the window
+        old_price = None
+        for ts, p in history:
+            if ts >= cutoff:
+                old_price = p
+                break
+        if old_price is None or old_price <= 0:
+            return 0.0
+        current_price = history[-1][1]
+        return ((current_price - old_price) / old_price) * 100
 
     def has_data(self, symbol: str) -> bool:
         return bool(self._cache.get(symbol, {}).get("price"))

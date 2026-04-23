@@ -16,8 +16,8 @@ Max fee at price 0.50: 0.50*0.50*0.02 = 0.5%
 At extremes (0.10/0.90): 0.10*0.90*0.02 = 0.18%
 """
 
-SPREAD_COST = 0.005   # GTC (maker) orders → price bump +0.01 for fill priority
-SLIPPAGE_EST = 0.005  # $4 orders on thin books → conservative estimate
+SPREAD_COST = 0.005   # GTC limit order: minimal spread impact for $3-5 bets
+SLIPPAGE_EST = 0.003  # Sub-$5 bets have negligible orderbook impact
 
 # Polymarket GTC orders are MAKER orders → fee is 0% on most markets
 # Only taker orders (FOK) pay 2% fee. We use GTC.
@@ -43,8 +43,44 @@ class EdgeModel:
         slippage: float = SLIPPAGE_EST,
     ):
         self.base_cost = spread_cost + slippage
+        self.spread_cost = spread_cost
+        self.slippage = slippage
+
+    def _dynamic_slippage(self, order_size: float) -> float:
+        """
+        Dynamic slippage based on order size.
+        Larger orders = more slippage (deeper in orderbook).
+
+        Model:
+        - Small orders ($1-10): base slippage (0.012)
+        - Medium orders ($10-50): +0.003 per $10
+        - Large orders ($50+): +0.008 per $50 + 0.005 base
+        """
+        if order_size <= 10:
+            return self.slippage
+        elif order_size <= 50:
+            # +0.0003 per dollar over $10
+            additional = (order_size - 10) * 0.00003
+            return self.slippage + additional
+        else:
+            # +0.0001 per dollar over $50 + 0.005 flat
+            additional = 0.005 + (order_size - 50) * 0.0001
+            return self.slippage + additional
+
+    def execution_cost(self, price: float, order_size: float) -> float:
+        """
+        Total estimated execution cost including:
+        - Spread cost (GTC price bump)
+        - Dynamic slippage (size-dependent)
+        - Taker fee (0% for GTC orders)
+
+        Returns total cost as a decimal (e.g., 0.025 = 2.5%)
+        """
+        dynamic_slip = self._dynamic_slippage(order_size)
+        return self.spread_cost + dynamic_slip + _dynamic_taker_fee(price)
 
     def total_cost(self, price: float) -> float:
+        """Legacy: returns base cost (fixed slippage, no size adjustment)"""
         return self.base_cost + _dynamic_taker_fee(price)
 
     def single_market_edge(self, yes_price: float, no_price: float) -> float:

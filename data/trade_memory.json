@@ -1,0 +1,55 @@
+{
+  "updated": "2026-03-24T20:39:24.250513+00:00",
+  "summary": {
+    "capital": 102.61,
+    "open_positions": 3
+  },
+  "direction_stats": {
+    "YES": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate_pct": 0,
+      "pnl": 0
+    },
+    "NO": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate_pct": 0,
+      "pnl": 0
+    }
+  },
+  "coin_report": {},
+  "timeframe_report": {},
+  "entry_price_zones": [],
+  "loss_patterns": {
+    "max_streak": 0,
+    "avg_streak_length": 0,
+    "total_streaks": 0,
+    "streak_distribution": {},
+    "streak_triggers": {}
+  },
+  "trend": {
+    "recent_24h": {
+      "trades": 0,
+      "wr": 0,
+      "pnl": 0
+    },
+    "older": {
+      "trades": 0,
+      "wr": 0,
+      "pnl": 0
+    },
+    "trend": "INSUFFICIENT_DATA"
+  },
+  "daily_breakdown": [],
+  "rules": [],
+  "warnings": [
+    {
+      "type": "CAPITAL_LOW",
+      "message": "Sermaye $102.61 — başlangıcın %21'unda",
+      "severity": "HIGH"
+    }
+  ]
+}

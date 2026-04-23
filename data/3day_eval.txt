@@ -1,0 +1,14 @@
+--- LAST 3 DAYS (44 TRADES) ---
+Real Total PnL: USD 1.01
+Real Total Win Rate: 23W / 21L (52.3%)
+
+YES Trades: 8W / 9L (47.1% WR)
+YES PnL: USD -14.39
+
+NO Trades: 15W / 12L (55.6% WR)
+NO PnL: USD 15.40
+
+--- SIMULATION (IF NO TRADES WERE REJECTED) ---
+Simulated PnL: USD -14.39
+Simulated Win Rate: 8W / 9L (47.1%)
+Difference in PnL: USD -15.40

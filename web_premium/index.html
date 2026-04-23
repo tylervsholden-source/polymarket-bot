@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket - Premium Agent Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem;
+            overflow-x: hidden;
+        }
+
+        /* Top Navigation */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 20px;
+            color: var(--accent-green);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Stats Grid */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .stat-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+        }
+
+        /* Decisions Feed */
+        .section-header {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .decisions-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .decision-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .decision-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--accent-blue);
+        }
+
+        .decision-card.exec::before { background: var(--accent-green); }
+        .decision-card.skip::before { background: var(--text-muted); }
+        .decision-card.sim::before { background: var(--accent-yellow); }
+
+        .decision-card:hover {
+            transform: scale(1.01);
+            background: rgba(40, 50, 70, 0.8);
+        }
+
+        .dc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .market-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.25rem;
+        }
+
+        .time-badge {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        .metrics-row {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            padding: 1rem 0;
+            border-top: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .m-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .m-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            display: inline-block;
+        }
+
+        .bg-green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .bg-blue { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .bg-yellow { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .bg-gray { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+        .txt-green { color: #34d399; }
+        .txt-red { color: #f87171; }
+
+        .reasoning-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            color: #cbd5e1;
+            display: flex;
+            gap: 12px;
+        }
+
+        .reasoning-icon {
+            color: var(--accent-blue);
+            flex-shrink: 0;
+            padding-top: 2px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:#3b82f6"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Agent Intelligence Hub
+        </div>
+        <div class="live-indicator">
+            <div class="pulse"></div>
+            LISTENING TO SIGNALS <span id="cycle-count" style="color:var(--text-muted); margin-left:8px; font-weight:500;"></span>
+        </div>
+    </nav>
+
+    <div class="stats-container">
+        <div class="stat-card">
+            <div class="stat-label">Toplam Analiz</div>
+            <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="stat-card" style="border-bottom: 3px solid var(--accent-green);">
+            <div class="stat-label">İşleme Giren (Execution)</div>
+            <div class="stat-value" id="stat-exec" style="color: #34d399;">0</div>
+        </div>
+        <div class="stat-card" style="border-bottom: 3px solid var(--accent-yellow);">
+            <div class="stat-label">Simülasyon (Sim Buy)</div>
+            <div class="stat-value" id="stat-sim" style="color: #fbbf24;">0</div>
+        </div>
+        <div class="stat-card" style="border-bottom: 3px solid var(--text-muted);">
+            <div class="stat-label">Atlanan (Skip)</div>
+            <div class="stat-value" id="stat-skip" style="color: #94a3b8;">0</div>
+        </div>
+    </div>
+
+    <div class="section-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:#3b82f6"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Canlı Karar Akışı
+    </div>
+
+    <div class="decisions-grid" id="decisions-container">
+        <div class="loading">Sinyaller bekleniyor... (data/status.json okunuyor)</div>
+    </div>
+
+    <script>
+        async function fetchDecisions() {
+            try {
+                // Fetch direct from the local server
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data && data.decisions) {
+                    renderDashboard(data);
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
+        }
+
+        function renderDashboard(data) {
+            const decisions = data.decisions || [];
+            document.getElementById('cycle-count').innerText = `Cycle #${data.cycle || '?'}`;
+
+            let execs = 0, sims = 0, skips = 0;
+            const container = document.getElementById('decisions-container');
+            container.innerHTML = '';
+
+            if (decisions.length === 0) {
+                container.innerHTML = '<div class="loading">Henüz yeni ajan kararı yok. Bot çalıştıkça veriler buraya akacaktır.</div>';
+                return;
+            }
+
+            decisions.forEach(d => {
+                const action = (d.action || 'UNKNOWN').toUpperCase();
+                let typeClass = '', actionBadge = '', actionText = '';
+
+                if (action.includes('ORDER') || action.includes('EXEC')) {
+                    execs++; typeClass = 'exec'; actionBadge = 'bg-green'; actionText = `EXECUTED ($${d.size})`;
+                } else if (action.includes('SIM')) {
+                    sims++; typeClass = 'sim'; actionBadge = 'bg-yellow'; actionText = `SIMULATION ($${d.size})`;
+                } else if (action.includes('SKIP')) {
+                    skips++; typeClass = 'skip'; actionBadge = 'bg-gray'; actionText = 'SKIPPED';
+                } else {
+                    typeClass = 'skip'; actionBadge = 'bg-gray'; actionText = action;
+                }
+
+                const edge = d.edge || 0;
+                const edgeClass = edge > 0 ? 'txt-green' : 'txt-red';
+                const edgeSign = edge > 0 ? '+' : '';
+
+                const confBadge = d.confidence === 'HIGH' ? 'bg-blue' : 'bg-gray';
+
+                const cardHTML = `
+                    <div class="decision-card ${typeClass}">
+                        <div class="dc-header">
+                            <div>
+                                <div class="market-name">${d.market}</div>
+                                <div style="color: var(--text-muted); font-size: 0.9rem;">Source: <span style="color:#fff; font-weight:600;">${d.category}</span></div>
+                            </div>
+                            <div class="time-badge">${d.time}</div>
+                        </div>
+                        
+                        <div class="metrics-row">
+                            <div class="metric">
+                                <span class="m-label">Aksiyon</span>
+                                <span class="badge ${actionBadge}">${actionText}</span>
+                            </div>
+                            <div class="metric">
+                                <span class="m-label">Olasılık (Prob)</span>
+                                <span class="m-value">${Number(d.prob).toFixed(2)}</span>
+                            </div>
+                            <div class="metric">
+                                <span class="m-label">Olası Fiyat (Price)</span>
+                                <span class="m-value">${Number(d.price).toFixed(3)}</span>
+                            </div>
+                            <div class="metric">
+                                <span class="m-label">Edge (Avantaj)</span>
+                                <span class="m-value ${edgeClass}">${edgeSign}${Number(d.edge).toFixed(3)}</span>
+                            </div>
+                            <div class="metric">
+                                <span class="m-label">Güven Skoru</span>
+                                <span class="badge ${confBadge}">${d.confidence}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="reasoning-box">
+                            <div class="reasoning-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            </div>
+                            <div>
+                                <span style="font-weight:700; color:#fff; display:block; margin-bottom:4px;">Gerekçe & Doğrulama</span>
+                                ${d.reasoning || 'No reasoning provided.'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHTML);
+            });
+
+            // Update stats
+            document.getElementById('stat-total').innerText = decisions.length;
+            document.getElementById('stat-exec').innerText = execs;
+            document.getElementById('stat-sim').innerText = sims;
+            document.getElementById('stat-skip').innerText = skips;
+        }
+
+        // Fetch every 3 seconds for almost realtime feel
+        fetchDecisions();
+        setInterval(fetchDecisions, 3000);
+    </script>
+</body>
+</html>

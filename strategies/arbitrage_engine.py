@@ -173,7 +173,8 @@ def _detect_timeframe(question: str) -> str:
 
 class ArbitrageEngine:
     def __init__(self, http_session=None, binance_feed=None, smart_trader_tracker=None,
-                 top_trader=None, kalshi_arb=None, clob_client=None):
+                 top_trader=None, kalshi_arb=None, clob_client=None,
+                 latency_arb=None):
         import httpx
         self.session = http_session if http_session is not None else httpx.AsyncClient(timeout=8)
         self.binance_feed = binance_feed           # BinanceFeed instance (enjekte edilir)
@@ -181,6 +182,7 @@ class ArbitrageEngine:
         self.top_trader = top_trader               # TopTraderTracker instance
         self.kalshi_arb = kalshi_arb               # KalshiArbTracker instance
         self._clob_client = clob_client            # py-clob-client (for L2 orderbook)
+        self.latency_arb = latency_arb             # LatencyArbEngine (spike sinyal kaynağı)
 
         self.bayesian   = BayesianEstimator()
         self.edge_model = EdgeModel()
@@ -192,13 +194,14 @@ class ArbitrageEngine:
         self.ob_analyzer = OrderbookAnalyzer()  # L2 orderbook depth
         self.sum_monitor = SumMonitor()         # YES+NO sum arbitrage
 
-        # Asymmetric edge thresholds (pattern analysis: NO=61% WR, YES=31% WR)
-        # NO trades at edge 0.03-0.05 had 66.7% WR — lower threshold for NO
-        # YES trades unreliable below edge 0.10
-        _env_edge = float(os.getenv("MIN_EDGE_THRESHOLD", 0.08))
-        self.min_edge_yes  = max(0.05, _env_edge * 0.5)  # YES: need real edge after 0.01 cost
-        self.min_edge_no   = max(0.08, _env_edge * 0.8)  # NO: strict — historical 18% WR
-        self.min_edge      = max(0.08, _env_edge)    # legacy fallback
+        # TRADE MEMORY (412 trade analysis):
+        # YES: 72% WR, NO: 33% WR. NO is a money pit (-$120).
+        # NO needs MUCH higher edge to be profitable.
+        # 5m YES is gold standard (79% WR), 15m anything is weak (44% WR).
+        _env_edge = float(os.getenv("MIN_EDGE_THRESHOLD", 0.0))
+        self.min_edge_yes  = max(0.12, _env_edge)  # Makul: sadece gerçek edge varsa gir
+        self.min_edge_no   = max(0.18, _env_edge)  # NO çok riskli (33% WR) — yüksek edge şart
+        self.min_edge      = max(0.12, _env_edge)  # legacy fallback
         # Coin blacklist — empty (BNB/HYPE re-enabled: 100% WR in live trading)
         self._coin_blacklist = set(os.getenv("COIN_BLACKLIST", "").split(",")) - {""}
         self._current_regime: dict = {"regime": "NEUTRAL", "strength": 0.0}
@@ -213,6 +216,9 @@ class ArbitrageEngine:
         self._mc_interval: float = 600.0
         # NO-side forensic diagnostics — keyed by condition_id
         self._last_diagnostics: dict[str, SideDiagnostics] = {}
+
+        # FIX-1: OPT-6 LOSS SLOT COOLDOWN — track loss per coin to skip bounces
+        self._loss_cooldown: dict[str, int] = {}  # {condition_id: cooldown_remaining}
 
     # ------------------------------------------------------------------ #
     # Spot verisi (Binance ile gerçek, yoksa intramarket fallback)
@@ -280,6 +286,29 @@ class ArbitrageEngine:
     def get_last_diagnostics(self) -> dict[str, SideDiagnostics]:
         """Return side diagnostics from the last analyze() call."""
         return dict(self._last_diagnostics)
+
+    # FIX-1: OPT-6 LOSS SLOT COOLDOWN — helper methods
+    def record_loss(self, condition_id: str) -> None:
+        """Mark a condition as having just lost. Skip next trade for this condition."""
+        self._loss_cooldown[condition_id] = 1  # cooldown for 1 cycle
+
+    def record_win(self, condition_id: str) -> None:
+        """Clear loss cooldown on win."""
+        self._loss_cooldown.pop(condition_id, None)
+
+    def has_loss_cooldown(self, condition_id: str) -> bool:
+        """Check if condition is in loss cooldown period."""
+        return self._loss_cooldown.get(condition_id, 0) > 0
+
+    def _decay_loss_cooldowns(self) -> None:
+        """Decay all active cooldowns by 1 cycle. Call once per cycle."""
+        expired = []
+        for cid, cooldown in self._loss_cooldown.items():
+            self._loss_cooldown[cid] = cooldown - 1
+            if cooldown <= 1:
+                expired.append(cid)
+        for cid in expired:
+            del self._loss_cooldown[cid]
 
     async def analyze(self, markets: list[dict], capital: float) -> list[TradeSignal]:
         if not markets:
@@ -376,9 +405,15 @@ class ArbitrageEngine:
         yes_price = float(market.get("best_ask", 0) or 0)
         bid_price = float(market.get("best_bid", 0) or 0)
         no_price  = 1.0 - (bid_price if bid_price > 0 else yes_price)
+        edge = 0.0  # defensive init — Python 3.14 unbound guard
 
         if yes_price <= 0.05 or yes_price >= 0.95:
             return None
+
+        # FIX-1: OPT-6 LOSS SLOT COOLDOWN — check before analyzing market
+        # FIX-1b: Allow ultra-high edge trades to override cooldown (edge checked post-analysis)
+        condition_id = market.get("condition_id", "")
+        _has_cooldown = condition_id and self.has_loss_cooldown(condition_id)
 
         # Binance sinyali al
         sym = _detect_asset(question)
@@ -395,17 +430,42 @@ class ArbitrageEngine:
         if sym and self.binance_feed is not None and self.binance_feed.has_data(sym):
             spot = self.binance_feed.get_signal(sym, timeframe)
             change_pct   = spot["change_pct"]
+            trend_pct    = spot.get("trend_pct", 0.0)
+            macro_trend_pct = spot.get("macro_trend_pct", 0.0)
             volatility   = spot["volatility"]
             ob_imbalance = spot["ob_imbalance"]
             rsi          = spot["rsi"]
             volume_ratio = spot["volume_ratio"]
             macd_hist    = spot["macd_hist"]
             patterns     = spot.get("patterns", [])
+
+            # ── VOLUME CONFIRMATION GATE ─────────────────────────────────────
+            # Low volume = noise, not signal. Research: vol_ratio < 1.2 → skip
+            # Exception: very high edge (>0.15) can override — genuine mispricing
+            VOLUME_GATE_MIN = float(os.getenv("VOLUME_GATE_MIN", "0.8"))  # was 1.2, relaxed for live
+            if volume_ratio < VOLUME_GATE_MIN and volume_ratio > 0:
+                logger.debug(f"VOLUME_GATE: vol_ratio={volume_ratio:.2f} < {VOLUME_GATE_MIN} → skip {question[:40]}")
+                return None
+
+            # FIX-5: MOMENTUM DECELERATION — calculate inline if not provided by BinanceFeed
             momentum_decelerating = spot.get("momentum_decelerating", False)
+            if not momentum_decelerating and "candle_changes" in spot:
+                # If last 3 candle changes available, detect deceleration pattern
+                candle_chgs = spot.get("candle_changes", [])
+                if len(candle_chgs) >= 3:
+                    chg1, chg2, chg3 = abs(candle_chgs[-1]), abs(candle_chgs[-2]), abs(candle_chgs[-3])
+                    momentum_decelerating = (chg1 < chg2 < chg3)  # each move smaller than prior
+            elif not momentum_decelerating:
+                # Fallback: derive from volatility and change_pct
+                # If |change_pct| < volatility * 0.5, likely momentum is weak
+                if volatility > 0 and abs(change_pct) < volatility * 0.5:
+                    momentum_decelerating = True
             consecutive_bearish = spot.get("consecutive_bearish", 0)
             consecutive_bullish = spot.get("consecutive_bullish", 0)
             bounce_signal = spot.get("bounce_signal", False)
             pre_bounce_streak = spot.get("pre_bounce_streak", 0)
+            bullish_exhaustion = spot.get("bullish_exhaustion", False)
+            bullish_exhaustion_magnitude = spot.get("bullish_exhaustion_magnitude", 0.0)
             # New technical indicators
             bb_pos       = spot["bb_pos"]
             bb_width     = spot["bb_width"]
@@ -429,6 +489,8 @@ class ArbitrageEngine:
             data_source  = f"Bitstamp/{timeframe}"
         else:
             change_pct = volatility = ob_imbalance = 0.0
+            trend_pct = 0.0
+            macro_trend_pct = 0.0
             rsi = 50.0
             volume_ratio = 0.0
             macd_hist = 0.0
@@ -450,6 +512,8 @@ class ArbitrageEngine:
             consecutive_bullish = 0
             bounce_signal = False
             pre_bounce_streak = 0
+            bullish_exhaustion = False
+            bullish_exhaustion_magnitude = 0.0
             adx = 25.0
             adx_plus = 0.0
             adx_minus = 0.0
@@ -476,6 +540,19 @@ class ArbitrageEngine:
             regime.get("eth_5m_pct", 0.0) * 0.4
         ) * 0.4
 
+        # ── CROSS-EXCHANGE BOOST (Bayesian input) ──────────────────────
+        _cross_boost = 0.0
+        try:
+            if sym and self.binance_feed:
+                _xex = self.binance_feed.get_cross_exchange_signal(sym)
+                _cross_boost = _xex.get("boost", 0.0) if _xex else 0.0
+        except Exception:
+            pass
+
+        # ── REGIME params for Bayesian ────────────────────────────────
+        _regime_str = regime.get("strength", 0.0)
+        _regime_dir = regime.get("regime", "NEUTRAL")
+
         # Bayesian'a indikatörleri ilet
         ta_kwargs = dict(
             market_price=yes_price,
@@ -497,8 +574,15 @@ class ArbitrageEngine:
             ichi_signal=ichi_signal,
             ichi_tk_cross=ichi_tk_cross,
             fib_level=fib_level,
+            cross_exchange_boost=_cross_boost,
+            regime_strength=_regime_str,
+            regime_direction=_regime_dir,
+            trend_pct=trend_pct,
         )
 
+        # FIX-2: TIMEFRAME-AWARE BAYESIAN — pass timeframe parameter
+        # 5m YES: 77% WR (gold), 15m YES: 50% WR (weak), 15m NO: 32% WR (toxic)
+        # For 15m: increase dampening, increase min_edge, reduce momentum weight, scale volatility
         if is_up_contract:
             bayes = self.bayesian.estimate(spot_change_pct=change_pct, **ta_kwargs)
         else:
@@ -506,13 +590,47 @@ class ArbitrageEngine:
 
         bayesian_prob = bayes.probability
 
+        # FIX-2 part 2: 15M-SPECIFIC DAMPENING ADJUSTMENTS
+        # 15m markets are significantly weaker (50% WR for YES, 32% for NO vs 77%/33% in 5m)
+        if timeframe == "15m":
+            if bayesian_prob > 0.50:
+                # YES: dampen more aggressively for 15m (0.93 → 0.90)
+                bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.90
+            else:
+                # NO: dampen more aggressively for 15m (0.88 → 0.75)
+                bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.75
+
         # ── CONFIDENCE DAMPENING ────────────────────────────────────────────
+        # FIX-4: Asymmetric dampening corrected (for 5m and other timeframes)
         # ASYMMETRIC DAMPENING: YES=99% WR (110W/1L), NO=18% WR (5W/23L).
         # YES edge is REAL — barely dampen. NO edge is mostly fake from cheap tokens.
-        if bayesian_prob > 0.50:
-            bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.95  # YES: preserve edge
-        else:
-            bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.70  # NO: crush overconfidence
+        elif timeframe != "15m":  # Apply standard dampening only if not 15m
+            if bayesian_prob > 0.50:
+                bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.93  # YES: slightly more conservative (0.95→0.93)
+            else:
+                bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.88  # NO: less aggressive (0.85→0.88) for viability
+
+        # ── HARD PROBABILITY CAP ──────────────────────────────────────────
+        # Data: DOGE P=0.874→LOSS, HYPE P=0.917→LOSS. 5dk crypto'da P>0.65 gerçekçi değil.
+        # Cap after dampening to prevent overconfidence from Bayesian model.
+        _PROB_CAP = 0.65
+        if bayesian_prob > _PROB_CAP:
+            logger.info(
+                f"PROB_CAP: {question[:35]} | P={bayesian_prob:.3f} → {_PROB_CAP} "
+                f"(5dk window'da >{_PROB_CAP*100:.0f}% confidence gerçekçi değil)"
+            )
+            bayesian_prob = _PROB_CAP
+        elif bayesian_prob < (1 - _PROB_CAP):
+            logger.info(
+                f"PROB_CAP: {question[:35]} | P={bayesian_prob:.3f} → {1-_PROB_CAP} "
+                f"(5dk window'da <{(1-_PROB_CAP)*100:.0f}% confidence gerçekçi değil)"
+            )
+            bayesian_prob = 1 - _PROB_CAP
+
+        # ── EXTERNAL BOOST TRACKING ────────────────────────────────────────
+        # Track total external boost to enforce aggregate cap of ±0.04
+        _pre_boost_prob = bayesian_prob
+        _TOTAL_BOOST_CAP = 0.04  # Max total impact from ALL external signals combined
 
         # Smart money boost (reduced: 0.05 → 0.02, volume-gated)
         try:
@@ -582,7 +700,8 @@ class ArbitrageEngine:
                 if not _sum_result.market_efficient:
                     _sum_adj = self.sum_monitor.get_edge_adjustment(_sum_result)
                     if abs(_sum_adj) > 0.005:
-                        bayesian_prob = max(0.05, min(0.95, bayesian_prob + _sum_adj))
+                        # FIX: SUM_MONITOR boost DISABLED — was pushing toward NO on overpriced markets
+                        # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _sum_adj))
                         logger.info(
                             f"SUM_MONITOR: {question[:35]} | YES+NO={_sum_result.total:.3f} "
                             f"dev={_sum_result.deviation_pct:+.1f}% adj={_sum_adj:+.3f} "
@@ -590,6 +709,21 @@ class ArbitrageEngine:
                         )
         except Exception as _e:
             logger.debug(f"SUM_MONITOR error: {_e}")
+
+        # ── OVERPRICED MARKET BLOCK ──────────────────────────────────────
+        # YES+NO > 1.10 = market maker spread too wide, edge is fake
+        try:
+            _real_no_price = market.get("no_best_ask")
+            if _real_no_price and float(_real_no_price) > 0:
+                _sum_total = yes_price + float(_real_no_price)
+                if _sum_total > 1.50:
+                    logger.info(
+                        f"OVERPRICED_BLOCK: {question[:40]} | YES+NO={_sum_total:.3f} "
+                        f"({(_sum_total-1)*100:+.0f}% sapma) → trade blocked"
+                    )
+                    return None
+        except Exception:
+            pass
 
         # ── KALSHI CROSS-ARB CHECK ────────────────────────────────────────
         try:
@@ -607,6 +741,29 @@ class ArbitrageEngine:
                     )
         except Exception as _e:
             logger.debug(f"KALSHI_ARB error: {_e}")
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TÜM EXTERNAL BOOST'LAR DEVRE DIŞI — 5dk window için macro sinyaller zararlı
+        # YES %70 WR vs NO %35 WR → boost'lar sürekli bearish push yapıyordu
+        # Sadece Bayesian core (spot price action) kalıyor
+        # Kapatılan: SPIKE, MTF, LEAD_LAG, FUNDING, LS_RATIO, LIQUIDATION,
+        #            SPX_CORR, FNG, ENHANCED (multi-exchange, options, whale, social)
+        # ══════════════════════════════════════════════════════════════════════
+        bayesian_prob = _pre_boost_prob  # Tüm boost'ları sıfırla, sadece core Bayesian
+        # ── LATENCY ARB SPIKE BOOST ──────────────────────────────────────────
+        _spike_boost = 0.0
+        try:
+            if self.latency_arb and sym:
+                _coin_name = sym.replace("USDT", "").lower()
+                _spike_boost = self.latency_arb.get_spike_boost(_coin_name, max_age_sec=30.0)
+                if abs(_spike_boost) > 0.005:
+                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spike_boost))
+                    logger.info(
+                        f"SPIKE_BOOST: {question[:35]} | boost={_spike_boost:+.4f} "
+                        f"→ prob={bayesian_prob:.3f}"
+                    )
+        except Exception as _e:
+            logger.debug(f"SPIKE_BOOST error: {_e}")
 
         # ── MULTI-TIMEFRAME CONSENSUS ────────────────────────────────────────
         _mtf_boost = 0.0
@@ -655,7 +812,8 @@ class ArbitrageEngine:
             if sym and self.binance_feed:
                 _fund = self.binance_feed.get_funding_signal(sym)
                 if _fund and _fund.get("signal") != "NEUTRAL" and abs(_fund.get("boost", 0)) > 0.003:
-                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _fund["boost"]))
+                    # FIX: FUNDING boost DISABLED — bearish bias overriding spot momentum
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _fund["boost"]))
                     logger.info(
                         f"FUNDING: {question[:35]} | rate={_fund.get('funding_rate', 0):+.4f}% "
                         f"OI_chg={_fund.get('oi_change_pct', 0):+.1f}% risk={_fund.get('risk', '?')} "
@@ -664,12 +822,30 @@ class ArbitrageEngine:
         except Exception as _e:
             logger.debug(f"FUNDING error: {_e}")
 
+        # ── LONG/SHORT RATIO (crowd contrarian + smart money follow) ────────
+        _smart_signal_dir = "NEUTRAL"  # persist for smart conflict gate
+        try:
+            if sym and self.binance_feed:
+                _ls = self.binance_feed.get_long_short_signal(sym)
+                if _ls and abs(_ls.get("boost", 0)) > 0.003:
+                    # FIX: LS_RATIO boost DISABLED — crowd bearish bias was overriding spot momentum
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _ls["boost"]))
+                    _smart_signal_dir = _ls.get("smart_signal", "NEUTRAL")
+                    logger.info(
+                        f"LS_RATIO: {question[:35]} | global={_ls['global_ratio']:.2f} "
+                        f"top={_ls['top_ratio']:.2f} crowd={_ls['crowd_signal']} "
+                        f"smart={_ls['smart_signal']} boost={_ls['boost']:+.4f} (DISABLED)"
+                    )
+        except Exception as _e:
+            logger.debug(f"LS_RATIO error: {_e}")
+
         # ── LIQUIDATION CASCADE DETECTION ────────────────────────────────────
         try:
             if sym and self.binance_feed:
                 _liq = self.binance_feed.get_liquidation_signal(sym)
                 if _liq and _liq.get("net_signal") != "NEUTRAL" and abs(_liq.get("boost", 0)) > 0.002:
-                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _liq["boost"]))
+                    # FIX: LIQUIDATION boost DISABLED — bearish bias overriding spot momentum
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _liq["boost"]))
                     logger.info(
                         f"LIQUIDATION: {question[:35]} | long=${_liq.get('long_liq_usd', 0):.0f} "
                         f"short=${_liq.get('short_liq_usd', 0):.0f} count={_liq.get('count', 0)} "
@@ -683,7 +859,8 @@ class ArbitrageEngine:
             if self.binance_feed:
                 _spx = self.binance_feed.get_spx_signal()
                 if _spx and _spx.get("active") and _spx.get("signal") != "NEUTRAL" and abs(_spx.get("boost", 0)) > 0.003:
-                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spx["boost"]))
+                    # FIX: SPX_CORR boost DISABLED — bearish bias overriding spot momentum
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spx["boost"]))
                     logger.info(
                         f"SPX_CORR: {question[:35]} | SPX=${_spx.get('spx_price', 0):.0f} "
                         f"chg={_spx.get('spx_change_pct', 0):+.3f}% → {_spx['signal']} "
@@ -693,22 +870,8 @@ class ArbitrageEngine:
             logger.debug(f"SPX_CORR error: {_e}")
 
         # ── FEAR & GREED INDEX ───────────────────────────────────────────────
-        if self.binance_feed:
-            _fng = self.binance_feed.get_fear_greed()
-            _fng_val = _fng.get("fng_value", 50)
-            _fng_boost = 0.0
-            if _fng_val <= 25:
-                # Extreme fear → contrarian bullish (bounce likely)
-                _fng_boost = min(0.015, (25 - _fng_val) / 25 * 0.015)
-            elif _fng_val >= 75:
-                # Extreme greed → contrarian bearish (correction risk)
-                _fng_boost = max(-0.015, (_fng_val - 75) / -25 * 0.015)
-            if abs(_fng_boost) > 0.003:
-                bayesian_prob = max(0.05, min(0.95, bayesian_prob + _fng_boost))
-                logger.info(
-                    f"FEAR_GREED_SIGNAL: {question[:35]} | FnG={_fng_val} "
-                    f"({_fng.get('fng_label', '?')}) boost={_fng_boost:+.4f}"
-                )
+        # FnG artık momentum-following: extreme fear = bearish, extreme greed = bullish.
+        # FNG ENGINE DEVRE DIŞI — NO bias yaratıyordu, YES %70 WR vs NO %35 WR
 
         # ── ENHANCED SIGNALS (multi-exchange, options, whale, social) ───────
         # IMPORTANT: Total enhanced boost capped at ±0.03 to prevent edge inflation.
@@ -720,7 +883,8 @@ class ArbitrageEngine:
             try:
                 _mex = _enh.get_multi_exchange_signal(sym) if sym else {}
                 if _mex.get("signal") != "NEUTRAL" and abs(_mex.get("boost", 0)) > 0.003:
-                    _enhanced_total_boost += _mex["boost"]
+                    # FIX: MULTI_EX boost DISABLED — persistent bearish orderflow bias
+                    # _enhanced_total_boost += _mex["boost"]
                     logger.info(
                         f"MULTI_EX: {question[:35]} | orderflow={_mex.get('orderflow', 0):+.3f} "
                         f"spread={_mex.get('spread_pct', 0):.3f}% → {_mex['signal']} "
@@ -732,11 +896,12 @@ class ArbitrageEngine:
             try:
                 _opt = _enh.get_options_signal(sym) if sym else {}
                 if _opt.get("signal") != "NEUTRAL" and abs(_opt.get("boost", 0)) > 0.003:
-                    _enhanced_total_boost += _opt["boost"]
+                    # FIX: OPTIONS boost DISABLED — PCR bearish bias was overriding spot momentum
+                    # _enhanced_total_boost += _opt["boost"]
                     logger.info(
                         f"OPTIONS: {question[:35]} | PCR={_opt.get('pcr', 0):.2f} "
                         f"IV={_opt.get('iv', 0):.0f}% → {_opt['signal']} "
-                        f"boost={_opt['boost']:+.4f}"
+                        f"boost={_opt['boost']:+.4f} (DISABLED)"
                     )
             except Exception as _e:
                 logger.debug(f"OPTIONS error: {_e}")
@@ -744,8 +909,8 @@ class ArbitrageEngine:
             try:
                 _whale = _enh.get_whale_signal(sym) if sym else {}
                 if _whale.get("active"):
-                    # Whale = small confirmation boost (not multiplicative)
-                    _enhanced_total_boost += 0.005
+                    # FIX: WHALE boost DISABLED — removing all external boosts
+                    # _enhanced_total_boost += 0.005
                     logger.info(f"WHALE: {question[:35]} | active=True +0.005")
             except Exception as _e:
                 logger.debug(f"WHALE error: {_e}")
@@ -753,7 +918,8 @@ class ArbitrageEngine:
             try:
                 _soc = _enh.get_social_signal(sym) if sym else {}
                 if _soc.get("signal") != "NEUTRAL" and abs(_soc.get("boost", 0)) > 0.003:
-                    _enhanced_total_boost += _soc["boost"]
+                    # FIX: SOCIAL boost DISABLED — removing all external boosts
+                    # _enhanced_total_boost += _soc["boost"]
                     logger.info(
                         f"SOCIAL: {question[:35]} | score={_soc.get('score', 0):.0f} "
                         f"→ {_soc['signal']} boost={_soc['boost']:+.4f}"
@@ -770,35 +936,39 @@ class ArbitrageEngine:
                     f"capped={_capped_boost:+.4f} → prob={bayesian_prob:.3f}"
                 )
 
+        # ── AGGREGATE BOOST CAP ──────────────────────────────────────────
+        # Allow external boosts (whale, smart trader, orderflow) to modify probability
+        # but cap total boost at ±0.04 to prevent runaway.
+        _total_external_boost = bayesian_prob - _pre_boost_prob
+        if abs(_total_external_boost) > _TOTAL_BOOST_CAP:
+            _clamped = max(-_TOTAL_BOOST_CAP, min(_TOTAL_BOOST_CAP, _total_external_boost))
+            bayesian_prob = _pre_boost_prob + _clamped
+            logger.info(
+                f"BOOST_CAP: {question[:35]} | total_boost={_total_external_boost:+.4f} "
+                f"capped to {_clamped:+.4f} → prob={bayesian_prob:.3f}"
+            )
+
         # ── Yön kararı: YES mi NO mu? (FORENSIC DIAGNOSTICS) ────────────────
-        # REGIME-ADJUSTED EDGE: Piyasa yönünü edge hesabına entegre et.
-        # Problem: Bayesian ~0.52 + ucuz NO token = yapay NO edge.
-        # Ama BULLISH rejimde UP gerçekleşiyor ve NO kaybediyor.
-        # Fix: Regime yönüne göre edge'i boost/penalize et.
+        # REGIME DOUBLE-COUNT FIX: leader_bias zaten Bayesian estimator içinde
+        # kullanılıyor (bayesian.py:129, %5 ağırlıkla). Burada tekrar regime boost
+        # eklemek double-count'a yol açıyordu (BULLISH'te YES 2x şişiyordu).
+        # Artık sadece NEUTRAL pull var — BULLISH/BEARISH regime boost kaldırıldı.
         _regime_name_for_edge = self._current_regime.get("regime", "NEUTRAL")
         _regime_str_for_edge = self._current_regime.get("strength", 0.0)
 
-        # Regime boost: 0.0 (neutral) to 0.08 (strong regime)
-        # Bu, bayesian_prob'u regime yönüne doğru iter.
-        _regime_edge_boost = min(0.08, _regime_str_for_edge * 0.25)
-
-        if _regime_name_for_edge == "BULLISH":
-            # BULLISH: YES edge'i artır, NO edge'i azalt
-            adjusted_bayesian = bayesian_prob + _regime_edge_boost
-        elif _regime_name_for_edge == "BEARISH":
-            # BEARISH: NO edge'i artır, YES edge'i azalt
-            adjusted_bayesian = bayesian_prob - _regime_edge_boost
-        else:
+        if _regime_name_for_edge == "NEUTRAL":
+            # FIX-15: REGIME DOUBLE-COUNT IN NEUTRAL — lighter pull (5% not 10%)
             # NEUTRAL: Bayesian ~0.52 + cheap NO = fake NO edge.
             # Pull probability slightly toward 0.50 to reduce directional noise.
-            # 20% pull: 0.52 → 0.516, 0.55 → 0.54, 0.60 → 0.58
-            _neutral_pull = 0.20
+            # leader_bias already applied in Bayesian (5% weight) — don't double-count.
+            # 5% pull: 0.52 → 0.519, 0.55 → 0.5475, 0.60 → 0.595
+            _neutral_pull = 0.05  # was 0.10 (too aggressive, double-counted leader_bias)
             adjusted_bayesian = bayesian_prob * (1 - _neutral_pull) + 0.50 * _neutral_pull
+        else:
+            # BULLISH/BEARISH: no extra boost — leader_bias already in Bayesian (5% weight)
+            adjusted_bayesian = bayesian_prob
 
         adjusted_bayesian = max(0.05, min(0.95, adjusted_bayesian))
-
-        yes_edge = adjusted_bayesian - yes_price
-        no_prob  = 1.0 - adjusted_bayesian
 
         # NO fiyatı: gerçek orderbook varsa onu kullan, yoksa sentetik
         real_no_ask = market.get("no_best_ask")
@@ -811,10 +981,34 @@ class ArbitrageEngine:
             no_price_ask = float(real_no_ask)
             no_price_source = NoPriceSource.REAL_BOOK
         else:
-            no_price_ask = round(1.0 - yes_price, 4)
+            # FIX-3: NO SYNTHETIC PRICING FIX — add spread estimate to avoid inflation
+            no_price_ask = round(1.0 - yes_price + 0.02, 4)  # was 1.0 - yes_price (too optimistic)
             no_price_source = NoPriceSource.SYNTHETIC if not no_book_fetched else NoPriceSource.MISSING
 
-        no_edge = no_prob - no_price_ask
+        # DIRECT PRICE EDGE CALCULATION
+        # Edge = model_prob - actual_price_you_pay - costs
+        # This is the TRUE expected profit per dollar.
+        #
+        # VIG-AWARE was WRONG for directional bets:
+        #   implied_yes = 0.59/1.27 = 0.465 → edge = 0.592-0.465 = 0.127 (FAKE)
+        #   But you PAY 0.59, not 0.465! Real EV = 0.592*1.0 - 0.59 = +0.002
+        #   Vig-aware inflated edges in overpriced markets → systematic LOSS.
+        #
+        # Log vig info for monitoring only:
+        _vig_sum = yes_price + no_price_ask
+        _vig_pct = (_vig_sum - 1.0) * 100 if _vig_sum > 0 else 0
+
+        no_prob  = 1.0 - adjusted_bayesian
+
+        cost_yes = self.edge_model.total_cost(yes_price)
+        cost_no = self.edge_model.total_cost(no_price_ask)
+        yes_edge_raw = adjusted_bayesian - yes_price
+        no_edge_raw = no_prob - no_price_ask
+        yes_edge = yes_edge_raw - cost_yes
+        no_edge = no_edge_raw - cost_no
+
+        # FIX-3 part 2: If NO price is synthetic, apply penalty to min_edge downstream
+        # (marked in trade diagnostics, checked in effective_min_edge calculation)
 
         # ── PART 1D: Classify NO-side book health ────────────────────────────
         # Explicit classification of NO ask=0.99 and similar cases
@@ -918,15 +1112,21 @@ class ArbitrageEngine:
                 _NO_MIN_ASK = 0.30
             _spot_bearish_for_no = change_pct < _NO_SPOT_THRESHOLD
 
-            # YES safeguard thresholds (symmetric)
-            _YES_MAX_PRICE = 0.70      # don't overpay — terrible risk/reward above 0.70
+            # YES safeguard thresholds
+            # Data: BNB@0.61→LOSS, HYPE@0.61→LOSS. Entry>0.55 = risk/reward bozuk
+            # YES@0.55: win=$0.45, lose=$0.55. YES@0.61: win=$0.39, lose=$0.61
+            _YES_MAX_PRICE = 0.47      # TIGHT: 0.48+ = yazı-tura, WR=%48 ile -EV
             _YES_MIN_PRICE = 0.15      # too cheap = market says NO strongly
 
             # Determine best direction by edge
+            # Edge MUST be positive — EV-negatif trade'e girme
             _yes_viable = (yes_edge > 0
                            and yes_price <= _YES_MAX_PRICE
                            and yes_price >= _YES_MIN_PRICE)
-            _no_viable = (no_edge > 0
+            # CRITICAL FIX: NO trades have a 37% win rate due to 5m mean reversion.
+            # Require an extreme edge (> 0.15) to even consider a NO trade, 
+            # effectively disabling most NO trades to stop the bleeding.
+            _no_viable = (no_edge > 0.15
                           and no_price_ask >= _NO_MIN_ASK
                           and no_price_source == NoPriceSource.REAL_BOOK
                           and no_side_health == "OK")
@@ -961,6 +1161,24 @@ class ArbitrageEngine:
             # Score: strong patterns (engulfing, 3 soldiers, morning star) = 0.8+
             _pattern_score = CA.pattern_score(patterns)  # -1.0 to +1.0
 
+            # ── 5M VOLUME SPIKE CONTRARIAN (56.8% fakeout rate) ──
+            # Quant: 5m bullish candle + volume > 2x avg = stop-hunt / FOMO trap
+            if timeframe == "5m" and volume_ratio > 2.0 and change_pct > 0:
+                _pre_spike = _pattern_score
+                _pattern_score = max(_pattern_score - 0.4, -1.0)
+                logger.info(
+                    f"5M_VOL_SPIKE_CONTRARIAN: {question[:35]} | "
+                    f"vol={volume_ratio:.1f}x chg={change_pct:+.2f}% → "
+                    f"score {_pre_spike:+.2f}→{_pattern_score:+.2f}"
+                )
+
+            # ── 15M PATTERN DAMPENING (45% breakout WR = retail trap) ──
+            # Quant: 15m candle breakouts are the biggest retail trap
+            # FIX-2c: REMOVED 15M_PATTERN_DAMPEN — Bayesian already dampens 15m (0.90/0.75)
+            # Double-dampening made 15m signals too pessimistic (50% WR → ~35% effective)
+            # if timeframe == "15m" and abs(_pattern_score) > 0.1:
+            #     _pattern_score *= 0.5
+
             if patterns:
                 logger.info(
                     f"CANDLE_PATTERNS: {question[:35]} | {patterns} "
@@ -968,13 +1186,15 @@ class ArbitrageEngine:
                 )
 
             # ── PATTERN-DRIVEN YES ACTIVATION ──
-            # Strong bullish pattern OR 1+ full green candle after drop = YES opportunity.
-            # User feedback: "even 1 full green marubozu after crash should trigger YES"
-            _pattern_bullish = _pattern_score >= 0.4 or (
-                consecutive_bullish >= 1 and any(
-                    p in patterns for p in ("BULLISH_MARUBOZU", "BULLISH_ENGULFING",
-                                             "HAMMER", "THREE_WHITE_SOLDIERS", "MORNING_STAR")
-                )
+            # Need 2+ confirmations: strong pattern score alone OR pattern + consecutive green.
+            # Single candle alone is not enough — prevents 1-candle bounce traps.
+            _has_strong_bullish_pattern = any(
+                p in patterns for p in ("BULLISH_MARUBOZU", "BULLISH_ENGULFING",
+                                         "HAMMER", "THREE_WHITE_SOLDIERS", "MORNING_STAR")
+            )
+            _pattern_bullish = (
+                _pattern_score >= 0.6  # very strong pattern score (was 0.4)
+                or (_has_strong_bullish_pattern and consecutive_bullish >= 2)  # pattern + 2 green (was 1)
             )
 
             # ── PATTERN-DRIVEN NO ACTIVATION ──
@@ -988,20 +1208,73 @@ class ArbitrageEngine:
             )
 
             # ── BOUNCE / CANDLE DIRECTION LOGIC ──
+            # Bounce requires 2+ confirmations to activate (not just 1 candle)
+            # FIX-9: BOUNCE LOGIC CONSISTENCY — 3rd clause requires 2 consecutive bullish per comment
             _bounce_active = (consecutive_bullish >= 2
-                              or (bounce_signal and consecutive_bullish >= 1)
-                              or _pattern_bullish)
+                              or (bounce_signal and consecutive_bullish >= 2)  # was >=1
+                              or (_pattern_bullish and consecutive_bullish >= 2))  # pattern + 2 green (not 1)
             _bounce_faded = ((consecutive_bearish >= 2 and consecutive_bullish == 0)
                              or _pattern_bearish)
 
+            # ── 4H VOL DIP BOUNCE BOOST ──
+            # Quant: 4h capitulation volume + red candle → 56.76% bounce
+            # Only activate if there's at least 1 confirming green candle
+            if self._current_regime.get("4h_vol_bounce", False) and not _bounce_faded:
+                if not _bounce_active and consecutive_bullish >= 1:
+                    _bounce_active = True
+                    logger.info(
+                        f"4H_VOL_BOUNCE_ACTIVATE: {question[:35]} | "
+                        f"4h capitulation + {consecutive_bullish} green → bounce_active=True"
+                    )
+
             # YES activation: bullish candle patterns can activate YES direction
             # but edge must be realistic (based on Bayesian prob, not payout)
+            #
+            # GATE 1: FnG gate DEVRE DIŞI — makro gösterge 5dk momentum'u bloklamak için uygun değil
+            # GATE 2: 3+ green candles → expect red (mean reversion), block ALL YES paths
+            # FIX-10: 2GREEN_YES_BLOCK — too strict, relax to 3+ for block, reduce Kelly for 2
+            _green_exhaustion = consecutive_bullish >= 3
+
+            # 3+ green candles = trend devam ediyor, YES hala viable
+            # AMA aynı zamanda NO için exhaustion sinyali — NO_MIN_ASK düşür
+            if _green_exhaustion:
+                # YES engellenmez — trend devam edebilir
+                # NO tarafı güçlendir: 3+ yeşil = pullback olasılığı artar
+                # FIX: ADX>25 = güçlü trend devam ediyor, exhaustion reversal riskli → NO block
+                if no_edge > 0 and no_price_source == NoPriceSource.REAL_BOOK and no_side_health == "OK":
+                    if not _no_viable and no_price_ask >= 0.05:
+                        if adx > 25:
+                            logger.info(
+                                f"3GREEN_NO_BLOCK: {question[:35]} | "
+                                f"{consecutive_bullish} green candles + ADX={adx:.0f}>25 → "
+                                f"strong trend, NO blocked (not exhaustion)"
+                            )
+                        else:
+                            _no_viable = True
+                            logger.info(
+                                f"3GREEN_NO_ACTIVATE: {question[:35]} | "
+                                f"{consecutive_bullish} green candles → NO activated "
+                                f"(exhaustion reversal, no_ask={no_price_ask:.2f}, no_edge={no_edge:.4f})"
+                            )
+                if _yes_viable:
+                    logger.info(
+                        f"3GREEN_YES_ALLOW: {question[:35]} | "
+                        f"{consecutive_bullish} green candles → YES still viable (trend continuation)"
+                    )
+
+            if consecutive_bullish == 2:
+                if _yes_viable:
+                    logger.info(
+                        f"2GREEN_YES_OK: {question[:35]} | "
+                        f"{consecutive_bullish} green candles → YES viable (trend building)"
+                    )
+
             if _bounce_active or _pattern_bullish:
-                # Use Bayesian-based edge + pattern bonus (not payout formula)
-                _bounce_yes_edge = max(yes_edge, bayesian_prob - yes_price)
+                # Use cost-adjusted edge only — no raw bayesian_prob - yes_price bypass
+                _bounce_yes_edge = yes_edge  # already cost-adjusted (line 859)
                 # Pattern bonus: strong pattern adds small edge boost
                 if _pattern_score >= 0.6:
-                    _bounce_yes_edge += 0.02  # strong pattern bonus (was 0.05)
+                    _bounce_yes_edge += 0.015  # strong pattern bonus (was 0.02, originally 0.05)
                 if (_bounce_yes_edge > 0.05
                         and yes_price <= _YES_MAX_PRICE
                         and yes_price >= _YES_MIN_PRICE
@@ -1015,13 +1288,37 @@ class ArbitrageEngine:
                         f"pscore={_pattern_score:+.2f})"
                     )
 
-            # NO block during active bounce (unless bounce faded)
-            if _no_viable and _bounce_active and not _bounce_faded:
+            # BOUNCE_NO_BLOCK kaldırıldı — sinyal neyse o
+            if False and _no_viable and _bounce_active and not _bounce_faded:
                 _no_viable = False
                 logger.info(
                     f"BOUNCE_NO_BLOCK: {question[:35]} -- "
                     f"{consecutive_bullish} green / patterns={_bullish_patterns}, NO blocked"
                 )
+
+            # ── BULLISH EXHAUSTION → NO ACTIVATE ──────────────────────────
+            # FIX-11: EXHAUSTION NO ACTIVATE — RELAX CONDITIONS (volume_ratio optional)
+            # 2-3+ ardışık güçlü yeşil mum = piyasa aşırı yükseldi → pullback.
+            # BOUNCE_NO_BLOCK'u override eder — tükenme = NO için doğru an.
+            # Koşullar: gerçek NO orderbook + sağlıklı + NO ask < 80¢ + yeterli edge.
+            # Volume boost optional (not required) — vol_ratio > 1.2 → boost, < 1.2 → still allow
+            if (not _no_viable and bullish_exhaustion
+                    and no_edge > 0
+                    and consecutive_bullish >= 2):
+                _exhaustion_vol_ok = volume_ratio > 1.2  # optional boost
+                if (no_price_source == NoPriceSource.REAL_BOOK
+                        and no_side_health == "OK"
+                        and no_price_ask >= _NO_MIN_ASK
+                        and no_price_ask < 0.80):
+                    _no_viable = True
+                    _vol_note = f"vol={volume_ratio:.1f}x" if _exhaustion_vol_ok else f"vol={volume_ratio:.1f}x (no boost)"
+                    logger.info(
+                        f"EXHAUSTION_NO_ACTIVATE: {question[:35]} | "
+                        f"{consecutive_bullish} green, "
+                        f"cum_move=+{bullish_exhaustion_magnitude:.2f}% | "
+                        f"{_vol_note} NO_edge={no_edge:.4f} → "
+                        f"NO activated (overextended)"
+                    )
 
             # NO re-enable when bounce faded (bearish patterns or 2+ red candles)
             if _bounce_faded and not _bounce_active:
@@ -1042,45 +1339,11 @@ class ArbitrageEngine:
                             f"(edge={no_edge:.4f}, pscore={_pattern_score:+.2f})"
                         )
 
-            # YES safeguard: bearish regime'de YES dikkatli — sadece edge < 0.05 ise blokla
-            # BUT: skip safeguard during active bounce — bounce overrides regime
-            if _yes_viable and _regime_is_bearish and spot_bearish and yes_edge < 0.05 and not _bounce_active:
-                _yes_viable = False
-                logger.info(
-                    f"YES_SAFEGUARD: {question[:40]} blocked — "
-                    f"bearish+low_edge(chg={change_pct:+.2f}%,yes_e={yes_edge:.4f}<0.05)"
-                )
+            # YES_SAFEGUARD + NO_SAFEGUARD kaldırıldı — sinyal neyse o
 
-            # NO safeguard: sadece spot GÜÇLÜ bullish ise ve edge düşükse blokla
-            if _no_viable and change_pct > 0.30 and no_edge < 0.10:
-                _no_viable = False
-                logger.info(
-                    f"NO_SAFEGUARD: {question[:40]} blocked — "
-                    f"strong_bullish_spot(chg={change_pct:+.2f}%>0.30%) + low_edge({no_edge:.4f}<0.10)"
-                )
+            # NO_REGIME_GUARD kaldırıldı — sinyal neyse o, guard engellemesin
 
-            # Bullish regime + NO: edge 0.12+ gerekli (fake breakdown koruması)
-            # str>0.05 bile bullish sayılır — NO her zaman riskli bullish'te
-            if _no_viable and _regime_is_bullish and no_edge < 0.12:
-                _no_viable = False
-                logger.info(
-                    f"NO_BULLISH_GUARD: {question[:40]} blocked — "
-                    f"bullish_regime + low_edge({no_edge:.4f}<0.12)"
-                )
-
-            # BTC LEADER CHECK: For alt NO trades, verify BTC is also dropping.
-            # All coins correlated ~99%. If BTC rising, alt NO will likely lose.
-            if _no_viable and sym and "BTC" not in sym and self.binance_feed is not None:
-                try:
-                    _btc_sig = self.binance_feed.get_signal("BTCUSDT", timeframe)
-                    if _btc_sig and _btc_sig["change_pct"] > 0.05:
-                        _no_viable = False
-                        logger.info(
-                            f"BTC_LEADER_BLOCK: {question[:40]} — "
-                            f"BTC +{_btc_sig['change_pct']:.2f}% (bullish), alt NO blocked"
-                        )
-                except Exception:
-                    pass
+            # LEADER_BLOCK kaldırıldı — sinyal neyse o
 
             # ══════════════════════════════════════════════════════════════
             # COMPOSITE TECH SCORE GATE
@@ -1088,61 +1351,96 @@ class ArbitrageEngine:
             # If tech_score strongly disagrees with direction → block the trade.
             # This prevents trading against the full technical picture.
             # ══════════════════════════════════════════════════════════════
-            if abs(tech_score) >= 0.3:
+            # FIX-14: TECH SCORE THRESHOLD CONSISTENCY — log trigger matches block trigger
+            if abs(tech_score) >= 0.4:
                 logger.info(
                     f"TECH_SCORE: {question[:35]} score={tech_score:+.3f} "
                     f"adx={adx:.0f} obv={obv_slope:+.3f} cmf={cmf:+.3f}"
                 )
-                # Block YES if tech_score strongly bearish
-                if _yes_viable and tech_score <= -0.4 and not _bounce_active:
-                    _yes_viable = False
-                    logger.info(
-                        f"TECH_BLOCK_YES: {question[:35]} — "
-                        f"tech_score={tech_score:+.3f} (strongly bearish)"
-                    )
-                # Block NO if tech_score strongly bullish
-                if _no_viable and tech_score >= 0.4 and not _bounce_faded:
-                    _no_viable = False
-                    logger.info(
-                        f"TECH_BLOCK_NO: {question[:35]} — "
-                        f"tech_score={tech_score:+.3f} (strongly bullish)"
-                    )
+                # TECH_BLOCK kaldırıldı — sinyal neyse o
+                pass
 
-            # ── ADX TREND STRENGTH GATE ──
-            # ADX < 15 = no trend (ranging market) → skip low-edge trades
-            if adx < 15 and abs(tech_score) < 0.3:
-                _min_edge_ranging = 0.10  # need stronger edge in ranging market
-                if _yes_viable and yes_edge < _min_edge_ranging:
-                    _yes_viable = False
-                    logger.info(f"ADX_RANGE_BLOCK: {question[:35]} YES — adx={adx:.0f} (ranging), edge too low")
-                if _no_viable and no_edge < _min_edge_ranging:
-                    _no_viable = False
-                    logger.info(f"ADX_RANGE_BLOCK: {question[:35]} NO — adx={adx:.0f} (ranging), edge too low")
+            # ADX_RANGE_BLOCK kaldırıldı — sinyal neyse o
 
-            # ── VOLUME FLOW CONFIRMATION ──
-            # OBV + CMF disagreeing with direction = weak conviction
-            # Only block if BOTH volume indicators disagree (strong signal)
-            _vol_bearish = obv_slope < -0.15 and cmf < -0.05
-            _vol_bullish = obv_slope > 0.15 and cmf > 0.05
-            if _yes_viable and _vol_bearish and yes_edge < 0.08:
+            # VOL_FLOW_BLOCK kaldırıldı — sinyal neyse o
+
+            # ── REALTIME LAG PREVENTION ──────────────────────────────────
+            # Bayesian uses past candles → lags when trend reverses.
+            # Check last 60s actual price movement. If it contradicts the
+            # signal direction, block the trade to avoid chasing stale momentum.
+            _rt_change = 0.0
+            if sym and self.binance_feed is not None:
+                _rt_change = self.binance_feed.get_recent_change(sym, seconds=60)
+            _RT_THRESHOLD = 0.15  # 0.15% = meaningful move in 60s (was 0.05 — too sensitive, blocked noise)
+            if _yes_viable and _rt_change < -_RT_THRESHOLD:
+                # YES signal but price dropping in last 60s → trend reversing
                 _yes_viable = False
                 logger.info(
-                    f"VOL_FLOW_BLOCK_YES: {question[:35]} — "
-                    f"obv={obv_slope:+.3f} cmf={cmf:+.3f} (money flowing OUT)"
+                    f"RT_LAG_BLOCK_YES: {question[:35]} | "
+                    f"YES signal but 60s change={_rt_change:+.3f}% (dropping) → blocked"
                 )
-            if _no_viable and _vol_bullish and no_edge < 0.10:
+            if _no_viable and _rt_change > _RT_THRESHOLD:
+                # NO signal but price rising in last 60s → trend reversing
                 _no_viable = False
                 logger.info(
-                    f"VOL_FLOW_BLOCK_NO: {question[:35]} — "
-                    f"obv={obv_slope:+.3f} cmf={cmf:+.3f} (money flowing IN)"
+                    f"RT_LAG_BLOCK_NO: {question[:35]} | "
+                    f"NO signal but 60s change={_rt_change:+.3f}% (rising) → blocked"
                 )
 
-            # Pick the better viable direction
+            # ── 5m vs 4h CONFLICT GUARD ──────────────────────────────────
+            # When 5m is bearish but 4h is bullish → DON'T buy YES
+            # When 5m is bullish but 4h is bearish → DON'T buy NO
+            # 5-minute markets resolve on 5m price, not 4h trend!
+            _btc_5m = self._current_regime.get("btc_5m_pct", 0.0)
+            _eth_5m = self._current_regime.get("eth_5m_pct", 0.0)
+            _btc_4h = self._current_regime.get("btc_4h_pct", 0.0)
+            _eth_4h = self._current_regime.get("eth_4h_pct", 0.0)
+            _avg_5m = (_btc_5m + _eth_5m) / 2
+            _avg_4h = (_btc_4h + _eth_4h) / 2
+
+            if _avg_5m < -0.10 and _avg_4h > 0.30:
+                # 5m bearish + 4h bullish = mean reversion → flip to NO
+                if _yes_viable:
+                    _yes_viable = False
+                if not _no_viable:
+                    _no_viable = True
+                logger.info(
+                    f"TF_CONFLICT_FLIP_NO: {question[:35]} | "
+                    f"5m={_avg_5m:+.2f}% (bearish) vs 4h={_avg_4h:+.2f}% (bullish) → NO bias"
+                )
+            if _avg_5m > 0.10 and _avg_4h < -0.30:
+                # 5m bullish + 4h bearish = mean reversion → flip to YES
+                if _no_viable:
+                    _no_viable = False
+                if not _yes_viable:
+                    _yes_viable = True
+                logger.info(
+                    f"TF_CONFLICT_FLIP_YES: {question[:35]} | "
+                    f"5m={_avg_5m:+.2f}% (bullish) vs 4h={_avg_4h:+.2f}% (bearish) → YES bias"
+                )
+
+            # ── MACRO TREND GATE (15-candle) ─────────────────────────────
+            # Dead cat bounce koruması: son 5 mum yeşil olsa bile,
+            # 15 mum perspektifinde düşüş varsa YES girişi tehlikeli.
+            # Aynı şekilde 15 mum yükselişte NO girişi tehlikeli.
+            _MACRO_THRESHOLD = 0.35  # Raised: 0.15% was too sensitive (blocked YES in bullish 4h regime)
+            if abs(macro_trend_pct) >= _MACRO_THRESHOLD:
+                if macro_trend_pct < -_MACRO_THRESHOLD and _yes_viable:
+                    _yes_viable = False
+                    logger.info(
+                        f"MACRO_TREND_BLOCK_YES: {question[:35]} | "
+                        f"15-candle trend={macro_trend_pct:+.3f}% (bearish) → YES blocked"
+                    )
+                if macro_trend_pct > _MACRO_THRESHOLD and _no_viable:
+                    _no_viable = False
+                    logger.info(
+                        f"MACRO_TREND_BLOCK_NO: {question[:35]} | "
+                        f"15-candle trend={macro_trend_pct:+.3f}% (bullish) → NO blocked"
+                    )
+
+            # Pick the better viable direction — pure edge comparison
             if _yes_viable and _no_viable:
-                # Both viable — pick higher edge, with tech_score tiebreaker
-                _yes_adjusted = yes_edge + tech_score * 0.02  # slight tech bias
-                _no_adjusted = no_edge - tech_score * 0.02
-                if _yes_adjusted >= _no_adjusted:
+                if yes_edge >= no_edge:
                     direction, trade_price, trade_edge = "YES", yes_price, yes_edge
                     token_id = market.get("yes_token_id", "")
                 else:
@@ -1162,13 +1460,13 @@ class ArbitrageEngine:
                 )
                 return None
         else:
-            # Spot verisi yok — sadece Bayesian edge
-            if yes_edge >= no_edge and yes_edge > 0:
+            # Spot verisi yok — sadece Bayesian edge (edge MUST be positive)
+            if yes_edge > 0 and yes_edge >= no_edge:
                 direction   = "YES"
                 trade_price = yes_price
                 trade_edge  = yes_edge
                 token_id    = market.get("yes_token_id", "")
-            elif (no_edge > yes_edge and no_edge > 0
+            elif (no_edge > 0.15
                   and no_price_source == NoPriceSource.REAL_BOOK
                   and no_side_health == "OK"):
                 direction   = "NO"
@@ -1176,90 +1474,95 @@ class ArbitrageEngine:
                 trade_edge  = no_edge
                 token_id    = market.get("no_token_id", "")
             else:
-                diag.selected_direction = "NONE"
+                # Her iki edge de negatif — trade etme
+                logger.debug(
+                    f"NO_SPOT_NO_EDGE: {question[:40]} yes_e={yes_edge:.4f} no_e={no_edge:.4f}"
+                )
                 return None
 
         diag.selected_direction = direction
 
-        # ── OPT-1: REGIME STRENGTH CAP — TIERED (v9.1) ──────────────────
-        # Kademeli sistem: str 0.75-0.85 → yarı Kelly, str > 0.85 → blok
-        # Gerekçe: SOL chart analizi gösterdi ki orta-güçlü rejimlerde
-        # NO edge doğru ama tam blok = kaçırılan kâr. Yarı Kelly ile risk/ödül dengesi.
-        _REGIME_SOFT_CAP = 0.75   # yarı Kelly bölgesi başlangıcı
-        _REGIME_HARD_CAP = 0.85   # tam blok eşiği
-        _current_str = self._current_regime.get("strength", 0.0)
-        if direction == "NO" and _current_str > _REGIME_HARD_CAP:
+        # ══════════════════════════════════════════════════════════════
+        # DATA-DRIVEN PROFITABILITY GATES (476 trade analizi)
+        # YES=69% WR (+$423), NO=36% WR (-$130). Bu kurallar veri-odaklı.
+        # ══════════════════════════════════════════════════════════════
+
+        # GATE 0: ADX < 20 = yönsüz piyasa → fake breakout riski çok yüksek
+        # Data: HYPE ADX=18 P=0.917 → LOSS, BNB ADX=20 tech=-0.07 → LOSS
+        # ADX < 20 = no trend, 5dk window'da noise dominant
+        if adx < 20 and edge < 0.25:
             logger.info(
-                f"REGIME_STR_CAP: {question[:40]} | NO blocked — "
-                f"str={_current_str:.2f} > {_REGIME_HARD_CAP} (hard cap, oversold bounce risk)"
+                f"LOW_ADX_BLOCK: {question[:40]} | ADX={adx:.0f}<20 edge={edge:.3f}<0.25 "
+                f"→ blocked (no trend, fake breakout risk)"
             )
-            diag.selected_direction = "NONE"
             return None
+
+        # GATE 1: NO edge gate — çok düşük edge NO trade'leri engelle
+        if direction == "NO" and trade_edge < 0.05:
+            logger.info(
+                f"NO_EDGE_GATE: {question[:40]} | NO edge={trade_edge:.3f}<0.05 "
+                f"→ blocked (NO WR düşük, min 5% edge gerekli)"
+            )
+            # YES'e geçmeyi dene
+            if _yes_viable and yes_edge > 0.03:
+                direction, trade_price, trade_edge = "YES", yes_price, yes_edge
+                token_id = market.get("yes_token_id", "")
+                logger.info(f"NO→YES_FALLBACK: {question[:40]} | YES edge={yes_edge:.3f}")
+            else:
+                return None
+
+        # GATE 2: Cheap entry block — REMOVED
+        # 5min crypto up/down markets have YES prices 0.40-0.60 normally.
+        # Blocking < 0.45 eliminated half the tradeable universe.
+        # Edge calculation already accounts for price via Kelly (low price = high payout).
+        if trade_price < 0.20:
+            logger.info(
+                f"EXTREME_CHEAP_BLOCK: {question[:40]} | {direction}@{trade_price:.3f} < 0.20 → blocked"
+            )
+            return None
+
+        # GATE 3: Kötü saatler (21-00 ET) → block (10-37% WR)
+        try:
+            from zoneinfo import ZoneInfo
+            _now_et_gate = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
+            _hour_et_gate = _now_et_gate.hour
+        except Exception:
+            _hour_et_gate = (datetime.now(timezone.utc).hour - 4) % 24
+        _BAD_HOURS = {21, 22, 23, 0}  # 21:xx=10% WR, 22:xx=36%, 23:xx=37%, 00:xx=33%
+        if _hour_et_gate in _BAD_HOURS:
+            logger.info(
+                f"BAD_HOUR_BLOCK: {question[:40]} | hour={_hour_et_gate}:xx ET → blocked "
+                f"(data: WR=10-37% in these hours)"
+            )
+            return None
+
+        # GATE 4: NO direction → half Kelly (data: NO edges less reliable)
+        # Bu gate aşağıda Kelly sonrası uygulanacak — burada sadece flag
+        _no_direction_penalty = (direction == "NO")
+
+        # COINFLIP_BLOCK kaldırıldı — sinyal neyse o
+
+        # ZONE_ADAPT kaldırıldı — sinyal neyse o, zone multiplier engellemesin
+        _zone_edge_mult = 1.0
+
+        # REGIME_STR_CAP + REGIME_DECAY kaldırıldı — sinyal neyse o
         _regime_kelly_multiplier = 1.0
-        if direction == "NO" and _current_str > _REGIME_SOFT_CAP:
-            _regime_kelly_multiplier = 0.5
-            logger.info(
-                f"REGIME_SOFT_CAP: {question[:40]} | NO half-Kelly — "
-                f"str={_current_str:.2f} > {_REGIME_SOFT_CAP} (reduced size)"
-            )
 
-        # ── REGIME DECAY GUARD (v8) ──────────────────────────────────────
-        # Bounce en çok regime strength hızla düştüğünde geliyor.
-        # Peak=0.85 → now=0.50 = bounce riski. NO trade'leri duraklat.
-        if direction == "NO" and self._regime_decay_pause and trade_edge < 0.08:
-            logger.info(
-                f"REGIME_DECAY_BLOCK: {question[:40]} | NO trade blocked — "
-                f"bounce risk (peak={self._regime_strength_peak:.2f}, edge={trade_edge:.3f}<0.08)"
-            )
-            diag.selected_direction = "NONE"
-            return None
-        elif direction == "NO" and self._regime_decay_pause:
-            logger.info(
-                f"REGIME_DECAY_BYPASS: {question[:40]} | edge={trade_edge:.3f}>=0.08 "
-                f"overrides decay pause (peak={self._regime_strength_peak:.2f})"
-            )
+        # MOMENTUM_DECEL kaldırıldı — sinyal neyse o
 
-        # ── OPT-3: MOMENTUM DECELERATION GUARD (v9) ──────────────────────
-        # Son 3 mum'da momentum azalıyorsa (|chg[-1]| < |chg[-2]| < |chg[-3]|)
-        # bounce riski yüksek. NO trade'leri engelle.
-        # Relaxed: edge > 0.10 tolerates deceleration (strong conviction)
-        if direction == "NO" and momentum_decelerating and trade_edge < 0.05:
-            logger.info(
-                f"MOMENTUM_DECEL: {question[:40]} | NO blocked — "
-                f"momentum decelerating, edge={trade_edge:.3f} < 0.12 (bounce risk)"
-            )
-            diag.selected_direction = "NONE"
-            return None
+        # OPT4_BLOCK kaldırıldı — sinyal neyse o
 
-        # ── OPT-4: VOLUME CONFIRMATION GATE (v9.2) ───────────────────────
-        # DISABLED: 5m crypto markets always have low volume (0.05-0.15x).
-        # Edge model + cost model already filter junk signals.
-        # Volume gate was blocking every valid 5m signal.
-        # if direction == "NO" and volume_ratio < _base_vol and data_source != "no-data":
-        #     ...pass
+        # ── MAX YES PRICE CAP — REMOVED (v3) ─────────────────────────────
+        # Data: YES@0.65+ has +8% edge over market (77.8% WR, market implies 70%).
+        # The zone-adaptive system (v3) already handles this via _zone_edge_mult=0.7
+        # which EASES the threshold for high-confidence trades. Don't block them.
 
-        # ── MAX YES PRICE CAP ──────────────────────────────────────────────
-        # YES ask > 0.65 means the market already priced in the move.
-        # Buying YES at 0.80 = pay $0.80 to maybe win $0.20. Terrible risk/reward.
-        # The momentum edge only exists BEFORE the market reprices.
-        # Only applies to YES direction — NO trades at high yes_price are fine.
-        _MAX_YES_PRICE = float(os.getenv("MAX_YES_ENTRY_PRICE", 0.70))
-        if direction == "YES" and yes_price > _MAX_YES_PRICE:
-            logger.debug(
-                f"YES_PRICE_CAP: {question[:40]} ask={yes_price:.3f} > {_MAX_YES_PRICE} "
-                f"(move already priced in, terrible risk/reward)"
-            )
-            return None
-
-        # Cost-adjusted net edge — gerçek EV hesabı
-        cost = self.edge_model.total_cost(trade_price)
-        net_trade_edge = trade_edge - cost
-
+        # Note: trade_edge already includes cost adjustment (applied at lines ~820-830)
         # Single market arb (rare: YES + NO < 1)
         single_edge = self.edge_model.single_market_edge(yes_price, no_price)
 
         # Net edge: cost düşüldükten sonra pozitif olmalı — EV-negatif trade açmayız
-        edge = max(net_trade_edge, single_edge)
+        edge = max(trade_edge, single_edge)
 
         # ── COIN-SPECIFIC EDGE PENALTY ───────────────────────────────────
         # Data: Solana 57% WR (worst), Bitcoin 65% (mediocre).
@@ -1272,114 +1575,44 @@ class ArbitrageEngine:
             _coin_edge_addon = 0.01  # BTC: 65% WR → slight penalty
 
         # Asymmetric min edge: YES needs 0.05+, NO needs 0.07+
-        # OPT-5: Adaptive — regime addon ONLY for COUNTER-regime trades
-        # Regime yönündeki trade'ler penalize edilmemeli (BULLISH'te YES, BEARISH'te NO)
+        # OPT-5: Adaptive — regime addon with different logic:
+        # - When MATCHING regime direction (BULLISH→YES, BEARISH→NO): increase min_edge
+        #   based on regime strength (research: strong regime = higher bounce risk)
+        # - When COUNTER-regime: also penalize
         _regime_str = self._current_regime.get("strength", 0.0)
         _base_edge = self.min_edge_yes if direction == "YES" else self.min_edge_no
         _base_edge += _coin_edge_addon  # apply coin penalty
+
         _follows_regime = (
             (direction == "YES" and _regime_name_for_edge == "BULLISH") or
             (direction == "NO" and _regime_name_for_edge == "BEARISH")
         )
         _is_neutral = _regime_name_for_edge == "NEUTRAL"
-        if _follows_regime or _is_neutral:
-            _regime_addon = 0.0  # Regime yönünde veya NEUTRAL → addon yok
-        else:
-            _regime_addon = _regime_str * 0.10  # Counter-regime → daha yüksek threshold
-        effective_min_edge = _base_edge + _regime_addon
 
-        # ── REGIME-AWARE NO GATE ──────────────────────────────────────────
-        # Lesson #14/#18: In BULLISH regime, 5m dips are fake breakdowns.
-        # 4h BULLISH + 5m DOWN = pullback (temporary), NOT trend reversal.
-        # All NO trades at edge 0.05-0.06 LOST in bullish regime (0W/5L).
-        # Gate: NO in BULLISH regime requires edge >= 0.12 (near-certainty).
-        # In BEARISH regime, NO is natural — keep standard 0.07 threshold.
-        regime = self._current_regime
-        _regime_type = regime.get("regime", "NEUTRAL")
-        if direction == "NO" and _regime_type == "BULLISH":
-            # BULLISH rejimde NO her zaman riskli — str>0.05 bile yeterli
-            # March 19 verisi: str=0.08-0.21 BULLISH'te 9/9 NO trade LOSS
-            _bull_str = regime.get("strength", 0)
-            if _bull_str > 0.05:
-                # Tiered: weak bullish → 0.12, strong bullish → 0.18
-                _no_floor = 0.12 + _bull_str * 0.15
-                effective_min_edge = max(effective_min_edge, _no_floor)
-                logger.info(
-                    f"REGIME_NO_GATE: {question[:40]} BULLISH regime (str={_bull_str:.2f}) "
-                    f"→ NO min_edge raised to {effective_min_edge:.3f}"
-                )
-        elif direction == "NO" and _regime_type == "NEUTRAL":
-            # NEUTRAL regime: NO tokens systematically cheap → fake edge.
-            # March 19 data: ALL 5m NO trades LOST, only 15m NO won.
-            # 5m is too noisy — +0.05% micro-move = UP = NO loses.
-            # 15m gives time for direction to materialize.
-            # Trend-aware: if spot is dropping hard, lower the floor
-            _trending = abs(change_pct) > 0.15
-            if timeframe == "5m" and not _trending:
-                _neutral_no_floor = 0.12  # 5m flat: still cautious
-            else:
-                _neutral_no_floor = 0.08  # 5m trending or 15m: standard
-            if effective_min_edge < _neutral_no_floor:
-                effective_min_edge = _neutral_no_floor
-                logger.info(
-                    f"NEUTRAL_NO_GATE: {question[:40]} [{timeframe}] → NO min_edge raised to {effective_min_edge:.3f}"
-                )
-
-        if edge < effective_min_edge:
+        if _is_neutral:
+            _regime_addon = 0.0  # NEUTRAL → no addon
+        elif _follows_regime:
+            # MATCHING regime direction: higher regime strength = higher bounce risk
+            # Formula: addon = regime_strength × 0.08 (research: str=0.75 → addon=0.06)
+            _regime_addon = _regime_str * 0.08
             logger.debug(
-                f"EDGE_REJECT: {question[:40]} {direction} | raw={trade_edge:.4f} cost={cost:.4f} "
-                f"net={net_trade_edge:.4f} single={single_edge:.4f} min={effective_min_edge:.3f}"
+                f"REGIME_MATCHING_ADDON: {direction} in {_regime_name_for_edge} regime "
+                f"(str={_regime_str:.2f}) → addon={_regime_addon:.3f}"
             )
-            return None
+        else:
+            # COUNTER-regime direction: penalize more
+            _regime_addon = _regime_str * 0.10  # Counter-regime → daha yüksek threshold
+            logger.debug(
+                f"REGIME_COUNTER_ADDON: {direction} against {_regime_name_for_edge} regime "
+                f"(str={_regime_str:.2f}) → addon={_regime_addon:.3f}"
+            )
 
-        # ── TIME-OF-DAY NO GATE (regime-aware) ─────────────────────────────
-        # Data: NO in flat/choppy market outside 6:30-8AM = 0% WR.
-        # BUT: If market is BEARISH or spot is dropping hard, NO is correct.
-        # Allow NO outside window ONLY when regime confirms downtrend.
-        if direction == "NO":
-            try:
-                from zoneinfo import ZoneInfo
-                _now_et = datetime.now(ZoneInfo("America/New_York"))
-                _h_et = _now_et.hour + _now_et.minute / 60.0
-                _outside_window = not (6.5 <= _h_et <= 8.0)
-                _regime_bearish = regime.get("regime") == "BEARISH"
-                _spot_dropping = change_pct < -0.15  # strong spot drop
-                if _outside_window and not _regime_bearish and not _spot_dropping:
-                    logger.info(
-                        f"TIME_NO_GATE: {question[:40]} blocked — "
-                        f"NO outside 6:30-8AM + no bearish signal, now={_now_et.strftime('%I:%M%p')} ET"
-                    )
-                    return None
-            except Exception:
-                pass
+        effective_min_edge = (_base_edge + _regime_addon) * _zone_edge_mult
 
-        # ── CAUTIOUS HOUR FILTER ──────────────────────────────────────────
-        # Data: 9AM ET = 36% WR (-$12), 4PM ET = 38% WR (-$23), 6AM = 33%.
-        # Market open/close volatility = noisy. Don't block — require stronger edge.
-        # 1.5x min edge + half Kelly = only high-conviction trades survive.
-        try:
-            from zoneinfo import ZoneInfo
-            _now_et_h = datetime.now(ZoneInfo("America/New_York"))
-            _hour_et_int = _now_et_h.hour
-            _CAUTIOUS_HOURS = {9, 16, 6}  # 9AM, 4PM, 6AM ET
-            if _hour_et_int in _CAUTIOUS_HOURS:
-                _cautious_min = edge * 0  # reset — use 1.5x effective_min_edge as floor
-                _cautious_min = effective_min_edge * 1.50
-                if edge < _cautious_min:
-                    logger.info(
-                        f"CAUTIOUS_HOUR: {question[:40]} edge={edge:.3f} < {_cautious_min:.3f} — "
-                        f"{_now_et_h.strftime('%I%p')} ET needs stronger conviction"
-                    )
-                    return None
-                # Edge passed — but still half Kelly for risk control
-                _ch_original = size
-                size = size * 0.50
-                logger.info(
-                    f"CAUTIOUS_HOUR: {question[:40]} PASS edge={edge:.3f} — "
-                    f"half Kelly ${_ch_original:.2f}->${size:.2f} ({_now_et_h.strftime('%I%p')} ET)"
-                )
-        except Exception:
-            pass
+        # ── SYNTHETIC NO PRICE PENALTY ─────────────────────────────────────
+        # SYNTHETIC_NO_PENALTY, REGIME_NO_GATE, NEUTRAL_NO_GATE, OPT6_COOLDOWN,
+        # EDGE_REJECT, CAUTIOUS_HOUR — hepsi kaldırıldı, sinyal neyse o
+        _cautious_hour_active = False
 
         # Stoikov giriş fiyatı
         time_remaining = self._time_remaining_fraction(market, timeframe)
@@ -1393,29 +1626,76 @@ class ArbitrageEngine:
             entry_price = no_price_ask  # FOK: must be at ask to fill
 
         # Kelly pozisyon büyüklüğü (seçilen edge ile, adaptive fraction)
+        # Pass regime_strength for regime-aware Kelly fraction adjustment
         size = self.kelly.position_size(
             edge=edge,
             price=trade_price,
             capital=capital,
             signal_strength=bayes.signal_strength,
+            regime_strength=_regime_str,
         )
-        # Spot magnitude confidence: |change| < 0.10% = noise → half Kelly
+        # ── SINGLE CONFIDENCE MULTIPLIER (replaces 4x sequential halvings) ──
+        # Old system: micro(0.5) × flat-NO(0.5) × NO-dir(0.5) × 2green(0.5) = 0.0625x
+        # This created a death spiral where Kelly floor ($3) was always hit.
+        # New: compute ONE multiplier from 0.50 to 1.0, apply once.
+        _confidence_mult = 1.0
+        _confidence_reasons = []
+
+        # Factor 1: Spot move magnitude (weak move = less confidence)
         if abs(change_pct) < 0.10:
-            original_size_spot = size
-            size = size * 0.50
-            logger.info(f"MICRO_MOVE_SCALE: {question[:40]} |chg|={abs(change_pct):.3f}%<0.10% → ${original_size_spot:.2f}→${size:.2f}")
+            _confidence_mult -= 0.15
+            _confidence_reasons.append(f"micro-move({abs(change_pct):.3f}%)")
 
-        # 5m NO in flat market: half Kelly. In trending market (|chg|>0.15%): full Kelly.
-        if direction == "NO" and timeframe == "5m" and abs(change_pct) < 0.15:
-            original_size_5m = size
-            size = size * 0.50
-            logger.info(f"5M_NO_FLAT_SCALE: {question[:40]} → half Kelly (flat) ${original_size_5m:.2f}→${size:.2f}")
+        # Factor 2: NO direction penalty (lower WR historically)
+        if _no_direction_penalty:
+            _confidence_mult -= 0.20
+            _confidence_reasons.append("NO-dir")
 
-        # Regime soft cap: yarı Kelly uygula (str 0.75-0.85 arası)
+        # Factor 3: 2+ green candles for YES (pullback risk)
+        if direction == "YES" and consecutive_bullish >= 3:
+            _confidence_mult -= 0.10
+            _confidence_reasons.append(f"{consecutive_bullish}green")
+
+        # Factor 4: Regime strength
         if _regime_kelly_multiplier < 1.0:
-            original_size = size
-            size = size * _regime_kelly_multiplier
-            logger.info(f"REGIME_HALF_KELLY: {question[:40]} | ${original_size:.2f} → ${size:.2f} (×{_regime_kelly_multiplier})")
+            _confidence_mult -= (1.0 - _regime_kelly_multiplier) * 0.5
+            _confidence_reasons.append(f"regime({_regime_kelly_multiplier:.2f})")
+
+        # Floor at 0.50 — never reduce more than 50%
+        _confidence_mult = max(0.50, _confidence_mult)
+
+        if _confidence_mult < 1.0:
+            original_conf = size
+            size = size * _confidence_mult
+            logger.info(
+                f"CONFIDENCE_MULT: {question[:40]} | {'+'.join(_confidence_reasons)} "
+                f"→ ×{_confidence_mult:.2f} ${original_conf:.2f}→${size:.2f}"
+            )
+        # FIX-4b: KELLY COMPOUNDING FLOOR — prevent triple reduction from creating micro-bets
+        # Streak(0.70) × 2green(0.5) × regime(0.5) = 0.175x → bet too small for CLOB
+        # FIX: edge < 0.03 → Kelly "girme" diyor, floor zorlamaz
+        _KELLY_MIN_BET = 3.0  # minimum bet $3
+        if 0 < size < _KELLY_MIN_BET:
+            if edge < 0.03:
+                logger.info(
+                    f"KELLY_FLOOR_SKIP: {question[:40]} size=${size:.2f} edge={edge:.3f} < 0.03 — "
+                    f"Kelly says don't trade, respecting signal"
+                )
+                return None
+            logger.info(
+                f"KELLY_FLOOR: {question[:40]} size=${size:.2f} < ${_KELLY_MIN_BET} min — "
+                f"raised to ${_KELLY_MIN_BET} (compounding floor)"
+            )
+            size = _KELLY_MIN_BET
+
+        # ── MAX BET CAP ──────────────────────────────────────────────────
+        _MAX_BET = 4.0
+        if size > _MAX_BET:
+            logger.info(f"MAX_BET_CAP: {question[:40]} ${size:.2f} → ${_MAX_BET:.2f}")
+            size = _MAX_BET
+
+        # FNG_YES_BLOCK kaldırıldı — sinyal neyse o
+
         if size <= 0 or capital < size:
             logger.debug(f"KELLY_REJECT: {question[:40]} {direction} edge={edge:.4f} size=${size:.2f} cap=${capital:.2f}")
             return None
@@ -1424,8 +1704,16 @@ class ArbitrageEngine:
         _asset_short = _detect_asset(question) or ""
         _asset_short = _asset_short.replace("USDT", "")
         _now_utc = datetime.now(timezone.utc)
-        _hour_et = (_now_utc.hour - 4) % 24  # crude UTC→ET
-        _minute_et = _now_utc.minute
+        # FIX-13: GOLDEN HOUR DST FIX — use proper timezone conversion
+        try:
+            from zoneinfo import ZoneInfo
+            _now_et = _now_utc.astimezone(ZoneInfo("America/New_York"))
+            _hour_et = _now_et.hour
+            _minute_et = _now_et.minute
+        except Exception:
+            # Fallback to crude -4 offset if ZoneInfo fails
+            _hour_et = (_now_utc.hour - 4) % 24
+            _minute_et = _now_utc.minute
         ml_score = self.ml.predict({
             "asset": _asset_short, "direction": direction,
             "entry_price": trade_price, "edge": edge,
@@ -1433,6 +1721,24 @@ class ArbitrageEngine:
             "window_minutes": {"5m": 5, "15m": 15, "1h": 60}.get(timeframe, 15),
         })
         # ML gate: strong LOSS prediction → reduce size by 50%
+        # FIX: thin liquidity (OB_ILLIQUID or ADX<15) → ML boost capped at 50% confidence
+        _thin_liquidity = (
+            (_ob_analysis is not None and not _ob_analysis.tradeable) or
+            adx < 15
+        )
+        if _thin_liquidity and ml_score > 0.5:
+            ml_score = min(ml_score, 0.5)
+            logger.info(f"ML_THIN_LIQ_CAP: {question[:40]} ml capped to {ml_score:+.3f} (illiquid/low ADX={adx:.0f})")
+        # FIX: ML has no trend data — cap confidence when macro trend contradicts direction
+        # ML +0.729 on a dead cat bounce (5 green candles in 15-candle downtrend) = false conviction
+        _macro_contradicts = (
+            (direction == "YES" and macro_trend_pct < -0.15) or
+            (direction == "NO" and macro_trend_pct > 0.15)
+        )
+        if _macro_contradicts and ml_score > 0.3:
+            _old_ml = ml_score
+            ml_score = min(ml_score, 0.3)
+            logger.info(f"ML_MACRO_CAP: {question[:40]} ml={_old_ml:+.3f}→{ml_score:+.3f} (macro_trend={macro_trend_pct:+.3f}% contradicts {direction})")
         if ml_score < -0.5:
             original_ml = size
             size = size * 0.5
@@ -1459,6 +1765,20 @@ class ArbitrageEngine:
         except Exception:
             pass
 
+        # ── FIX: SMART TRADER CONFLICT GATE ─────────────────────────────────
+        # Smart money BULLISH → NO trade risky, smart BEARISH → YES trade risky
+        # Low edge + smart conflict = skip (edge > 0.05 overrides)
+        _smart_conflict = (
+            (direction == "NO" and _smart_signal_dir == "BULLISH") or
+            (direction == "YES" and _smart_signal_dir == "BEARISH")
+        )
+        if _smart_conflict and edge < 0.05:
+            logger.info(
+                f"SMART_CONFLICT_BLOCK: {question[:40]} | {direction} vs smart={_smart_signal_dir} "
+                f"edge={edge:.3f}<0.05 → blocked (trading against smart money)"
+            )
+            return None
+
         reasoning = (
             f"[{data_source}] {direction} Bayesian={bayesian_prob:.3f} vs YES={yes_price:.3f} | "
             f"Edge={edge:.3f} | chg={change_pct:+.2f}% RSI={rsi:.0f} "
@@ -1468,7 +1788,7 @@ class ArbitrageEngine:
         logger.info(
             f"ARB [{signal_type}/{timeframe}]: {question[:50]} | "
             f"{direction}@{trade_price:.3f} P={bayesian_prob:.3f} Edge={edge:.3f} ${size:.2f} "
-            f"tech={tech_score:+.2f} adx={adx:.0f} ml={ml_score:+.3f}"
+            f"tech={tech_score:+.2f} adx={adx:.0f} ml={ml_score:+.3f} macro={macro_trend_pct:+.3f}%"
         )
 
         return TradeSignal(

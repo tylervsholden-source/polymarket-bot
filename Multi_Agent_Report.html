@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Polymarket Bot - Multi-Agent Orchestration Report</title>
+<style>
+  @page { size: letter; margin: 0.8in 0.9in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #333; line-height: 1.45; max-width: 8.5in; margin: 0 auto; padding: 0.8in 0.9in; }
+  .page-break { page-break-before: always; margin-top: 0.3in; }
+  h1 { font-size: 20pt; color: #1B3A5C; margin-bottom: 4px; }
+  .subtitle { font-size: 11pt; color: #555; border-bottom: 3px solid #2E75B6; padding-bottom: 8px; margin-bottom: 18px; }
+  h2 { font-size: 13pt; color: #1B3A5C; margin: 18px 0 8px 0; border-left: 4px solid #2E75B6; padding-left: 10px; }
+  p { margin-bottom: 8px; }
+  .label { font-weight: bold; color: #1B3A5C; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px 0; font-size: 10pt; }
+  th { background: #1B3A5C; color: #fff; padding: 6px 8px; text-align: center; font-weight: bold; border: 1px solid #ccc; }
+  td { padding: 5px 8px; border: 1px solid #ccc; text-align: center; }
+  tr:nth-child(even) td { background: #f5f5f5; }
+  .left { text-align: left; }
+  .green { color: #2E8B57; font-weight: bold; }
+  .red { color: #C0392B; font-weight: bold; }
+  .blue { color: #2E75B6; font-weight: bold; }
+  .gold { color: #D4A017; font-weight: bold; }
+  .footer { border-top: 2px solid #2E75B6; margin-top: 20px; padding-top: 6px; font-size: 9pt; color: #777; }
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .kpi { background: #f0f6fa; border: 1px solid #d5e8f0; border-radius: 6px; padding: 10px; text-align: center; }
+  .kpi .value { font-size: 16pt; font-weight: bold; color: #1B3A5C; }
+  .kpi .lbl { font-size: 8pt; color: #777; text-transform: uppercase; letter-spacing: 0.5px; }
+  .flow-box { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; margin: 10px 0; }
+  .flow-step { padding: 10px; text-align: center; position: relative; }
+  .flow-step .num { background: #2E75B6; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; margin-bottom: 4px; }
+  .flow-step .title { font-weight: bold; color: #1B3A5C; font-size: 10pt; }
+  .flow-step .desc { font-size: 8.5pt; color: #555; }
+  .arrow { color: #2E75B6; font-size: 18pt; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ PAGE 1 ════════════════════ -->
+<h1>POLYMARKET TRADING BOT</h1>
+<div class="subtitle">Multi-Agent Orchestration Report &nbsp;|&nbsp; 21 Mart 2026</div>
+
+<h2>1. Sistem Mimarisi</h2>
+<p>Bot, 60 saniyelik d&ouml;ng&uuml;lerle &ccedil;alisan bir multi-agent orchestration sistemi kullanir. Her d&ouml;ng&uuml;de 3 bagimsiz agent koordineli &ccedil;alisarak trade kararlari &uuml;retir. Hybrid iletisim modeli: Research ve Signal agent paralel &ccedil;alisir, sonu&ccedil;lari birlestirilir, ardindan Reviewer agent sirali olarak her sinyali degerlendirir.</p>
+
+<h2>2. Agent G&ouml;rev Dagilimi</h2>
+<table>
+<tr>
+  <th>ResearchAgent</th>
+  <th>SignalAgent</th>
+  <th>ReviewerAgent</th>
+</tr>
+<tr>
+  <td class="left">Piyasa durumu, whale aktivitesi, smart money, regime tespiti, on-chain veriler, sentiment analizi</td>
+  <td class="left">6-model Bayesian pipeline: Bayesian + Edge + Spread + Stoikov + Kelly + Monte Carlo</td>
+  <td class="left">Claude API ile her trade &ouml;nerisi APPROVE / VETO / REDUCE. API yoksa rule-based fallback</td>
+</tr>
+<tr>
+  <td>Timeout: 25s &nbsp;|&nbsp; <span class="blue">PARALEL</span></td>
+  <td>Timeout: 20s &nbsp;|&nbsp; <span class="blue">PARALEL</span></td>
+  <td>Timeout: 30s &nbsp;|&nbsp; <span class="gold">SIRALI</span></td>
+</tr>
+</table>
+
+<h2>3. 30 Dakikalik D&ouml;ng&uuml; Akisi</h2>
+<p>Her 60 saniyede bir d&ouml;ng&uuml; &ccedil;alisir. 30 dakikada yaklasik 30 d&ouml;ng&uuml; tamamlanir:</p>
+<table>
+<tr><th>Faz</th><th>S&uuml;re</th><th>Islem</th></tr>
+<tr><td class="blue">PHASE 1</td><td>~3-5s</td><td class="left">ResearchAgent + SignalAgent PARALEL &ccedil;alisir. Spot veri, whale, smart trader, 6-model sinyal &uuml;retimi</td></tr>
+<tr><td class="blue">PHASE 2</td><td>~0.1s</td><td class="left">Sinyaller research context ile zenginlestirilir. Confluence score (0-1) ve risk flag hesaplanir</td></tr>
+<tr><td class="blue">PHASE 3</td><td>~2-5s</td><td class="left">ReviewerAgent her sinyali degerlendirir: APPROVE / VETO / REDUCE. Claude API veya rule-based</td></tr>
+<tr><td class="green">EXECUTE</td><td>~1-2s</td><td class="left">Onaylanan sinyaller LiveGate (11 nokta kontrol) sonrasi Polymarket CLOB API ile execute edilir</td></tr>
+</table>
+
+<h2>4. Yeni &Ouml;zellikler</h2>
+<p><span class="label">Confluence Score:</span> Bagimsiz sinyallerin (edge, whale, smart money, regime, volume) ne kadar ayni y&ouml;nde oldugunu 0-1 arasi &ouml;l&ccedil;er. &gt;0.7 y&uuml;ksek g&uuml;ven, &lt;0.4 d&uuml;s&uuml;k g&uuml;ven.</p>
+<p><span class="label">Risk Flag Sistemi:</span> COUNTER_REGIME, WHALE_OPPOSITION, RSI_OVERBOUGHT/OVERSOLD, REGIME_OVEREXTENDED, LOW_VOLUME, THIN_EDGE otomatik tespit edilir.</p>
+<p><span class="label">Reviewer Veto:</span> NO direction + edge &lt;0.15 otomatik VETO. 3+ risk flag REDUCE (%50). RSI extreme + d&uuml;s&uuml;k confluence VETO.</p>
+
+<!-- ════════════════════ PAGE 2 ════════════════════ -->
+<div class="page-break"></div>
+<h2>5. Trade Performans &Ouml;zeti</h2>
+<p>429 kapanan pozisyon &uuml;zerinden toplam performans analizi. Baslangic sermayesi $500 USDC.</p>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="value">429</div><div class="lbl">Toplam Trade</div></div>
+  <div class="kpi"><div class="value" style="color:#2E8B57">%59.1</div><div class="lbl">Win Rate (233W/161L)</div></div>
+  <div class="kpi"><div class="value" style="color:#2E8B57">+$305.65</div><div class="lbl">Net PnL</div></div>
+  <div class="kpi"><div class="value" style="color:#C0392B">$0.31</div><div class="lbl">Mevcut Capital</div></div>
+</div>
+<div class="kpi-grid">
+  <div class="kpi"><div class="value" style="color:#2E8B57;font-size:13pt">+$3.42</div><div class="lbl">Ort. Win</div></div>
+  <div class="kpi"><div class="value" style="color:#C0392B;font-size:13pt">-$3.06</div><div class="lbl">Ort. Loss</div></div>
+  <div class="kpi"><div class="value" style="color:#2E8B57;font-size:13pt">+$797.83</div><div class="lbl">Win PnL</div></div>
+  <div class="kpi"><div class="value" style="color:#C0392B;font-size:13pt">-$492.18</div><div class="lbl">Loss PnL</div></div>
+</div>
+
+<h2>6. Coin Bazli Analiz</h2>
+<table>
+<tr><th>Coin</th><th>Win</th><th>Loss</th><th>WR%</th><th>Net PnL</th><th>Durum</th></tr>
+<tr><td class="left"><b>Bitcoin</b></td><td class="green">58</td><td class="red">43</td><td>57%</td><td class="green">+$89.29</td><td class="left">En &ccedil;ok islem, istikrarli</td></tr>
+<tr><td class="left"><b>XRP</b></td><td class="green">43</td><td class="red">29</td><td>60%</td><td class="green">+$61.77</td><td class="left">Iyi WR, g&uuml;venilir</td></tr>
+<tr><td class="left"><b>Ethereum</b></td><td class="green">47</td><td class="red">37</td><td>56%</td><td class="green">+$54.61</td><td class="left">Hacim y&uuml;ksek, orta WR</td></tr>
+<tr><td class="left"><b>Solana</b></td><td class="green">44</td><td class="red">36</td><td>55%</td><td class="green">+$38.92</td><td class="left">Orta performans</td></tr>
+<tr><td class="left"><b>Hyperliquid</b></td><td class="green">19</td><td class="red">5</td><td><b>79%</b></td><td class="green">+$34.72</td><td class="left">En y&uuml;ksek WR, az islem</td></tr>
+<tr><td class="left"><b>Dogecoin</b></td><td class="green">18</td><td class="red">8</td><td>69%</td><td class="green">+$24.51</td><td class="left">Iyi WR, d&uuml;s&uuml;k hacim</td></tr>
+<tr><td class="left"><b>BNB</b></td><td class="green">4</td><td class="red">3</td><td>57%</td><td class="green">+$1.83</td><td class="left">Az veri, belirsiz</td></tr>
+</table>
+
+<h2>7. Zaman Dilimi Analizi</h2>
+<table>
+<tr><th>Timeframe</th><th>Win</th><th>Loss</th><th>WR%</th><th>Net PnL</th><th>Sinyal</th></tr>
+<tr><td><b>5 dakika</b></td><td class="green">191</td><td class="red">102</td><td class="green"><b>65%</b></td><td class="green"><b>+$346.97</b></td><td class="green"><b>GOLD STANDARD</b></td></tr>
+<tr><td><b>15 dakika</b></td><td class="green">42</td><td class="red">56</td><td class="red"><b>43%</b></td><td class="red"><b>-$35.32</b></td><td class="red"><b>ZAYIF</b></td></tr>
+<tr><td><b>4 saat</b></td><td>0</td><td class="red">3</td><td class="red">0%</td><td class="red">-$6.00</td><td class="red">DEVRE DISI</td></tr>
+</table>
+<p><span class="label">Kritik Bulgu:</span> 5 dakikalik marketler t&uuml;m karlilik kaynagi (+$347). 15 dakika net zarar (-$35). 4 saat tamamen basarisiz. Subagent reviewer bu veriyi kullanarak 15m/4h trade&rsquo;lerde otomatik REDUCE veya VETO uygulayabilir.</p>
+
+<!-- ════════════════════ PAGE 3 ════════════════════ -->
+<div class="page-break"></div>
+<h2>8. Entegrasyon Test Sonu&ccedil;lari</h2>
+<p>Subagent sistemi 8 kapsamli entegrasyon testinden basariyla ge&ccedil;ti:</p>
+<table>
+<tr><th>#</th><th>Test</th><th>Sonu&ccedil;</th><th>Detay</th></tr>
+<tr><td>1</td><td class="left">Base Agent Lifecycle</td><td class="green">PASS</td><td class="left">IDLE &rarr; RUNNING &rarr; COMPLETED/FAIL/TIMEOUT</td></tr>
+<tr><td>2</td><td class="left">ResearchResult Data Structures</td><td class="green">PASS</td><td class="left">16 alan, aggregate sentiment OK</td></tr>
+<tr><td>3</td><td class="left">Confluence Score &amp; Risk Flags</td><td class="green">PASS</td><td class="left">Aligned=0.91, Counter=0.42, 6 flag</td></tr>
+<tr><td>4</td><td class="left">Reviewer Rule-Based Logic</td><td class="green">PASS</td><td class="left">APPROVE/VETO/REDUCE dogru karar</td></tr>
+<tr><td>5</td><td class="left">Batch Result Filtering</td><td class="green">PASS</td><td class="left">2/3 onaylandi (VETO filtresi OK)</td></tr>
+<tr><td>6</td><td class="left">Full Coordinator Pipeline</td><td class="green">PASS</td><td class="left">2 sinyal &rarr; 2 onay, 2296ms pipeline</td></tr>
+<tr><td>7</td><td class="left">Empty Candidates Handler</td><td class="green">PASS</td><td class="left">0 aday &rarr; 0ms, graceful skip</td></tr>
+<tr><td>8</td><td class="left">Review Summary Format</td><td class="green">PASS</td><td class="left">306 char, t&uuml;m alanlar mevcut</td></tr>
+</table>
+
+<h2>9. Reviewer Agent Karar Matrisi</h2>
+<p>Asagidaki tablo reviewer agent&rsquo;in hangi durumlarda hangi karari verdigini g&ouml;sterir:</p>
+<table>
+<tr><th>Kosul</th><th>Karar</th><th>Gerek&ccedil;esi</th></tr>
+<tr><td class="left">YES + edge &gt;0.08 + d&uuml;s&uuml;k risk</td><td class="green">APPROVE</td><td class="left">Standard YES onay, tarihsel %72 WR destekliyor</td></tr>
+<tr><td class="left">NO + edge &lt;0.15</td><td class="red">VETO</td><td class="left">NO tarihsel %33 WR, d&uuml;s&uuml;k edge ile zarar riski &ccedil;ok y&uuml;ksek</td></tr>
+<tr><td class="left">Regime &gt;0.75 + counter-trade</td><td class="red">VETO</td><td class="left">Asiri uzanmis rejimde ters pozisyon bounce riski</td></tr>
+<tr><td class="left">Whale muhalefet + ince edge</td><td class="red">VETO</td><td class="left">B&uuml;y&uuml;k oyuncular aksi y&ouml;nde, bilgi dezavantaji</td></tr>
+<tr><td class="left">3+ risk flag</td><td class="gold">REDUCE 50%</td><td class="left">Birden fazla uyari, pozisyon k&uuml;&ccedil;&uuml;ltme ile risk azaltma</td></tr>
+<tr><td class="left">Confluence &lt;0.4</td><td class="gold">REDUCE 30%</td><td class="left">D&uuml;s&uuml;k sinyal uyumu, temkinli pozisyon</td></tr>
+<tr><td class="left">RSI extreme + d&uuml;s&uuml;k confluence</td><td class="red">VETO</td><td class="left">Asiri alim/satim + zayif sinyal = geri d&ouml;n&uuml;s olasi</td></tr>
+</table>
+
+<h2>10. &Ouml;neriler ve Sonraki Adimlar</h2>
+<p><span class="label">5m Odaklanma:</span> T&uuml;m karlilik 5 dakikalik marketlerden geliyor (+$347). 15m marketlerde REDUCE, 4h marketlerde VETO default olmali.</p>
+<p><span class="label">Reviewer API Aktivasyonu:</span> ANTHROPIC_API_KEY env degiskeni ile Claude API aktif edildiginde reviewer daha nuansli kararlar verebilir. &Ouml;zellikle borderline case&rsquo;lerde (edge 0.08-0.12 arasi).</p>
+<p><span class="label">Confluence Threshold:</span> Minimum confluence 0.5 olarak ayarlanmali. 0.5 alti sinyaller otomatik VETO veya REDUCE ile filtrelenmeli.</p>
+<p><span class="label">Hyperliquid Firsati:</span> %79 WR ile en basarili coin. Daha fazla Hyperliquid marketi taranmali.</p>
+
+<div class="footer">
+  Rapor Tarihi: 21 Mart 2026 &nbsp;|&nbsp; Sistem: Multi-Agent Orchestration v2 &nbsp;|&nbsp; <b>429 Trade Analizi</b>
+</div>
+
+</body>
+</html>

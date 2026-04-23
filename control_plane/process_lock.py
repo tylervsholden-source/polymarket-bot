@@ -32,19 +32,34 @@ class ProcessLock:
         self._acquired = False
 
     def acquire(self) -> ProcessLockInfo:
-        """Lock al. Başka instance varsa sys.exit(1)."""
+        """Lock al. Başka instance varsa öldür ve devral.
+
+        Windows MSYS2 ortamında PID tracking güvenilmez — bash PID vs Windows PID
+        farklı. Bu yüzden: eski Python bot process'lerini aggressive öldür.
+        """
         self._path.parent.mkdir(exist_ok=True)
+
+        # ── Eski bot instance'larını öldür ──
+        # NOT: PowerShell subprocess hidden window'da crash yapıyor.
+        # Lock-file PID check yeterli — aşağıda old_pid varsa taskkill ile öldürülüyor.
+        # self._kill_other_bot_instances()
 
         if self._path.exists():
             old_pid_str = self._path.read_text().strip()
             if old_pid_str.isdigit():
                 old_pid = int(old_pid_str)
-                if self._pid_alive(old_pid):
-                    logger.error(
-                        f"Başka bir bot instance'ı zaten çalışıyor (PID {old_pid}). "
-                        f"Durdurmak için: kill {old_pid} veya {self._path} silin."
-                    )
-                    sys.exit(1)
+                if old_pid == os.getpid():
+                    logger.info(f"Lock zaten bu process'e ait (PID {old_pid}). Re-acquire.")
+                elif self._pid_alive(old_pid):
+                    # Hâlâ yaşıyorsa force kill (taskkill — os.kill Windows'ta güvensiz)
+                    logger.warning(f"Eski bot hâlâ çalışıyor (PID {old_pid}), öldürülüyor...")
+                    try:
+                        import subprocess as _sp
+                        _sp.run(["taskkill", "/F", "/PID", str(old_pid)],
+                                capture_output=True, timeout=5)
+                        time.sleep(1)
+                    except Exception:
+                        pass
                 else:
                     logger.warning(
                         f"Eski lock dosyası (PID {old_pid}, artık çalışmıyor). Temizleniyor."
@@ -90,16 +105,14 @@ class ProcessLock:
         return None
 
     def is_mine(self) -> bool:
-        """Lock bu process'e mi ait?"""
-        if not self._acquired:
-            return False
-        # Basit kontrol: lock dosyası bizim PID'imizi içeriyor mu?
-        # _pid_alive Windows'ta os.kill(pid,0) hatası verebilir,
-        # ama dosyayı biz yazdık, PID eşleşmesi yeterli.
-        if not self._path.exists():
-            return False
-        pid_str = self._path.read_text().strip()
-        return pid_str.isdigit() and int(pid_str) == os.getpid()
+        """Lock bu process'e mi ait?
+
+        Sadece in-memory _acquired flag'ına güven.
+        Dosya PID kontrolü Windows'ta subprocess PID karışıklığına
+        neden oluyordu (system python vs .venv python).
+        acquire() başarılıysa lock bizimdir — başka process değiştiremez.
+        """
+        return self._acquired
 
     def info(self) -> ProcessLockInfo:
         """Dashboard için lock durumu."""
@@ -113,10 +126,75 @@ class ProcessLock:
         )
 
     @staticmethod
+    def _kill_other_bot_instances() -> None:
+        """Windows'ta diğer bot Python process'lerini öldür.
+
+        taskkill /F /PID kullan — os.kill(pid, 9) Windows'ta process grubunu
+        etkileyebiliyor ve kendi process'imizi de öldürebiliyor.
+        """
+        my_pid = os.getpid()
+        logger.info(f"CLEANUP: my_pid={my_pid}, diğer main.py instance'ları aranıyor...")
+        try:
+            import subprocess
+            # PowerShell: tüm python process'lerini PID ve CommandLine ile listele
+            ps_cmd = (
+                "Get-CimInstance Win32_Process "
+                "-Filter \"Name like '%python%'\" "
+                "| Select-Object ProcessId,CommandLine "
+                "| ForEach-Object { "
+                "Write-Host \"$($_.ProcessId)|$($_.CommandLine)\" }"
+            )
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=15,
+            )
+            killed = 0
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line or "main.py" not in line:
+                    continue
+                parts = line.split("|", 1)
+                if not parts[0].strip().isdigit():
+                    continue
+                pid = int(parts[0].strip())
+                if pid != my_pid and pid > 0:
+                    try:
+                        # taskkill: sadece hedef PID'i öldürür, process grubuna dokunmaz
+                        subprocess.run(
+                            ["taskkill", "/F", "/PID", str(pid)],
+                            capture_output=True, timeout=5,
+                        )
+                        killed += 1
+                        logger.warning(f"Eski bot instance öldürüldü: PID {pid}")
+                    except Exception:
+                        pass
+            logger.info(f"CLEANUP: tamamlandı, {killed} instance öldürüldü")
+        except Exception as e:
+            logger.debug(f"Bot cleanup hatası (önemsiz): {e}")
+
+    @staticmethod
     def _pid_alive(pid: int) -> bool:
-        """PID hâlâ çalışıyor mu? Cross-platform."""
+        """PID hâlâ çalışıyor mu? Cross-platform.
+
+        Windows'ta os.kill(pid, 0) güvenilmez — farklı python.exe
+        instance'ları aynı PID'i paylaşabilir. tasklist ile doğrula.
+        """
         try:
             os.kill(pid, 0)
-            return True
         except (OSError, ProcessLookupError):
             return False
+
+        # Windows: ek doğrulama — PID gerçekten python mu?
+        if sys.platform == "win32" or os.name == "nt":
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                output = result.stdout.lower()
+                return "python" in output
+            except Exception:
+                pass  # tasklist başarısız → os.kill sonucuna güven
+
+        return True

@@ -1,0 +1,439 @@
+================================================================================
+POLYMARKET BOT - DETAILED CONTRADICTION REFERENCE INDEX
+Complete line numbers and code snippets for all 23 issues
+================================================================================
+
+CRITICAL ISSUES
+================================================================================
+
+[A1] OPT-6 LOSS SLOT COOLDOWN - MISSING
+------
+Documentation:
+  - File: CLAUDE.md, line ~45
+    "OPT-6: Loss Slot Cooldown — Kayıp olan slot'tan sonraki slot'u atla"
+  - File: docs/strategy.md, line ~125
+    "Bounce pattern — 2+ ardışık NO-win periyottan sonra %100 bounce"
+
+Code Reality:
+  - File: arbitrage_engine.py
+    - Line 1400-1416: OPT-1 regime strength cap
+    - Line 1418-1427: OPT-2 regime decay guard (NOT loss-based!)
+    - Line 1429-1437: OPT-3 momentum deceleration
+    - NO OPT-6 implementation found
+  
+  - Class: ArbitrageEngine.__init__ (line 201-242)
+    Has: self._regime_strength_peak, self._regime_decay_pause
+    Missing: self._last_loss_market_id, self._loss_cooldown_count
+
+Where to fix:
+  - arbitrage_engine.py, add to __init__:
+    self._loss_history = {}  # {condition_id: loss_count}
+  - Add logic in _evaluate_market before creating TradeSignal (after line 1570)
+
+
+[A2] 5M vs 15M UNIFIED BAYESIAN MOTOR
+------
+Evidence of mismatch:
+  - File: CLAUDE.md, table at line ~90
+    "v9: 5m=79% WR, 15m=44% WR"
+
+Code (timeframe detected but not used):
+  - File: arbitrage_engine.py
+    - Line 165-175: _detect_timeframe() correctly identifies 5m vs 15m
+    - Line 340: timeframe = _detect_timeframe(question)
+    - Line 350: sym = _detect_asset(question)
+    - Line 380-400: ta_kwargs built (volatility, rsi, macd)
+    - Line 505-512: bayes = self.bayesian.estimate(spot_change_pct=change_pct, **ta_kwargs)
+    
+    PROBLEM: timeframe NOT passed to bayesian.estimate()!
+
+  - File: strategies/bayesian.py (not provided, but referenced)
+    Should have: def estimate(spot_change_pct, volatility, ..., timeframe=None)
+    Instead has: def estimate(spot_change_pct, volatility, ...)
+
+Where to fix:
+  - arbitrage_engine.py line 505-512:
+    bayes = self.bayesian.estimate(..., timeframe=timeframe)
+  - strategies/bayesian.py: add timeframe parameter and scale indicators accordingly
+
+
+[A3] REVIEWER FALLBACK UNRELIABILITY
+------
+Decision points:
+  - File: reviewer_agent.py, line 176-186
+    _ensure_client() checks: _HAS_ANTHROPIC and ANTHROPIC_API_KEY
+    If no API → returns False
+    
+  - File: reviewer_agent.py, line 182-186
+    if has_api:
+        decisions = await self._review_with_claude(signals, research, capital)
+    else:
+        logger.info("[ReviewerAgent] No API — falling back to rule-based review")
+        decisions = self._rule_based_review(signals, research, capital)
+
+  - File: coordinator.py, line 296-310
+    else:
+        result.review_status = review_out.status.value
+        logger.warning("[Coordinator] Review failed... passing all signals through (no veto)")
+        result.approved_signals = [(sig, ReviewDecision(..., verdict=ReviewVerdict.APPROVE_WITH_WARNING, ...))
+            for sig in signal_result.signals]
+
+Bug in fallback:
+  - File: reviewer_agent.py, line 345
+    if "COUNTER_REGIME" in " ".join(sig.risk_flags):
+    
+    PROBLEM: substring matching
+    risk_flags = ["COUNTER_REGIME_NO", "WHALE_OPPOSITION"]
+    " ".join(...) = "COUNTER_REGIME_NO WHALE_OPPOSITION"
+    "COUNTER_REGIME" in "..." → TRUE (but fragile)
+    
+    Should be: any(flag.startswith("COUNTER_REGIME") for flag in sig.risk_flags)
+
+Where to fix:
+  1. reviewer_agent.py line 345:
+     Replace substring check with startswith() check
+  2. coordinator.py line 299-301:
+     Don't auto-approve if review fails — VETO instead (safer default)
+  3. Add ANTHROPIC_API_KEY requirement check at startup (fail loudly)
+
+
+================================================================================
+HIGH-PRIORITY ISSUES (with line refs)
+================================================================================
+
+[B1] REGIME DOUBLE-COUNT (NEUTRAL regime only)
+------
+Leader bias in Bayesian:
+  - arbitrage_engine.py, line 818-838:
+    leader_bias = (regime.get("btc_4h_pct", 0.0) * 0.6 + ...) * 0.6 + ...
+    Passed to Bayesian.estimate() as ta_kwargs parameter
+    
+  - bayesian.py (estimated): Applies 5% weight to leader_bias
+
+First adjustment (NEUTRAL regime specific):
+  - arbitrage_engine.py, line 901-908:
+    if _regime_name_for_edge == "NEUTRAL":
+        _neutral_pull = 0.10
+        adjusted_bayesian = bayesian_prob * (1 - _neutral_pull) + 0.50 * _neutral_pull
+    
+    PROBLEM: This pulls toward 0.50 regardless of leader_bias already baked in
+    If leader_bias was +0.04 (already applied in Bayesian), pulling again = double-count
+
+Second regime:
+  - arbitrage_engine.py, line 901: else branch
+    adjusted_bayesian = bayesian_prob  (no pull)
+    
+    This means leader_bias counted ONCE for BULLISH/BEARISH
+    But counted TWICE for NEUTRAL (Bayesian + neutral_pull)
+
+Where to fix:
+  - arbitrage_engine.py line 901-908:
+    if _regime_name_for_edge == "NEUTRAL":
+        adjusted_bayesian = bayesian_prob * 0.95 + 0.50 * 0.05  # LIGHTER pull (5% not 10%)
+    OR remove neutral_pull entirely since Bayesian already has 5% leader_bias weight
+
+
+[B2] NO PRICE SYNTHETIC PRICING INFLATED
+------
+Location:
+  - arbitrage_engine.py, line 920-935
+    real_no_ask = market.get("no_best_ask")
+    if real_no_ask and float(real_no_ask) > 0:
+        no_price_ask = float(real_no_ask)
+    else:
+        no_price_ask = round(1.0 - yes_price, 4)  # SYNTHETIC
+
+Problem:
+  - Formula assumes YES + NO = 1.0 exactly
+  - Polymarket inefficiencies: often YES + NO < 1.0 (0.91-0.98)
+  - Example: YES=0.45, real NO sum should be 0.46, but synthetic says 0.55
+  - Synthetic NO edge = 0.55 - 0.50 prob = +0.05 (fake!)
+  - Real NO edge = 0.46 - 0.50 prob = -0.04 (correct, should VETO)
+
+Cost adjustment:
+  - arbitrage_engine.py, line 938-943:
+    cost_yes = self.edge_model.total_cost(yes_price)
+    cost_no = self.edge_model.total_cost(no_price_ask)
+    
+    Tries to fix but applies SAME cost to both → doesn't help with synthetic inflation
+
+Where to fix:
+  1. Before synthetic fallback, check market.get("sum_monitor_result")
+  2. If available, use empirical sum inefficiency to adjust synthetic NO
+  3. If synthetic NO used, flag as "low_confidence" and apply 2x edge threshold
+
+
+[B3] CONFIDENCE DAMPENING ASYMMETRY
+------
+Location: arbitrage_engine.py, line 533-542
+```python
+if bayesian_prob > 0.50:
+    bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.95  # YES: 5% reduction
+else:
+    bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.85  # NO: 15% reduction
+```
+
+Problem analysis:
+  - YES WR = 72%, NO WR = 33%
+  - Current dampening is inverse of reality:
+    * YES (strong signal) damped 5%
+    * NO (weak signal) damped 15%
+  - Should dampen weak signal LESS (increase threshold instead)
+
+Example trade lost:
+  - NO market at 0.40, Bayesian prob = 0.55
+  - After dampening: prob = 0.50 + (0.55-0.50)*0.85 = 0.5425
+  - no_edge = 0.50 - 0.40 = 0.10 (after dampening = 0.08)
+  - Barely passes min_edge check (0.08), but data says NO has 33% WR
+  - Should require edge >= 0.20 for profitable NO trade
+
+Where to fix:
+  - Change line 533-542:
+    if bayesian_prob > 0.50:
+        bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 0.98  # YES: 2% (preserve strong edge)
+    else:
+        bayesian_prob = 0.50 + (bayesian_prob - 0.50) * 1.00  # NO: 0% (don't dampen weak)
+  - Increase min_edge_no from 0.15 to 0.20-0.22
+
+
+[B4] ZONE-ADAPTIVE MULTIPLIER DATA STALENESS
+------
+Location: arbitrage_engine.py, line 1136-1175
+Data snapshot:
+  - Comment at line 1139:
+    "Updated 2026-03-21 15:30 UTC. Philosophy: never ban, always adapt."
+  - Hardcoded zone multipliers for YES and NO ranges
+  - Example: YES@0.52-0.55 → zone_mult = 2.0 (because "46% WR, -$32.03")
+
+Problem:
+  - Timestamp: 2026-03-21 15:30 UTC
+  - Now: 2026-03-22 (1 day later)
+  - Market regime changes daily → zone WR changes daily
+  - Philosophy says "always adapt" but code applies STATIC multipliers
+
+Evidence of change:
+  - 2026-03-21: YES@0.52-0.55 was 46% WR
+  - 2026-03-22: could be 52% WR, 58% WR, or 40% WR (unknown)
+  - Code: still applies 2.0x multiplier (would VETO profitable zone, or allow losers)
+
+Where to fix:
+  - Replace hardcoded zones with dynamic calculation from position_manager.get_recent_trades()
+  - Or: require zone re-calibration every N cycles (3-4 hours max)
+  - Add .env flag: ZONE_ADAPTIVE_ENABLED=true/false
+
+
+[B5] MOMENTUM_DECELERATION GATE COMPLETELY INERT
+------
+Location: arbitrage_engine.py, line 1429-1437
+```python
+if direction == "NO" and momentum_decelerating and trade_edge < _DECEL_MIN_EDGE:
+    logger.info(f"MOMENTUM_DECEL: ...")
+    return None
+```
+
+How it's supposed to work:
+  - spot.get("momentum_decelerating") should be True if |change[-1]| < |change[-2]|
+  - If momentum slowing down + NO trade = bounce risk → VETO
+
+Reality:
+  - arbitrage_engine.py, line 355:
+    momentum_decelerating = spot.get("momentum_decelerating", False)
+  - Default is False
+  - BinanceFeed source (not provided) never sets this field
+  - Gate NEVER activates
+
+Where to fix:
+  1. Add field to BinanceFeed.get_signal() output:
+     ```python
+     candles = self.feed[-3:]  # last 3 candles
+     momentum_decelerating = (abs(candles[-1].change) < abs(candles[-2].change) <
+                              abs(candles[-3].change))
+     ```
+  2. Test: feed["momentum_decelerating"] should be True in 30-40% of calls
+
+
+[B6] VOLUME CONFIRMATION GATE DISABLED
+------
+Location: arbitrage_engine.py, line 1411-1415
+```python
+# ── OPT-4: VOLUME CONFIRMATION GATE (v9.2) ───────────────────────
+# DISABLED: 5m crypto markets always have low volume (0.05-0.15x).
+# Edge model + cost model already filter junk signals.
+# Volume gate was blocking every valid 5m signal.
+# if direction == "NO" and volume_ratio < _base_vol and data_source != "no-data":
+#     ...pass
+```
+
+Contradiction:
+  - CLAUDE.md states: "OPT-4: Volume Confirmation Gate — vol_ratio < 1.2x → NO block"
+  - Code: COMMENTED OUT
+  - Comment explains why (too aggressive) but documentation says it's active
+
+Uncertainty:
+  - Is this intentional (accepted regression)?
+  - Or is it a bug that needs to be re-enabled?
+  - No way to know without git history
+
+Where to fix:
+  - Update CLAUDE.md to reflect: "OPT-4: DISABLED as of v9.2" OR
+  - Un-comment code and implement volume confirmation properly:
+    ```python
+    if direction == "NO" and volume_ratio < 1.0:  # more lenient than 1.2x
+        logger.info(f"OPT4_BLOCK: ...")
+        return None
+    ```
+
+
+[B7] COINFLIP ZONE EDGE THRESHOLD TOO OPTIMISTIC
+------
+Location: arbitrage_engine.py, line 1110-1133
+```python
+_COINFLIP_LOW  = 0.45
+_COINFLIP_HIGH = 0.55
+_COINFLIP_EDGE_OVERRIDE = 0.10  # Strong edge bypasses dead zone
+```
+
+Data:
+  - Line 1098-1104 comment:
+    "entry 0.45-0.55 = %78 of trades, %41 WR → LOSING"
+
+Math check:
+  - 41% WR in 0.45-0.55 zone means:
+    * 41% win, 59% loss
+    * To break even: P(win)*payout - P(loss)*1 = 0
+    * At price 0.50: payout = 2.0
+    * 0.41*2.0 - 0.59*1 = 0.82 - 0.59 = +0.23 (wait, profit?)
+  - But accounting for cost (1%):
+    * 0.41*(2.0 - 0.01) - 0.59*(1 + 0.01) = 0.8159 - 0.5959 = +0.22
+    * So even 41% WR at 0.50 is profitable?
+  
+  NO — WR of 41% vs edge expectation of 50% means:
+    * If Bayesian says prob=0.50 but actual WR=41%
+    * Then Bayesian is overestimating by 9 percentage points
+    * To overcome this, need edge > Bayesian overestimate
+    * Edge >= 0.18-0.20 (not 0.10)
+
+Where to fix:
+  - Change line 1110:
+    _COINFLIP_EDGE_OVERRIDE = 0.18  # was 0.10 (too optimistic)
+
+
+[B8] REGIME-AWARE NO GATE SOFT/HARD CAP CONFLICT
+------
+Location: arbitrage_engine.py, line 1400-1416
+Hard cap:
+  ```python
+  _REGIME_SOFT_CAP = 0.75
+  _REGIME_HARD_CAP = 0.85
+  if direction == "NO" and _current_str > _REGIME_HARD_CAP:
+      logger.info(f"REGIME_STR_CAP: ... NO blocked — str={_current_str:.2f} > {_REGIME_HARD_CAP}")
+      return None
+  ```
+
+Soft cap (later in code):
+  - arbitrage_engine.py, line 1511-1544:
+    ```python
+    if direction == "NO" and _regime_type == "BULLISH":
+        _bull_str = regime.get("strength", 0)
+        if _bull_str > 0.05:
+            _no_floor = 0.12 + _bull_str * 0.15
+    ```
+
+Problem:
+  - Hard cap evaluated at line 1400 (EARLY)
+  - Soft cap evaluated at line 1511 (LATER)
+  - If str > 0.85: hard cap returns None → soft cap never reached
+  - This means soft cap logic is dead code for str > 0.85
+
+Flow:
+  1. str=0.80: hard cap passes, soft cap raises floor to 0.12+0.08*0.15=0.132 ✓
+  2. str=0.90: hard cap blocks at line 1403 → soft cap unreachable ✗
+
+Where to fix:
+  - Rename: soft_cap→medium_cap, hard_cap→absolute_cap
+  - Clarify: soft is advisory (scale Kelly), medium is threshold (raise floor), hard is wall (BLOCK)
+  - OR merge into single tiered system:
+    ```python
+    if str > 0.85:
+        return None  # ABSOLUTE BLOCK
+    elif str > 0.75:
+        size *= 0.5  # HALF KELLY
+    elif str > 0.60:
+        _no_floor = 0.10 + str*0.10  # RAISED THRESHOLD
+    ```
+
+
+================================================================================
+MEDIUM-PRIORITY REFERENCES (selected)
+================================================================================
+
+[C1] PATTERN SCORE THRESHOLD REGRESSION
+  Location: arbitrage_engine.py, line 1039-1050
+  - Comment: "was 0.4"
+  - Current: >= 0.6
+  - Impact: fewer YES activations, from 75% WR to 50%
+  
+  Data: No backtest shown for threshold change (risky)
+
+[C3] MEAN REVERSION ASSUMPTION
+  Location: arbitrage_engine.py, line 1088-1098
+  - Blocks ALL YES if consecutive_bullish >= 2
+  - Assumption: 2+ green always followed by red
+  - Reality: sometimes continues (BTC, SOL have 4-5 green streaks)
+  
+  Fix: use ADX to detect trend continuation vs mean reversion
+
+[C9] BTC_LEADER_BLOCK EXCLUDES BTC
+  Location: arbitrage_engine.py, line 1195-1206
+  ```python
+  if _no_viable and sym and "BTC" not in sym and self.binance_feed is not None:
+      # BTC itself excluded!
+  ```
+  
+  Fix: remove "BTC" not in sym check (BTC also correlates with self)
+
+[C12] GOLDEN HOUR TIMEZONE BUG
+  Location: arbitrage_engine.py, line 1684
+  ```python
+  _hour_et = (_now_utc.hour - 4) % 24  # WRONG: always -4, ignores DST
+  ```
+  
+  Fix: use zoneinfo.ZoneInfo("America/New_York") for proper DST handling
+
+
+================================================================================
+FILES AND LINE COUNTS
+================================================================================
+
+arbitrage_engine.py: 1690 lines
+  - Signal generation core (lines 1-600)
+  - Market evaluation (lines 600-1000)
+  - Direction decision (lines 1000-1200)
+  - Gate filters (lines 1200-1600)
+  - Kelly sizing (lines 1600-1650)
+  - Final signal output (lines 1650-1690)
+
+kelly_criterion.py: 113 lines
+  - Position sizing formula (lines 71-109)
+  - Streak multiplier (lines 28-70)
+
+orchestrator.py: 1900+ lines (partially read)
+  - Cycle management (lines 500-650)
+  - Multi-agent pipeline (lines 700-900)
+  - Live gate checks (lines 800-850)
+  - Trade execution (lines 900-1100)
+
+coordinator.py: 390 lines
+  - Research + Signal parallel (lines 200-230)
+  - Merge + Review sequential (lines 260-330)
+  - Fallback approval (lines 296-310) ← BUG
+
+reviewer_agent.py: 399 lines
+  - Anthropic client (lines 140-160)
+  - Claude API review (lines 205-246)
+  - Rule-based fallback (lines 323-398) ← BUG at line 345
+
+research_agent.py: 351 lines
+signal_agent_v2.py: 263 lines
+
+================================================================================

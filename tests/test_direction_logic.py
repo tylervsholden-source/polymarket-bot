@@ -42,11 +42,11 @@ def make_market(yes_price: float, yes_token="yes_tok", no_token="no_tok",
 @pytest.mark.asyncio
 async def test_bullish_yields_yes_direction():
     eng = make_engine()
-    market = make_market(yes_price=0.40)
+    market = make_market(yes_price=0.48)
 
-    # Bayesian'ı 0.60 dön (40c piyasa, %60 tahmin → bullish, edge=0.20)
+    # Bayesian'ı 0.65 dön (48c piyasa, %65 tahmin → bullish, edge=0.17)
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.60, signal_strength=0.5)
+        mock_est.return_value = MagicMock(probability=0.65, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None, "Bullish edge'de sinyal üretilmeli"
@@ -59,14 +59,16 @@ async def test_bullish_yields_yes_direction():
 @pytest.mark.asyncio
 async def test_bearish_yields_no_direction():
     eng = make_engine()
-    # Provide real NO book so NO side is tradable (not synthetic/missing)
-    market = make_market(yes_price=0.70, no_best_ask=0.30, no_best_bid=0.28)
+    # Provide real NO book — NO ask=0.46 (above CHEAP_ENTRY_BLOCK threshold)
+    market = make_market(yes_price=0.70, no_best_ask=0.46, no_best_bid=0.44)
 
-    # Bayesian 0.45 → YES 70c'ta pahalı → NO al (30c'tan, edge≈0.25)
+    # Bayesian 0.20 → YES 70c'ta pahalı → NO al (46c'tan, strong NO edge)
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.45, signal_strength=0.5)
+        mock_est.return_value = MagicMock(probability=0.20, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
+    # NO direction artık 0.12+ edge gerektirir ve half-Kelly uygulanır
+    # NO edge = (1-0.20) - 0.46 = 0.34 (güçlü, 0.12 üstünde → geçer)
     assert signal is not None, "Bearish edge'de sinyal üretilmeli"
     assert signal.direction == "NO"
     assert signal.token_id == "no_tok"
@@ -91,17 +93,17 @@ async def test_neutral_no_signal():
 @pytest.mark.asyncio
 async def test_no_signal_entry_price_is_no_price():
     eng = make_engine()
-    # Provide real NO book for NO direction to be eligible
-    market = make_market(yes_price=0.80, no_best_ask=0.20, no_best_bid=0.18)
+    # Provide real NO book — NO ask=0.46 (above CHEAP_ENTRY_BLOCK threshold)
+    market = make_market(yes_price=0.70, no_best_ask=0.46, no_best_bid=0.44)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
-        mock_est.return_value = MagicMock(probability=0.35, signal_strength=0.5)  # bearish, edge≈0.45
+        mock_est.return_value = MagicMock(probability=0.20, signal_strength=0.5)  # bearish, strong NO edge
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
     assert signal is not None
     assert signal.direction == "NO"
-    # entry_price NO tarafına yakın olmalı (0.20 ± Stoikov ayarı)
-    assert signal.entry_price < 0.40, (
+    # entry_price NO tarafına yakın olmalı (0.46 ± Stoikov ayarı)
+    assert signal.entry_price < 0.55, (
         f"NO entry_price YES fiyatına yakın olmamalı: {signal.entry_price:.3f}"
     )
 
@@ -110,7 +112,7 @@ async def test_no_signal_entry_price_is_no_price():
 @pytest.mark.asyncio
 async def test_yes_signal_market_price_is_yes_price():
     eng = make_engine()
-    market = make_market(yes_price=0.35)
+    market = make_market(yes_price=0.48)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.65, signal_strength=0.5)
@@ -118,5 +120,5 @@ async def test_yes_signal_market_price_is_yes_price():
 
     assert signal is not None
     assert signal.direction == "YES"
-    assert signal.market_price == pytest.approx(0.35)
+    assert signal.market_price == pytest.approx(0.48)
     assert signal.token_id == "yes_tok"

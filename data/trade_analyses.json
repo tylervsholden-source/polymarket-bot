@@ -1,0 +1,2993 @@
+[
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 4:45PM-5:00PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5151865
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 4:45PM-5:00PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5159554
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 5:05PM-5:10PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5172236
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 24, 5:00PM-5:15PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.518139
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 5:10PM-5:15PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.65,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5190613
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 5:15PM-5:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5199788
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 5:15PM-5:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5207636
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 5:35PM-5:40PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5215445
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 5:40PM-5:45PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5224447
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 6:00PM-6:15PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5232842
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 6:00PM-6:15PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5240972
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 6:35PM-6:40PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.524964
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 6:35PM-6:40PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5261822
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 24, 7:05PM-7:10PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5271223
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 6:50PM-6:55PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5280719
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 24, 7:15PM-7:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.73,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5291808
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 7:15PM-7:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5301423
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 24, 7:40PM-7:45PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.531105
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 24, 7:45PM-8:00PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5322576
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 8:10PM-8:15PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5332806
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 8:15PM-8:20PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5343502
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 8:15PM-8:30PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.53555
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 24, 8:35PM-8:40PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.536775
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 8:35PM-8:40PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5378757
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 8:35PM-8:40PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5390959
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 8:45PM-8:50PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5404851
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 8:45PM-8:50PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5422254
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 24, 8:45PM-9:00PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5435884
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 24, 8:45PM-9:00PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5449786
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 24, 8:45PM-9:00PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.546389
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 24, 8:45PM-9:00PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5478349
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 1:10AM-1:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.65,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5492206
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 1:10AM-1:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5506191
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 1:10AM-1:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5518868
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 1:20AM-1:25AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5533714
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 1:25AM-1:30AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5549068
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 1:25AM-1:30AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.556499
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 1:40AM-1:45AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5583153
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 2:05AM-2:10AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.62,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5620625
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 2:00AM-2:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.2,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5646157
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 2:20AM-2:25AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5663357
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 2:25AM-2:30AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5679417
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 2:30AM-2:35AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.51,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5693696
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 2:35AM-2:40AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5708513
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 3:05AM-3:10AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5725467
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 3:00AM-3:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5740821
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 3:15AM-3:30AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5757844
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 3:30AM-3:35AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5776672
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 3:40AM-3:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5795245
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 3:45AM-3:50AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.65,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.581321
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 3:45AM-4:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.583082
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 4:00AM-4:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5850062
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 4:15AM-4:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.58695
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 4:30AM-4:45AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5887613
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 4:30AM-4:45AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5904522
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 4:30AM-4:45AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5922272
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 5:00AM-5:05AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5938945
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 5:05AM-5:10AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.5965765
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 5:10AM-5:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.5987444
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 5:35AM-5:40AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6010327
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 5:35AM-5:40AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6030045
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 5:55AM-6:00AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.604837
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 5:45AM-6:00AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.606729
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 6:30AM-6:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6091733
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 6:55AM-7:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6112297
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 6:45AM-7:00AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.37,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6134012
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 7:15AM-7:20AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6152723
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 7:15AM-7:30AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.68,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.617264
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 7:15AM-7:30AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 3.77,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6192014
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 7:40AM-7:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6211061
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:40AM-7:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6231856
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 7:40AM-7:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.75,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6252615
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:50AM-7:55AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6273265
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 7:45AM-8:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6294901
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 8:00AM-8:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6315343
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 8:25AM-8:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.48,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6335714
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 8:25AM-8:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.72,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6357257
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 8:25AM-8:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.56,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.637978
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 8:15AM-8:30AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6402054
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 8:25AM-8:30AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.86,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6424863
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 8:40AM-8:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.64462
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 8:45AM-9:00AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6469069
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 9:00AM-9:05AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6489966
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 9:00AM-9:05AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6511295
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 9:00AM-9:05AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6532688
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 9:00AM-9:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.8,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.655484
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 9:00AM-9:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6578877
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 9:00AM-9:15AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6601028
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 9:15AM-9:30AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 3.2,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6623354
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 9:35AM-9:40AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.79,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6645262
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 9:40AM-9:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.94,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.667127
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 9:45AM-10:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.51,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6699224
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 9:45AM-10:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6725569
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 9:45AM-10:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.44,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6751342
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 9:45AM-10:00AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6775827
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 10:10AM-10:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.680084
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 10:10AM-10:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6834123
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 10:10AM-10:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6859431
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 10:10AM-10:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6884296
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 10:30AM-10:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6908588
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 11:05AM-11:10AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 3.17,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6935148
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 11:00AM-11:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 3.14,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.6960263
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 11:20AM-11:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.25,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.6989095
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 11:20AM-11:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.701733
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 11:35AM-11:40AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.65,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7045453
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 11:45AM-12:00PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7070904
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 11:45AM-12:00PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -1.95,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7099495
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 12:20PM-12:25PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -1.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7131524
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 12:25PM-12:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.716112
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 12:30PM-12:35PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7188225
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 25, 12:30PM-12:45PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.25,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7216587
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 12:30PM-12:45PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7244093
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 12:30PM-12:45PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7272065
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 25, 12:30PM-12:45PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7300267
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 12:30PM-12:45PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7326572
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 1:30PM-1:35PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.13,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7353752
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 1:55PM-2:00PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.738228
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 25, 1:55PM-2:00PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7412171
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 2:10PM-2:15PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7447748
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 2:15PM-2:20PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7485604
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 2:30PM-2:35PM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 3.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7514653
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 3:00PM-3:05PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7543154
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 4:30PM-4:35PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7574492
+  },
+  {
+    "market_id": "",
+    "question": "Hyperliquid Up or Down - March 25, 4:30PM-4:35PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -1.65,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7606432
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 5:15PM-5:20PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7638028
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 6:00PM-6:15PM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7672558
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 6:50PM-6:55PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.2,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.770419
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 6:50PM-6:55PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.2,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7734737
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 25, 7:05PM-7:10PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.777365
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:05PM-7:10PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7816613
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 7:00PM-7:15PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7853096
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:25PM-7:30PM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7886326
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 25, 7:25PM-7:30PM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7924576
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:35PM-7:40PM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774498933.7955892
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 25, 7:40PM-7:45PM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.12,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774498933.7986782
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 1:05AM-1:10AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774502138.7951663
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 1:10AM-1:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774502535.0659657
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 26, 1:20AM-1:25AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774502921.69299
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 1:30AM-1:35AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774503469.1957667
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 26, 1:30AM-1:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774504259.9134233
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 1:45AM-2:00AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774505140.4433768
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 1:55AM-2:00AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774505140.4475794
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 1:55AM-2:00AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774505140.4516735
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 1:55AM-2:00AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774505220.450539
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 2:00AM-2:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -1.7,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774506011.7009506
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 2:10AM-2:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774506090.9960995
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 2:25AM-2:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -3.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774506976.9045784
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 2:30AM-2:35AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774507138.1554642
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 2:30AM-2:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774507868.374414
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 2:30AM-2:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774507868.3824146
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 2:30AM-2:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774507868.3859053
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 3:00AM-3:05AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774508896.5273783
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 3:05AM-3:10AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774509296.5737114
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 3:05AM-3:10AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -3.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774509375.698209
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 3:15AM-3:30AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.8,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774510577.9721837
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 3:15AM-3:30AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.95,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774510655.728154
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 3:40AM-3:45AM ET",
+    "direction": "YES",
+    "outcome": "WIN",
+    "pnl": 3.05,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "YES_BASE_RATE: YES trade'lerin y\u00fcksek WR (%72) ile tutarl\u0131",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774511462.0359836
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 3:40AM-3:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.72,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774511462.0404875
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 3:40AM-3:45AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.59,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774511462.0441773
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 4:05AM-4:10AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774512894.9324076
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 26, 4:05AM-4:10AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774512894.9369142
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 4:20AM-4:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774513782.4505332
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 4:20AM-4:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.85,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774513782.4557552
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 4:20AM-4:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.59,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774513864.449158
+  },
+  {
+    "market_id": "",
+    "question": "Hyperliquid Up or Down - March 26, 4:40AM-4:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 3.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774515050.879281
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 26, 4:45AM-5:00AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774516000.9544153
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 5:05AM-5:10AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774516481.4234107
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 5:20AM-5:25AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774517363.861741
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 5:20AM-5:25AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774517444.3070486
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 5:35AM-5:40AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774518325.4013104
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 5:35AM-5:40AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774518325.4063487
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 5:30AM-5:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774518723.016366
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 6:05AM-6:10AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774520106.3456047
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 6:15AM-6:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.16,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774521367.5430999
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 6:15AM-6:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774521367.5481365
+  },
+  {
+    "market_id": "",
+    "question": "Hyperliquid Up or Down - March 26, 6:15AM-6:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -3.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774521367.552372
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 6:55AM-7:00AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774523178.3445225
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 7:00AM-7:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774524139.259206
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 7:10AM-7:15AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774524139.264044
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 7:30AM-7:35AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774525103.2180486
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 7:30AM-7:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774525829.7347648
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 7:30AM-7:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774525829.7394207
+  },
+  {
+    "market_id": "",
+    "question": "Hyperliquid Up or Down - March 26, 7:30AM-7:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -3.0,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774525909.240187
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 7:50AM-7:55AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -1.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774526464.9872105
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 8:00AM-8:05AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774526942.2366931
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 8:00AM-8:15AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.55,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774527737.0259576
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 8:45AM-9:00AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774530363.984791
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 9:30AM-9:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.6,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774533014.4833436
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 9:40AM-9:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774533103.2525434
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 10:00AM-10:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774534822.665735
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 10:00AM-10:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774534822.671374
+  },
+  {
+    "market_id": "",
+    "question": "Dogecoin Up or Down - March 26, 10:00AM-10:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774534822.6758275
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 10:00AM-10:15AM ET",
+    "direction": "YES",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "INSUFFICIENT_EDGE: Edge e\u015fi\u011finin alt\u0131nda giri\u015f",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774534902.9941568
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 10:30AM-10:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.45,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774536592.7728996
+  },
+  {
+    "market_id": "",
+    "question": "Ethereum Up or Down - March 26, 10:30AM-10:45AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774536592.777966
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 10:30AM-10:45AM ET",
+    "direction": "NO",
+    "outcome": "WIN",
+    "pnl": 2.5,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "CORRECT_DIRECTION: Y\u00f6n tahmini do\u011fru",
+    "pattern": "",
+    "lessons": [],
+    "timestamp": 1774536592.7824874
+  },
+  {
+    "market_id": "",
+    "question": "XRP Up or Down - March 26, 11:15AM-11:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.35,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774539346.4169323
+  },
+  {
+    "market_id": "",
+    "question": "Solana Up or Down - March 26, 11:15AM-11:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774539346.4223123
+  },
+  {
+    "market_id": "",
+    "question": "Bitcoin Up or Down - March 26, 11:15AM-11:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.4,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774539346.4268637
+  },
+  {
+    "market_id": "",
+    "question": "BNB Up or Down - March 26, 11:15AM-11:30AM ET",
+    "direction": "NO",
+    "outcome": "LOSS",
+    "pnl": -2.3,
+    "edge": 0,
+    "confluence": 0,
+    "root_cause": "NO_THIN_EDGE: Yetersiz edge ile NO trade (33% WR riski)",
+    "pattern": "LOW_EDGE_LOSS",
+    "lessons": [
+      "NO trade'lerde min 0.15 edge gerekli \u2014 33% WR riski devam ediyor",
+      "Edge < 0.05 trade'ler nadiren kazan\u0131yor \u2014 filtre g\u00fc\u00e7lendir",
+      "Pattern: LOW_EDGE_LOSS \u2014 Edge < 0.08 olan trade kaybetti"
+    ],
+    "timestamp": 1774539425.812778
+  }
+]

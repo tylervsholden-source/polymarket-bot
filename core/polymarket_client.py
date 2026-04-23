@@ -17,6 +17,10 @@ CHAIN_ID = 137  # Polygon mainnet
 
 
 class PolymarketClient:
+    # ── Global dedup: aynı market'e 5dk içinde tekrar order koymayı engelle ──
+    _order_dedup: dict[str, float] = {}  # market_id → last order epoch
+    ORDER_DEDUP_SEC = 300  # 5 dakika cooldown
+
     def __init__(self):
         self.private_key = os.getenv("POLYMARKET_PRIVATE_KEY")
         self.wallet_address = os.getenv("POLYMARKET_WALLET_ADDRESS")
@@ -38,6 +42,14 @@ class PolymarketClient:
                 funder=self.wallet_address,
             )
             self._clob.set_api_creds(self._clob.create_or_derive_api_creds())
+            # ROUNDING_CONFIG patch — amount=4 prevents "invalid amounts" errors.
+            try:
+                from py_clob_client.order_builder.builder import ROUNDING_CONFIG
+                from py_clob_client.clob_types import RoundConfig
+                for _ts, _pd in [("0.1", 1), ("0.01", 2), ("0.001", 3), ("0.0001", 4)]:
+                    ROUNDING_CONFIG[_ts] = RoundConfig(price=_pd, size=2, amount=4)
+            except Exception:
+                pass
             logger.info("CLOB client başlatıldı (gerçek mod).")
             self._ensure_allowance()
         except ImportError:
@@ -307,6 +319,9 @@ class PolymarketClient:
         CRITICAL: Every order attempt is journaled to data/trade_journal.jsonl
         BEFORE submission. This prevents silent money loss.
         """
+        # ORDER_DEDUP_BLOCK kaldırıldı — sinyal neyse o
+        now = time.time()
+
         # ── JOURNAL: Record intent BEFORE sending to CLOB ──
         journal_entry = {
             "action": "ORDER_ATTEMPT",
@@ -334,31 +349,48 @@ class PolymarketClient:
         journal_entry["result"] = "PENDING"
         self._journal_trade(journal_entry)
 
+        # Mark dedup BEFORE sending — para CLOB'a gidince zaten kilitlenir
+        self._order_dedup[market_id] = time.time()
+
         try:
             from py_clob_client.clob_types import OrderArgs, OrderType
             from py_clob_client.order_builder.constants import BUY
 
             side = BUY
 
-            from py_clob_client.order_builder.builder import ROUNDING_CONFIG
-            from py_clob_client.clob_types import RoundConfig
-            # Patch ALL tick sizes — amount=4 prevents "invalid amounts" errors.
-            # Without this, py-clob-client defaults to amount=2 which truncates
-            # maker_amount and causes CLOB rejection (e.g. "should be 3.9912 but got 3.99").
-            for _ts, _pd in [("0.1", 1), ("0.01", 2), ("0.001", 3), ("0.0001", 4)]:
-                ROUNDING_CONFIG[_ts] = RoundConfig(price=_pd, size=2, amount=4)
+            # ROUNDING_CONFIG artık _init_clob()'da bir kere patch ediliyor.
 
-            # GTC with slight price bump for fill priority.
-            # +0.01 instead of +0.02 — audit found the 0.02 overpay ate 25% of edge.
-            # Edge model accounts for 0.01 total cost. Must match.
+            # GTC with price bump for fill priority.
+            # Bump read from control.json (hot-configurable, no restart needed).
+            # Default 0.03. +0.02 gave 17% fill rate (Mar 21).
+            # Edge model SPREAD_COST=0.025 accounts for this cost.
             import asyncio
             import math
+            import json as _json
 
-            price = round(min(price + 0.01, 0.99), 2)
+            _bump = 0.02  # default reduced: 0.03 was too aggressive, 100% timeout on Mar 21
+            try:
+                with open(os.path.join("data", "control.json")) as _cf:
+                    _ctrl = _json.load(_cf)
+                    _bump = _ctrl.get("price_bump", 0.02)
+            except Exception:
+                pass
+
+            # Adaptive bump: don't exceed 0.99, don't bump past midpoint
+            # If price already high (>0.90), reduce bump to avoid overpaying
+            if price > 0.90:
+                _bump = min(_bump, 0.01)
+            elif price > 0.80:
+                _bump = min(_bump, 0.02)
+            price = round(min(price + _bump, 0.99), 2)
 
             # Size (taker_amount) max 2 decimals per CLOB API.
             # maker_amount (USDC) max 4 decimals.
             size = math.floor(amount / price * 100) / 100
+
+            # CLOB minimum size = 5 shares
+            if size < 5.0:
+                size = 5.0
 
             # CLOB requires notional (size * price) >= $1.00
             while size * price < 1.0 and price > 0:
@@ -406,9 +438,9 @@ class PolymarketClient:
 
             # GTC: emir hemen dolmayabilir — 30sn bekle, dolmamışsa iptal et
             if status != "matched":
-                logger.info(f"GTC emir gönderildi ({order_id}), fill bekleniyor (max 30sn)...")
+                logger.info(f"GTC emir gönderildi ({order_id}), fill bekleniyor (max 45sn)...")
                 filled = False
-                for _wait in range(6):  # 6 × 5s = 30s
+                for _wait in range(9):  # 9 × 5s = 45s
                     await asyncio.sleep(5)
                     try:
                         order_info = self._clob.get_order(order_id)
@@ -424,20 +456,38 @@ class PolymarketClient:
                         logger.debug(f"GTC poll hatası: {poll_err}")
 
                 if not filled:
-                    # 30sn doldu, dolmadı — iptal et
-                    logger.warning(f"GTC emir 30sn içinde dolmadı — iptal ediliyor: {order_id}")
+                    # 45sn doldu, dolmadı — iptal et
+                    logger.warning(f"GTC emir 45sn içinde dolmadı — iptal ediliyor: {order_id}")
                     try:
                         self._clob.cancel(order_id)
-                        logger.info(f"GTC emir iptal edildi: {order_id}")
+                        # Cancel onayı: iptal gerçekleşti mi kontrol et
+                        await asyncio.sleep(2)
+                        try:
+                            verify = self._clob.get_order(order_id)
+                            v_status = verify.get("status", "") if verify else ""
+                            if v_status == "matched":
+                                logger.warning(f"GTC emir cancel sırasında doldu! {order_id}")
+                                status = "matched"
+                                filled = True
+                            elif v_status in ("cancelled", "expired", ""):
+                                logger.info(f"GTC emir iptal onaylandı: {order_id} status={v_status}")
+                            else:
+                                logger.warning(f"GTC emir iptal sonrası beklenmeyen durum: {order_id} status={v_status}")
+                        except Exception:
+                            logger.info(f"GTC emir iptal edildi (onay alınamadı): {order_id}")
                     except Exception as cancel_err:
-                        logger.error(f"GTC iptal hatası: {cancel_err}")
-                    self._journal_trade({
-                        "action": "ORDER_RESULT", "market_id": market_id,
-                        "outcome": outcome, "amount": amount, "price": price,
-                        "result": "GTC_TIMEOUT_CANCELLED", "order_id": order_id,
-                        "question": question[:80],
-                    })
-                    return None
+                        logger.error(f"GTC iptal hatası — emir order book'ta kalabilir!: {cancel_err}")
+                    if filled:
+                        # Cancel sırasında dolmuş — devam et (aşağıda success path'e düşer)
+                        pass
+                    else:
+                        self._journal_trade({
+                            "action": "ORDER_RESULT", "market_id": market_id,
+                            "outcome": outcome, "amount": amount, "price": price,
+                            "result": "GTC_TIMEOUT_CANCELLED", "order_id": order_id,
+                            "question": question[:80],
+                        })
+                        return None
 
             logger.success(f"Emir dolduruldu: {order_id} status={status}")
 
@@ -500,6 +550,224 @@ class PolymarketClient:
         except Exception as e:
             logger.error(f"Emir durumu alınamadı: {e}")
             return None
+
+    def get_open_orders(self) -> list[dict]:
+        """CLOB'dan tüm açık (LIVE/MATCHED) emirleri çek.
+
+        Restart sonrası duplicate order'ı önlemek için kullanılır.
+        Önceki instance'ın yerleştirdiği emirleri tespit eder.
+        """
+        if not self._clob:
+            return []
+        try:
+            orders = self._clob.get_orders()
+            # LIVE = henüz dolmamış, MATCHED = doldurulmuş ama market açık
+            active = []
+            for o in orders:
+                status = (o.get("status") or "").upper()
+                if status in ("LIVE", "MATCHED"):
+                    active.append(o)
+            logger.info(f"CLOB açık emir sayısı: {len(active)}")
+            return active
+        except Exception as e:
+            logger.warning(f"Açık emirler alınamadı: {e}")
+            return []
+
+    # ------------------------------------------------------------------ #
+    # Passive Order & Cancel (Market Making)
+    # ------------------------------------------------------------------ #
+
+    async def place_passive_order(
+        self,
+        token_id: str,
+        price: float,
+        size: float,
+        question: str = "",
+    ) -> dict | None:
+        """Place a GTC limit order WITHOUT price bump, WITHOUT 45s wait.
+
+        For market making: fire-and-forget at exact Stoikov-computed price.
+        Returns order info immediately (may not be filled yet).
+        """
+        import math
+
+        self._journal_trade({
+            "action": "MAKER_ORDER_ATTEMPT",
+            "token_id": token_id[:20],
+            "price": price,
+            "size": size,
+            "question": question[:80],
+            "is_live": self._clob is not None,
+        })
+
+        if not self._clob:
+            sim_id = f"SIM-MAKER-{int(time.time())}"
+            self._journal_trade({
+                "action": "MAKER_ORDER_RESULT", "result": "SIMULATED",
+                "order_id": sim_id, "price": price, "size": size,
+            })
+            return {"order_id": sim_id, "price": price, "size": size,
+                    "amount": round(size * price, 4), "status": "SIMULATED"}
+
+        if not token_id:
+            return None
+
+        try:
+            from py_clob_client.clob_types import OrderArgs, OrderType
+            from py_clob_client.order_builder.constants import BUY
+
+            # NO price bump — passive placement
+            price = round(min(max(price, 0.01), 0.99), 2)
+
+            # CLOB minimum size = 5 shares
+            if size < 5.0:
+                size = 5.0
+
+            # Ensure minimum notional ($1.00)
+            while size * price < 1.0 and price > 0:
+                size = round(size + 0.01, 2)
+
+            order_args = OrderArgs(
+                token_id=token_id, price=price, size=size, side=BUY,
+            )
+            signed = self._clob.create_order(order_args)
+            response = self._clob.post_order(signed, OrderType.GTC)
+
+            if not response or not isinstance(response, dict):
+                logger.warning(f"MAKER order rejected: {response}")
+                return None
+
+            order_id = response.get("orderID") or response.get("id", "")
+            status = response.get("status", "UNKNOWN")
+
+            logger.info(
+                f"MAKER_ORDER: {order_id[:16]} price={price} size={size:.2f} "
+                f"status={status} | {question[:40]}"
+            )
+
+            self._journal_trade({
+                "action": "MAKER_ORDER_RESULT", "order_id": order_id,
+                "price": price, "size": size, "status": status,
+                "question": question[:80], "result": "PLACED",
+            })
+
+            return {
+                "order_id": order_id,
+                "token_id": token_id,
+                "price": price,
+                "size": size,
+                "amount": round(size * price, 4),
+                "status": status,
+            }
+        except Exception as e:
+            logger.error(f"MAKER order failed: {e}")
+            self._journal_trade({
+                "action": "MAKER_ORDER_RESULT", "result": "EXCEPTION",
+                "error": str(e)[:200], "question": question[:80],
+            })
+            return None
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel a single GTC order by ID. Returns True if cancelled."""
+        if not self._clob or not order_id:
+            return False
+        try:
+            self._clob.cancel(order_id)
+            logger.info(f"ORDER_CANCELLED: {order_id[:16]}")
+            return True
+        except Exception as e:
+            logger.debug(f"Cancel failed ({order_id[:16]}): {e}")
+            return False
+
+    def cancel_all_orders(self) -> int:
+        """Cancel all open orders. Returns count cancelled."""
+        if not self._clob:
+            return 0
+        try:
+            self._clob.cancel_all()
+            logger.info("ALL_ORDERS_CANCELLED")
+            return 1  # API doesn't return count
+        except Exception as e:
+            logger.warning(f"Cancel all failed: {e}")
+            return 0
+
+    # ------------------------------------------------------------------ #
+    # Bond / All-Market Scanning
+    # ------------------------------------------------------------------ #
+
+    async def get_all_active_markets(self, min_volume: float = 0) -> list[dict]:
+        """Fetch ALL active markets (not just crypto) for bond scanning.
+
+        Unlike get_active_markets, this does NOT filter by crypto keywords.
+        Scans all future markets across all categories.
+        """
+        from datetime import datetime, timezone
+        import asyncio as _asyncio
+
+        all_markets: list[dict] = []
+        params_base = {
+            "active": "true",
+            "closed": "false",
+            "limit": 500,
+            "order": "endDate",
+            "ascending": "true",
+        }
+        now = datetime.now(timezone.utc)
+
+        async def _fetch_offset(offset: int) -> list:
+            try:
+                resp = await self.session.get(
+                    f"{GAMMA_API}/markets",
+                    params={**params_base, "offset": offset},
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+            except Exception as e:
+                logger.debug(f"Bond market fetch offset={offset}: {e}")
+            return []
+
+        # Scan up to 5000 markets (bonds can be anywhere)
+        step = 500
+        max_offset = 5_000
+        batch_size = 4
+
+        offsets = list(range(0, max_offset, step))
+        for i in range(0, len(offsets), batch_size):
+            batch = offsets[i:i + batch_size]
+            results = await _asyncio.gather(*[_fetch_offset(o) for o in batch])
+            page_empty = True
+            for data in results:
+                if data:
+                    page_empty = False
+                    all_markets.extend(data)
+            if page_empty and i > 0:
+                break
+
+        # Filter to future markets only
+        future_markets = []
+        seen_ids: set = set()
+        for m in all_markets:
+            cid = m.get("conditionId") or m.get("condition_id", "")
+            if cid in seen_ids:
+                continue
+            end_str = m.get("endDate", "") or m.get("endDateIso", "")
+            if not end_str:
+                continue
+            try:
+                s = str(end_str).replace("Z", "+00:00")
+                if len(s) == 10:
+                    s += "T23:59:00+00:00"
+                end_dt = datetime.fromisoformat(s)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                if end_dt > now:
+                    future_markets.append(m)
+                    seen_ids.add(cid)
+            except Exception:
+                pass
+
+        return self._normalize_markets(future_markets, min_volume)
 
     # ------------------------------------------------------------------ #
     # Simülasyon (API key yokken)
