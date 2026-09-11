@@ -104,6 +104,34 @@ class PolymarketClient:
     # Market Data (Gamma API — auth gerekmez)
     # ------------------------------------------------------------------ #
 
+    def _verify_outcome_order(self, m: dict, cid: str) -> None:
+        """clobTokenIds[0]/[1] her zaman YES/NO (ya da Up/Down) sirasinda mi?
+        Bu VARSAYIM hicbir yerde dogrulanmiyordu — yanlissa yon tersine doner,
+        tum loglar/muhasebe yine "dogru" gorunur. Davranisi degistirmez,
+        sadece Gamma'nin `outcomes` alaniyla capraz kontrol edip loglar."""
+        raw = m.get("outcomes")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = None
+        if not isinstance(raw, list) or len(raw) < 2:
+            return
+        first = str(raw[0]).strip().lower()
+        second = str(raw[1]).strip().lower()
+        yes_like = {"yes", "up"}
+        no_like = {"no", "down"}
+        if first in yes_like and second in no_like:
+            return
+        if first in no_like and second in yes_like:
+            logger.error(
+                f"OUTCOME_ORDER_FLIPPED: {cid} outcomes={raw} — "
+                f"clobTokenIds[0/1] YES/NO varsayimi TERS! yes_token_id/no_token_id "
+                f"muhtemelen yanlis yona esleniyor."
+            )
+            return
+        logger.warning(f"OUTCOME_ORDER_UNKNOWN: {cid} outcomes={raw} — beklenmeyen etiketler, dogrulanamadi.")
+
     def _normalize_markets(self, markets: list[dict], min_volume: float) -> list[dict]:
         """Raw market listesini normalize et ve filtrele."""
         import json as _json
@@ -127,6 +155,7 @@ class PolymarketClient:
                 m["yes_token_id"] = token_ids[0] if len(token_ids) > 0 else None
                 m["no_token_id"] = token_ids[1] if len(token_ids) > 1 else None
                 m["condition_id"] = cid
+                self._verify_outcome_order(m, cid)
                 m["end_date_iso"] = m.get("endDateIso") or m.get("end_date_iso", "")
                 filtered.append(m)
                 seen_ids.add(cid)
