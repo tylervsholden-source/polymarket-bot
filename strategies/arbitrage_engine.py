@@ -217,9 +217,6 @@ class ArbitrageEngine:
         # NO-side forensic diagnostics — keyed by condition_id
         self._last_diagnostics: dict[str, SideDiagnostics] = {}
 
-        # FIX-1: OPT-6 LOSS SLOT COOLDOWN — track loss per coin to skip bounces
-        self._loss_cooldown: dict[str, int] = {}  # {condition_id: cooldown_remaining}
-
     # ------------------------------------------------------------------ #
     # Spot verisi (Binance ile gerçek, yoksa intramarket fallback)
     # ------------------------------------------------------------------ #
@@ -286,29 +283,6 @@ class ArbitrageEngine:
     def get_last_diagnostics(self) -> dict[str, SideDiagnostics]:
         """Return side diagnostics from the last analyze() call."""
         return dict(self._last_diagnostics)
-
-    # FIX-1: OPT-6 LOSS SLOT COOLDOWN — helper methods
-    def record_loss(self, condition_id: str) -> None:
-        """Mark a condition as having just lost. Skip next trade for this condition."""
-        self._loss_cooldown[condition_id] = 1  # cooldown for 1 cycle
-
-    def record_win(self, condition_id: str) -> None:
-        """Clear loss cooldown on win."""
-        self._loss_cooldown.pop(condition_id, None)
-
-    def has_loss_cooldown(self, condition_id: str) -> bool:
-        """Check if condition is in loss cooldown period."""
-        return self._loss_cooldown.get(condition_id, 0) > 0
-
-    def _decay_loss_cooldowns(self) -> None:
-        """Decay all active cooldowns by 1 cycle. Call once per cycle."""
-        expired = []
-        for cid, cooldown in self._loss_cooldown.items():
-            self._loss_cooldown[cid] = cooldown - 1
-            if cooldown <= 1:
-                expired.append(cid)
-        for cid in expired:
-            del self._loss_cooldown[cid]
 
     async def analyze(self, markets: list[dict], capital: float) -> list[TradeSignal]:
         if not markets:
@@ -409,11 +383,6 @@ class ArbitrageEngine:
 
         if yes_price <= 0.05 or yes_price >= 0.95:
             return None
-
-        # FIX-1: OPT-6 LOSS SLOT COOLDOWN — check before analyzing market
-        # FIX-1b: Allow ultra-high edge trades to override cooldown (edge checked post-analysis)
-        condition_id = market.get("condition_id", "")
-        _has_cooldown = condition_id and self.has_loss_cooldown(condition_id)
 
         # Binance sinyali al
         sym = _detect_asset(question)
