@@ -176,7 +176,7 @@ async def test_full_sim_execution_chain():
     market = _fake_market(
         "btc-exec-test",
         "Bitcoin up or down? 12:00PM-12:15PM ET",
-        ask=0.48,
+        ask=0.40,  # within current _YES_MAX_PRICE=0.47 viability window (tightened from 0.70)
     )
 
     signals = await engine.analyze([market], capital=5.0)
