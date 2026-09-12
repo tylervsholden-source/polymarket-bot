@@ -32,6 +32,15 @@ from strategies.sum_monitor import SumMonitor
 from core.candlestick_analyzer import CandlestickAnalyzer as CA
 
 
+def _get_current_et_hour() -> int:
+    """Current hour in America/New_York, as a separate patch point for tests."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).hour
+    except Exception:
+        return (datetime.now(timezone.utc).hour - 4) % 24
+
+
 # ── NO-side rejection reasons (PART 1A/1D) ──────────────────────────────────
 class NoSideStatus(str, Enum):
     """Explicit classification of why NO side was or was not selected."""
@@ -1522,12 +1531,7 @@ class ArbitrageEngine:
             return None
 
         # GATE 3: Kötü saatler (21-00 ET) → block (10-37% WR)
-        try:
-            from zoneinfo import ZoneInfo
-            _now_et_gate = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
-            _hour_et_gate = _now_et_gate.hour
-        except Exception:
-            _hour_et_gate = (datetime.now(timezone.utc).hour - 4) % 24
+        _hour_et_gate = _get_current_et_hour()
         _BAD_HOURS = {21, 22, 23, 0}  # 21:xx=10% WR, 22:xx=36%, 23:xx=37%, 00:xx=33%
         if _hour_et_gate in _BAD_HOURS:
             logger.info(
