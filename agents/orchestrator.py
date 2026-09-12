@@ -794,31 +794,8 @@ class Orchestrator:
                 # ── FRESH_PRICE_ABORT ──────────────────────────────────
                 # Ders #32: sinyal fiyatı ≠ execution fiyatı. Stale sinyale güvenme.
                 # Execution anında taze fiyat al, kayma > edge'in %60'ı → iptal.
-                try:
-                    _fresh = await self.client.get_market(market_id)
-                    if _fresh:
-                        _fresh_ask = float(_fresh.get("best_ask", 0) or 0)
-                        if _fresh_ask > 0 and signal.direction == "YES":
-                            _slippage = abs(_fresh_ask - signal.entry_price)
-                            if _slippage > signal.edge * 0.60:
-                                logger.warning(
-                                    f"FRESH_PRICE_ABORT: {market['question'][:40]} | "
-                                    f"stale={signal.entry_price:.3f} fresh={_fresh_ask:.3f} "
-                                    f"slip={_slippage:.3f} > edge*0.6={signal.edge*0.60:.3f}"
-                                )
-                                continue
-                        _fresh_no_ask = float(_fresh.get("no_best_ask", 0) or 0)
-                        if _fresh_no_ask > 0 and signal.direction == "NO":
-                            _slippage = abs(_fresh_no_ask - signal.entry_price)
-                            if _slippage > signal.edge * 0.60:
-                                logger.warning(
-                                    f"FRESH_PRICE_ABORT: {market['question'][:40]} | "
-                                    f"stale={signal.entry_price:.3f} fresh={_fresh_no_ask:.3f} "
-                                    f"slip={_slippage:.3f} > edge*0.6={signal.edge*0.60:.3f}"
-                                )
-                                continue
-                except Exception as e:
-                    logger.debug(f"Fresh price fetch failed: {e}")
+                if not await self._fresh_price_ok(market, market_id, signal):
+                    continue
 
                 # ── DOĞRUDAN EMİR VER (onay kuyruğu bypass) ──
                 order = await self.client.place_order(
@@ -940,6 +917,36 @@ class Orchestrator:
                 logger.error(f"BOND_CYCLE error: {bond_err}")
 
         await self._finalize_cycle(markets, candidates)
+
+    async def _fresh_price_ok(self, market: dict, market_id: str, signal) -> bool:
+        """Execution anındaki taze fiyatı kontrol et; kayma edge'in %60'ını aşarsa False dön.
+
+        NOT: get_market() (Gamma API) sadece YES-side best_ask/best_bid alanlarını
+        normalize eder — no_best_ask hiç set edilmez. Bu yüzden NO yönü için
+        no_token_id'nin kendi orderbook'u ayrıca çekilir (market taramasında
+        no_best_ask'ın doldurulduğu yöntemle aynı).
+        """
+        try:
+            if signal.direction == "YES":
+                fresh = await self.client.get_market(market_id)
+                fresh_ask = float(fresh.get("best_ask", 0) or 0) if fresh else 0.0
+            else:
+                no_tid = market.get("no_token_id")
+                no_book = self.client.get_orderbook(no_tid) if no_tid else None
+                fresh_ask = float(no_book.get("best_ask", 0) or 0) if no_book else 0.0
+
+            if fresh_ask > 0:
+                slippage = abs(fresh_ask - signal.entry_price)
+                if slippage > signal.edge * 0.60:
+                    logger.warning(
+                        f"FRESH_PRICE_ABORT: {market['question'][:40]} | "
+                        f"stale={signal.entry_price:.3f} fresh={fresh_ask:.3f} "
+                        f"slip={slippage:.3f} > edge*0.6={signal.edge * 0.60:.3f}"
+                    )
+                    return False
+        except Exception as e:
+            logger.debug(f"Fresh price fetch failed: {e}")
+        return True
 
     async def _execute_approved_orders(self):
         """Dashboard'dan onaylanan emirleri gerçekten execute et.
