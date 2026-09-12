@@ -100,6 +100,7 @@ class Orchestrator:
 
         self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", 7))  # PIVOT: raised to 7 (2 dir + 5 maker)
         self.min_edge = float(os.getenv("MIN_EDGE_THRESHOLD", 0.08))
+        self.min_market_volume = float(os.getenv("MIN_MARKET_VOLUME", 10_000))
         self.daily_stop_loss = float(os.getenv("DAILY_STOP_LOSS_PCT", 0.15))
         # Tüm zaman dilimlerine izin ver: 5m, 15m, 1h, 4h
         self.max_hours = float(os.getenv("MAX_HOURS_TO_CLOSE", 24.0))
@@ -484,7 +485,11 @@ class Orchestrator:
             return
 
         # Market fetch — 5dk'lık crypto up/down marketler
-        markets = await self.client.get_active_markets(min_volume=0)
+        # Bug: min_volume=0 hardcode edilmişti; CLAUDE.md'nin "Min market hacmi: $5,000"
+        # kuralı (ve .env.example'daki MIN_MARKET_VOLUME=10000) hiç uygulanmıyordu —
+        # QualityFilter doğru yazılmış ama sadece scan_markets.py'de kullanılıyordu,
+        # canlı orchestrator'a hiç bağlı değildi.
+        markets = await self.client.get_active_markets(min_volume=self.min_market_volume)
         logger.info(f"{len(markets)} aktif market bulundu.")
 
         candidates = self._pre_filter(markets)
