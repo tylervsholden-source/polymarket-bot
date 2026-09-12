@@ -775,7 +775,7 @@ class Orchestrator:
                         process_lock=self._process_lock,
                         control_file="data/control.json",
                         readiness_file="data/readiness_verdict.json",
-                        daily_loss_exceeded=False,  # devre dışı — kullanıcı talebi (2026-03-21)
+                        daily_loss_exceeded=self.position_manager.daily_loss_exceeded(self.daily_stop_loss),
                         open_position_count=open_count,
                         max_open_positions=self.max_open_positions,
                         order_timestamps=self._order_timestamps,
@@ -967,13 +967,13 @@ class Orchestrator:
         _lock = self._process_lock
         capital = self.position_manager.available_capital()
         open_count = self.position_manager.open_position_count()
-        daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
+        daily_stop = self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
 
         for order_req in approved:
             # Re-fetch capital/open_count per order (stale after previous execution)
             capital = self.position_manager.available_capital()
             open_count = self.position_manager.open_position_count()
-            daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
+            daily_stop = self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
 
             market_id = order_req.get("market_id", "")
             token_id = order_req.get("token_id", "")
