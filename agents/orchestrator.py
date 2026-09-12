@@ -1294,7 +1294,14 @@ class Orchestrator:
 
         filtered = []
         for slot, group in slots.items():
-            # LOSS_COOLDOWN kaldırıldı — sinyal neyse o
+            # OPT-6: Loss slot cooldown — kayıp olan slot'tan hemen sonraki
+            # slot'ta dead-cat-bounce riski var, o slot'u tamamen atla.
+            if self._is_adjacent_to_loss_slot(slot):
+                logger.info(
+                    f"LOSS_COOLDOWN: {slot} | önceki slot kayıptı, "
+                    f"{len(group)} sinyal DÜŞÜRÜLDİ"
+                )
+                continue
 
             # Kalan kapasite = max - zaten açık olan
             already_open = existing_slot_count.get(slot, 0)
