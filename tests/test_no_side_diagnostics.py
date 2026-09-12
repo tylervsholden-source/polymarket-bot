@@ -62,7 +62,9 @@ def _make_market(
 
 def _make_engine() -> ArbitrageEngine:
     """Create an ArbitrageEngine with no external dependencies."""
-    return ArbitrageEngine(http_session=None, binance_feed=None, smart_trader_tracker=None)
+    engine = ArbitrageEngine(http_session=None, binance_feed=None, smart_trader_tracker=None)
+    engine._et_hour_override = 12  # BAD_HOUR_BLOCK gate'ini gerçek saatten bağımsızlaştır
+    return engine
 
 
 # ---------------------------------------------------------------------------

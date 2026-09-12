@@ -172,6 +172,7 @@ async def test_full_sim_execution_chain():
         smart_trader_tracker=None,
     )
     engine.min_edge = 0.01
+    engine._et_hour_override = 12  # BAD_HOUR_BLOCK gate'ini gerçek saatten bağımsızlaştır
 
     market = _fake_market(
         "btc-exec-test",

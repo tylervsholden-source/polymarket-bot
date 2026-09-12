@@ -17,6 +17,7 @@ def make_engine(min_edge=0.04):
         smart_trader_tracker=None,
     )
     eng.min_edge = min_edge
+    eng._et_hour_override = 12  # BAD_HOUR_BLOCK gate'ini gerçek saatten bağımsızlaştır
     return eng
 
 

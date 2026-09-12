@@ -51,6 +51,7 @@ def _make_engine() -> ArbitrageEngine:
         binance_feed=None,
         smart_trader_tracker=None,
     )
+    engine._et_hour_override = 12  # BAD_HOUR_BLOCK gate'ini gerçek saatten bağımsızlaştır
     return engine
 
 

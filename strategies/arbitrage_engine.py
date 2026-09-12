@@ -211,6 +211,9 @@ class ArbitrageEngine:
         # Bu düşüşü tespit edip NO trade'leri 1 cycle duraklatıyoruz.
         self._regime_strength_peak: float = 0.0  # son peak strength
         self._regime_decay_pause: bool = False    # True ise NO trade'ler durur
+        # Test/backtest hook: gerçek saat yerine sabit ET saati enjekte etmek için.
+        # None ise gerçek "şu an" kullanılır (canlı davranış değişmez).
+        self._et_hour_override: int | None = None
         self._mc_result: MonteCarloResult | None = None
         self._mc_last_run: float = 0.0
         self._mc_interval: float = 600.0
@@ -1522,12 +1525,15 @@ class ArbitrageEngine:
             return None
 
         # GATE 3: Kötü saatler (21-00 ET) → block (10-37% WR)
-        try:
-            from zoneinfo import ZoneInfo
-            _now_et_gate = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
-            _hour_et_gate = _now_et_gate.hour
-        except Exception:
-            _hour_et_gate = (datetime.now(timezone.utc).hour - 4) % 24
+        if self._et_hour_override is not None:
+            _hour_et_gate = self._et_hour_override
+        else:
+            try:
+                from zoneinfo import ZoneInfo
+                _now_et_gate = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
+                _hour_et_gate = _now_et_gate.hour
+            except Exception:
+                _hour_et_gate = (datetime.now(timezone.utc).hour - 4) % 24
         _BAD_HOURS = {21, 22, 23, 0}  # 21:xx=10% WR, 22:xx=36%, 23:xx=37%, 00:xx=33%
         if _hour_et_gate in _BAD_HOURS:
             logger.info(
