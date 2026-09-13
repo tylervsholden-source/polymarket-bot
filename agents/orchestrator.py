@@ -117,6 +117,14 @@ class Orchestrator:
             kalshi_arb=self.kalshi_arb,
             clob_client=self.client._clob,
         )
+        # AutonomousDecisionEngine.get_adaptive_params() diğer alanları (min_edge_yes/no,
+        # max_bet_multiplier) sadece cycle_interval_seconds/aggression için okunuyordu —
+        # DEFENSIVE/SURVIVAL moda geçildiğinde gerçek edge eşiği/bet boyutu hiç
+        # sıkılaşmıyordu. Base değerler burada saklanıyor: adaptif eşik hiçbir zaman bu
+        # tasarım gereği static tabanın (0.12/0.18) ALTINA düşürmesin, sadece sıkılaştırsın.
+        self._base_min_edge_yes = self.arb_engine.min_edge_yes
+        self._base_min_edge_no = self.arb_engine.min_edge_no
+        self._adaptive_bet_multiplier = 1.0
 
         # ── SUBAGENT COORDINATOR ──────────────────────────────────────
         # Multi-agent orchestration: Research + Signal (parallel) → Review (sequential)
@@ -385,6 +393,22 @@ class Orchestrator:
             if adaptive.get("cycle_interval_seconds", self.interval) != self.interval:
                 wait_time = adaptive["cycle_interval_seconds"] + backoff
                 logger.info(f"ADAPTIVE_INTERVAL: {wait_time:.0f}s (aggression={adaptive['aggression']})")
+
+            # AutonomousEngine adaptif min_edge / bet boyutu — bir sonraki döngüde
+            # gerçek edge gate'ine (arb_engine) ve bet sizing'e uygulanır. min_edge asla
+            # base'in altına düşmez (sadece DEFENSIVE/SURVIVAL'da sıkılaştırır, NORMAL/
+            # AGGRESSIVE'de get_adaptive_params()'ın base'den düşük varsayılanları
+            # (0.08/0.15) statik tabanı gevşetmez).
+            self.arb_engine.min_edge_yes = max(self._base_min_edge_yes, adaptive["min_edge_yes"])
+            self.arb_engine.min_edge_no = max(self._base_min_edge_no, adaptive["min_edge_no"])
+            self._adaptive_bet_multiplier = adaptive["max_bet_multiplier"]
+            if adaptive["aggression"] != "NORMAL":
+                logger.info(
+                    f"ADAPTIVE_RISK: aggression={adaptive['aggression']} "
+                    f"min_edge_yes={self.arb_engine.min_edge_yes:.2f} "
+                    f"min_edge_no={self.arb_engine.min_edge_no:.2f} "
+                    f"bet_mult={self._adaptive_bet_multiplier:.2f}"
+                )
 
             # Her 10 döngüde sağlık raporu
             if self._cycle_count % 10 == 0:
@@ -745,6 +769,18 @@ class Orchestrator:
             if wf_mult < 1.0:
                 bet_size *= wf_mult
                 logger.info(f"WALK_FORWARD: bet_size adjusted by {wf_mult:.2f} → ${bet_size:.2f}")
+
+            # ── AutonomousEngine adaptive bet multiplier (performans bazlı) ──
+            # get_adaptive_params()'ın max_bet_multiplier'ı önceden hiç bet_size'a
+            # uygulanmıyordu (run()'da sadece cycle_interval_seconds okunuyordu) —
+            # DEFENSIVE/SURVIVAL'da gerçek sipariş boyutu küçülmüyordu.
+            if self._adaptive_bet_multiplier != 1.0:
+                original_bet = bet_size
+                bet_size *= self._adaptive_bet_multiplier
+                logger.info(
+                    f"[ADAPTIVE] Bet multiplier: ${original_bet:.2f} × "
+                    f"{self._adaptive_bet_multiplier:.2f} = ${bet_size:.2f}"
+                )
 
             # Final hard cap — hiçbir koşulda aşılmaz
             if bet_size > HARD_MAX_BET:
