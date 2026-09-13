@@ -1822,7 +1822,11 @@ class Orchestrator:
             _coin = self._shadow_detect_asset(_q)
             if not _coin or _coin in _coin_done:
                 continue
-            if trade.get("result") == "WIN" and trade.get("direction", "").upper() == "NO":
+            # Real closed positions carry "outcome" (YES/NO), not "direction" —
+            # "direction" only exists on sim-mode trades. Reading "direction" here
+            # always returned "" and this streak (and the OPT-7 bounce guard below)
+            # never fired in live/paper trading.
+            if trade.get("result") == "WIN" and trade.get("outcome", "").upper() == "NO":
                 self._consecutive_wins_per_coin[_coin] = self._consecutive_wins_per_coin.get(_coin, 0) + 1
             else:
                 _coin_done.add(_coin)  # Bu coin'in streak'i kırıldı
