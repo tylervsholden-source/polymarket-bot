@@ -287,7 +287,7 @@ class ArbitrageEngine:
             self._mc_result = self.mc.simulate(
                 edge=edge, capital=capital, n_trades=100,
                 fill_rate=0.85,
-                position_size_pct=float(os.getenv("MAX_POSITION_PCT", 0.10)),
+                position_size_pct=float(os.getenv("MAX_POSITION_PCT", 0.20)),
             )
             self._mc_last_run = now
             mc = self._mc_result
