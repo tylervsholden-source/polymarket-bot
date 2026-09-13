@@ -180,6 +180,19 @@ def _detect_timeframe(question: str) -> str:
     return "1h"  # varsayılan
 
 
+def _momentum_decel_blocks_no(direction: str, momentum_decelerating: bool) -> bool:
+    """OPT-3: Momentum Deceleration Guard (CLAUDE.md v9 — "Tümü Aktif").
+
+    Son 3 mumda |change| azalıyorsa (momentum_decelerating) → bounce riski →
+    NO trade'i engelle. YES yönünü etkilemez.
+
+    `momentum_decelerating` uzun süre hesaplanıp hiç okunmuyordu (git blame
+    9b5fd52, "MOMENTUM_DECEL kaldırıldı" yorumu) — bu fonksiyon gate'i geri
+    bağlar ve izole test edilebilir kılar.
+    """
+    return direction == "NO" and momentum_decelerating
+
+
 class ArbitrageEngine:
     def __init__(self, http_session=None, binance_feed=None, smart_trader_tracker=None,
                  top_trader=None, kalshi_arb=None, clob_client=None,
@@ -1521,7 +1534,13 @@ class ArbitrageEngine:
         # REGIME_STR_CAP + REGIME_DECAY kaldırıldı — sinyal neyse o
         _regime_kelly_multiplier = 1.0
 
-        # MOMENTUM_DECEL kaldırıldı — sinyal neyse o
+        # OPT-3: Momentum Deceleration Guard (CLAUDE.md v9 spec, bkz. docstring).
+        if _momentum_decel_blocks_no(direction, momentum_decelerating):
+            logger.info(
+                f"MOMENTUM_DECEL_BLOCK: {question[:40]} | NO blocked — son 3 mumda "
+                f"|change| azalıyor (bounce riski, OPT-3)"
+            )
+            return None
 
         # OPT4_BLOCK kaldırıldı — sinyal neyse o
 
