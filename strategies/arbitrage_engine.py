@@ -748,10 +748,11 @@ class ArbitrageEngine:
                 _coin_name = sym.replace("USDT", "").lower()
                 _spike_boost = self.latency_arb.get_spike_boost(_coin_name, max_age_sec=30.0)
                 if abs(_spike_boost) > 0.005:
-                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spike_boost))
+                    # FIX: SPIKE boost DISABLED — listed under "Kapatılan" above but
+                    # was never actually commented out, silently undoing the reset.
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _spike_boost))
                     logger.info(
-                        f"SPIKE_BOOST: {question[:35]} | boost={_spike_boost:+.4f} "
-                        f"→ prob={bayesian_prob:.3f}"
+                        f"SPIKE_BOOST: {question[:35]} | boost={_spike_boost:+.4f} (DISABLED)"
                     )
         except Exception as _e:
             logger.debug(f"SPIKE_BOOST error: {_e}")
@@ -764,21 +765,24 @@ class ArbitrageEngine:
                 if _mtf and _mtf.get("aligned") and _mtf.get("agreement", 0) >= 1.0:
                     _mtf_boost = _mtf.get("boost", 0)
                     if abs(_mtf_boost) > 0.003:
-                        bayesian_prob = max(0.05, min(0.95, bayesian_prob + _mtf_boost))
+                        # FIX: MTF boost DISABLED — listed under "Kapatılan" above but
+                        # was never actually commented out, silently undoing the reset.
+                        # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _mtf_boost))
                         _details = _mtf.get("details", {})
                         logger.info(
                             f"MTF_CONSENSUS: {question[:35]} | dir={_mtf.get('direction')} "
-                            f"agree={_mtf.get('agreement', 0):.0%} boost={_mtf_boost:+.4f} | "
+                            f"agree={_mtf.get('agreement', 0):.0%} boost={_mtf_boost:+.4f} (DISABLED) | "
                             f"5m={_details.get('5m', 0):+.2f}% "
                             f"15m={_details.get('15m', 0):+.2f}% "
                             f"1h={_details.get('1h', 0):+.2f}%"
                         )
                 elif _mtf and not _mtf.get("aligned") and _mtf.get("direction") == "MIXED":
-                    _dampen = 0.10
-                    bayesian_prob = bayesian_prob * (1 - _dampen) + 0.50 * _dampen
+                    # FIX: MTF mixed-dampen DISABLED — same "Kapatılan" MTF entry covers
+                    # both the aligned-boost and the mixed-dampen path.
+                    # _dampen = 0.10
+                    # bayesian_prob = bayesian_prob * (1 - _dampen) + 0.50 * _dampen
                     logger.debug(
-                        f"MTF_MIXED: {question[:35]} | Timeframe'ler uyuşmuyor, "
-                        f"edge dampened %{_dampen*100:.0f}"
+                        f"MTF_MIXED: {question[:35]} | Timeframe'ler uyuşmuyor (DISABLED, dampen atlanmadı)"
                     )
         except Exception as _e:
             logger.debug(f"MTF_CONSENSUS error: {_e}")
@@ -789,11 +793,13 @@ class ArbitrageEngine:
                 _xex = self.binance_feed.get_cross_exchange_signal(sym)
                 logger.debug(f"LEAD_LAG_RAW: {question[:30]} | sig={_xex.get('signal')} boost={_xex.get('boost', 0):+.4f}")
                 if _xex and _xex.get("signal") != "NEUTRAL" and abs(_xex.get("boost", 0)) > 0.003:
-                    bayesian_prob = max(0.05, min(0.95, bayesian_prob + _xex["boost"]))
+                    # FIX: LEAD_LAG boost DISABLED — listed under "Kapatılan" above but
+                    # was never actually commented out, silently undoing the reset.
+                    # bayesian_prob = max(0.05, min(0.95, bayesian_prob + _xex["boost"]))
                     logger.info(
                         f"LEAD_LAG: {question[:35]} | Binance=${_xex.get('binance_price', 0):.2f} "
                         f"Bitstamp=${_xex.get('bitstamp_price', 0):.2f} spread={_xex.get('spread_pct', 0):+.4f}% "
-                        f"→ {_xex['signal']} boost={_xex['boost']:+.4f}"
+                        f"→ {_xex['signal']} boost={_xex['boost']:+.4f} (DISABLED)"
                     )
         except Exception as _e:
             logger.debug(f"LEAD_LAG error: {_e}")
