@@ -152,6 +152,7 @@ class ResearchAgent(BaseAgent):
         self.binance_feed = binance_feed
         self.smart_tracker = smart_tracker
         self._whale_tracker_cls = whale_tracker_cls
+        self._whale_tracker = None
         self.enhanced_signals = enhanced_signals
 
     async def run(self, **kwargs) -> ResearchResult:
@@ -260,7 +261,13 @@ class ResearchAgent(BaseAgent):
     ) -> dict[str, WhaleData]:
         """WhaleTracker ile buyuk pozisyon hareketlerini analiz et."""
         try:
-            tracker = self._whale_tracker_cls()
+            # Tek seferlik, uzun omurlu instance (binance_feed/smart_tracker
+            # ile ayni pattern) — her cagrida yeniden olusturulursa, WhaleTracker
+            # kendi httpx.AsyncClient session'ini hicbir zaman kapatmadigi icin
+            # her orchestrator cycle'inda (60-120sn) bir tane daha sizdirir.
+            if self._whale_tracker is None:
+                self._whale_tracker = self._whale_tracker_cls()
+            tracker = self._whale_tracker
             result = {}
             # Batch: max 5 concurrent whale fetches
             sem = asyncio.Semaphore(5)
