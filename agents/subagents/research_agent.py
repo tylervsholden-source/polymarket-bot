@@ -326,13 +326,24 @@ class ResearchAgent(BaseAgent):
         if not self.binance_feed:
             return RegimeData()
         try:
-            regime = getattr(self.binance_feed, "_regime", None)
+            # BinanceFeed'in gercek regime API'si get_market_regime(); burada
+            # daha once var olmayan bir `_regime` attribute'u okunuyordu
+            # (getattr -> her zaman None) ve fallback de get_signal()'in hic
+            # dondurmedigi "change_4h" anahtarini okuyordu. Sonuc: regime HER
+            # ZAMAN NEUTRAL/0.0 kaliyor, REGIME_OVEREXTENDED / COUNTER_REGIME_*
+            # risk flag'leri ve AutonomousEngine'in regime>0.80 boyut freni
+            # canli yolda hic tetiklenmiyordu.
+            _get_regime = getattr(self.binance_feed, "get_market_regime", None)
+            regime = _get_regime() if callable(_get_regime) else None
             if regime and isinstance(regime, dict):
+                # get_market_regime() BULLISH/BEARISH doner; RegimeData ve tum
+                # tuketiciler (signal_agent_v2, bayesian) UP/DOWN bekliyor.
+                _raw_dir = str(regime.get("regime", "NEUTRAL")).upper()
                 return RegimeData(
-                    direction=regime.get("regime", "NEUTRAL"),
+                    direction={"BULLISH": "UP", "BEARISH": "DOWN"}.get(_raw_dir, _raw_dir),
                     strength=regime.get("strength", 0.0),
-                    btc_change_4h=regime.get("btc_4h", 0.0),
-                    eth_change_4h=regime.get("eth_4h", 0.0),
+                    btc_change_4h=regime.get("btc_4h_pct", 0.0),
+                    eth_change_4h=regime.get("eth_4h_pct", 0.0),
                 )
             # Fallback: get from latest spot data
             btc = self.binance_feed.get_signal("BTCUSDT") or {}
