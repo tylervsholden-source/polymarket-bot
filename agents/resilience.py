@@ -167,6 +167,7 @@ async def cycle_guard(name: str, timeout: float = 120.0):
             f"[CYCLE_GUARD] '{name}' timed out after {elapsed:.1f}s "
             f"(limit={timeout}s). Continuing to next cycle."
         )
+        raise
     except asyncio.CancelledError:
         raise
     except Exception as e:
@@ -175,6 +176,7 @@ async def cycle_guard(name: str, timeout: float = 120.0):
             f"[CYCLE_GUARD] '{name}' failed after {elapsed:.1f}s: "
             f"{type(e).__name__}: {e}"
         )
+        raise
 
 
 # ═══════════════════════════════════════════════════════════════════
