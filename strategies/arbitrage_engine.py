@@ -618,11 +618,6 @@ class ArbitrageEngine:
             )
             bayesian_prob = 1 - _PROB_CAP
 
-        # ── EXTERNAL BOOST TRACKING ────────────────────────────────────────
-        # Track total external boost to enforce aggregate cap of ±0.04
-        _pre_boost_prob = bayesian_prob
-        _TOTAL_BOOST_CAP = 0.04  # Max total impact from ALL external signals combined
-
         # Smart money boost (reduced: 0.05 → 0.02, volume-gated)
         try:
             if self.smart_trader is not None:
@@ -733,12 +728,24 @@ class ArbitrageEngine:
         except Exception as _e:
             logger.debug(f"KALSHI_ARB error: {_e}")
 
+        # ── EXTERNAL BOOST TRACKING ────────────────────────────────────────
+        # Track total external boost to enforce aggregate cap of ±0.04
+        # BUG (16th daily review): this used to be captured BEFORE SmartMoney/
+        # TopTrader/OB_Depth/KalshiArb ran, so the reset below silently wiped
+        # those four (not in the "Kapatılan" list) along with the intentionally
+        # disabled macro signals. Captured here — after they've applied — so
+        # only the signals actually named below get reset.
+        _pre_boost_prob = bayesian_prob
+        _TOTAL_BOOST_CAP = 0.04  # Max total impact from ALL external signals combined
+
         # ══════════════════════════════════════════════════════════════════════
         # TÜM EXTERNAL BOOST'LAR DEVRE DIŞI — 5dk window için macro sinyaller zararlı
         # YES %70 WR vs NO %35 WR → boost'lar sürekli bearish push yapıyordu
         # Sadece Bayesian core (spot price action) kalıyor
         # Kapatılan: SPIKE, MTF, LEAD_LAG, FUNDING, LS_RATIO, LIQUIDATION,
         #            SPX_CORR, FNG, ENHANCED (multi-exchange, options, whale, social)
+        # NOT: SmartMoney/TopTrader/OB_Depth/KalshiArb bu listede yok — kasıtlı
+        # olarak açık kalıyorlar (bkz. yukarıdaki _pre_boost_prob capture noktası).
         # ══════════════════════════════════════════════════════════════════════
         bayesian_prob = _pre_boost_prob  # Tüm boost'ları sıfırla, sadece core Bayesian
         # ── LATENCY ARB SPIKE BOOST ──────────────────────────────────────────
