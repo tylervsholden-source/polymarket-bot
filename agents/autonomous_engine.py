@@ -75,6 +75,7 @@ class PerformanceSnapshot:
     consecutive_wins: int = 0
     capital: float = 0.0
     initial_capital: float = 0.0
+    peak_capital: float = 0.0
     drawdown_pct: float = 0.0
     hourly_pnl: float = 0.0
     session_pnl: float = 0.0
@@ -380,10 +381,16 @@ class AutonomousDecisionEngine:
                 else:
                     break
 
-        # Drawdown
-        if perf.initial_capital > 0:
-            peak = max(perf.initial_capital, capital)
-            perf.drawdown_pct = max(0, (peak - capital) / peak)
+        # Drawdown — measured from the true session high-water mark, not just
+        # initial_capital vs current capital. peak_capital is a running max
+        # across every _update_performance() call this session, so a drop
+        # from a post-growth peak (e.g. $1000 -> $3000 -> $1500) is still
+        # detected even though current capital ($1500) never falls below
+        # initial_capital ($1000) — previously that case always read as 0%
+        # drawdown, silently defeating the CRITICAL drawdown protection below.
+        perf.peak_capital = max(perf.peak_capital, perf.initial_capital, capital)
+        if perf.peak_capital > 0:
+            perf.drawdown_pct = max(0, (perf.peak_capital - capital) / perf.peak_capital)
 
         # Session PnL
         pnls = [t.get("pnl", 0) for t in closed_trades]
