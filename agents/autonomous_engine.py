@@ -435,10 +435,18 @@ class AutonomousDecisionEngine:
             params["min_edge_no"] = 0.25
             params["aggression"] = "SURVIVAL"
 
-        # Ardışık kayıp → AGGRESSIVE MODE: hızlı devam
+        # Ardışık kayıp → hızlı devam (cycle_interval kısalt), ama "aggression"
+        # etiketini SADECE hâlâ NORMAL ise "AGGRESSIVE"ye çevir — DEFENSIVE/
+        # SURVIVAL zaten yukarıda perf.win_rate/perf.capital'a göre set edildiyse
+        # (gerçek min_edge/max_bet_multiplier sıkılaştırması hâlâ yürürlükte),
+        # bu blok onu ezip günlüklerde "AGGRESSIVE" göstermemeli — orchestrator.run()
+        # bu label'ı sadece logluyor (ADAPTIVE_INTERVAL/ADAPTIVE_RISK), gerçek
+        # min_edge_yes/no ve max_bet_multiplier değerleri etkilenmiyor, ama yanlış
+        # etiket bir sonraki günlük incelemeyi (bu döngü) yanıltabilir.
         if perf.consecutive_losses >= 3:
             params["cycle_interval_seconds"] = 60  # 1dk (AGGRESSIVE: 120→60)
-            params["aggression"] = "AGGRESSIVE"
+            if params["aggression"] == "NORMAL":
+                params["aggression"] = "AGGRESSIVE"
 
         return params
 

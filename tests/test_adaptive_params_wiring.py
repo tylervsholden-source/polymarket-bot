@@ -89,3 +89,35 @@ def test_survival_params_tighten_above_static_base():
     base_min_edge_no = 0.18
     applied = max(base_min_edge_no, params["min_edge_no"])
     assert applied == 0.25, "SURVIVAL mode should tighten min_edge_no above the static base"
+
+
+def test_consecutive_losses_do_not_overwrite_defensive_aggression_label():
+    # Bug: a losing streak (>=3) unconditionally stamped aggression="AGGRESSIVE"
+    # even when win_rate<0.40 had already set it to "DEFENSIVE" (tighter
+    # min_edge/max_bet_multiplier still applied — only the label was wrong).
+    # "aggression" is log-only (grep confirms no code branches on its value
+    # besides logger.info calls in orchestrator.run()), but daily strategy
+    # reviews read exactly that log line to diagnose bot state, so a wrong
+    # label there is a real (if non-monetary) correctness bug.
+    engine = AutonomousDecisionEngine()
+    engine._performance.win_rate = 0.30
+    engine._performance.total_trades = 20
+    engine._performance.capital = 100.0
+    engine._performance.consecutive_losses = 5
+    params = engine.get_adaptive_params()
+
+    assert params["aggression"] == "DEFENSIVE", (
+        "a losing streak must not overwrite the DEFENSIVE label set by a low "
+        "win rate — the tighter min_edge/max_bet_multiplier are still in "
+        "effect and the log should say so"
+    )
+    assert params["cycle_interval_seconds"] == 60
+
+
+def test_consecutive_losses_still_label_aggression_when_otherwise_normal():
+    engine = AutonomousDecisionEngine()
+    engine._performance.capital = 100.0  # above LOW_CAPITAL_THRESHOLD, isolates this branch
+    engine._performance.consecutive_losses = 3
+    params = engine.get_adaptive_params()
+    assert params["aggression"] == "AGGRESSIVE"
+    assert params["cycle_interval_seconds"] == 60
