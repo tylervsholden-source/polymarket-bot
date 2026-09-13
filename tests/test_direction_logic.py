@@ -59,16 +59,18 @@ async def test_bullish_yields_yes_direction():
 @pytest.mark.asyncio
 async def test_bearish_yields_no_direction():
     eng = make_engine()
-    # Provide real NO book — NO ask=0.46 (above CHEAP_ENTRY_BLOCK threshold)
-    market = make_market(yes_price=0.70, no_best_ask=0.46, no_best_bid=0.44)
+    # Provide real NO book — NO ask=0.35 (above CHEAP_ENTRY_BLOCK threshold,
+    # low enough that even after PROB_CAP (P(NO)<=0.65) and cost adjustment,
+    # edge clears OPT-5's effective_min_edge for NO, ~0.19 with BTC addon)
+    market = make_market(yes_price=0.70, no_best_ask=0.35, no_best_bid=0.33)
 
-    # Bayesian 0.20 → YES 70c'ta pahalı → NO al (46c'tan, strong NO edge)
+    # Bayesian 0.20 → YES 70c'ta pahalı → NO al (35c'tan, strong NO edge)
     with patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.20, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
 
-    # NO direction artık 0.12+ edge gerektirir ve half-Kelly uygulanır
-    # NO edge = (1-0.20) - 0.46 = 0.34 (güçlü, 0.12 üstünde → geçer)
+    # NO direction OPT-5 adaptive min_edge (~0.19) + half-Kelly uygulanır
+    # NO edge ≈ 0.65 (PROB_CAP tavanı) - 0.35 = 0.30 (güçlü, eşiğin üstünde → geçer)
     assert signal is not None, "Bearish edge'de sinyal üretilmeli"
     assert signal.direction == "NO"
     assert signal.token_id == "no_tok"
@@ -93,8 +95,9 @@ async def test_neutral_no_signal():
 @pytest.mark.asyncio
 async def test_no_signal_entry_price_is_no_price():
     eng = make_engine()
-    # Provide real NO book — NO ask=0.46 (above CHEAP_ENTRY_BLOCK threshold)
-    market = make_market(yes_price=0.70, no_best_ask=0.46, no_best_bid=0.44)
+    # Provide real NO book — NO ask=0.35 (above CHEAP_ENTRY_BLOCK threshold,
+    # clears OPT-5's effective_min_edge for NO after PROB_CAP + cost adjustment)
+    market = make_market(yes_price=0.70, no_best_ask=0.35, no_best_bid=0.33)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.20, signal_strength=0.5)  # bearish, strong NO edge

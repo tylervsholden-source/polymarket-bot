@@ -89,9 +89,10 @@ async def test_yes_direction_uses_yes_token_id():
     engine = _make_engine()
     market = _base_market()
 
-    # yes_ask=0.50 → bayesian_prob=0.63 → yes_edge strong (YES dominates)
-    # no_ask=0.46 → no_prob=0.37 → no_edge negative
-    _mock_bayesian(engine, probability=0.63)
+    # yes_ask=0.50, probability pushed past the PROB_CAP ceiling (0.65) so the
+    # post-dampening/cap edge (0.15) clears OPT-5's effective_min_edge for YES
+    # no_ask=0.46 → no_prob capped low → no_edge negative
+    _mock_bayesian(engine, probability=0.90)
     _mock_kelly(engine, size=50.0)
     _mock_stoikov(engine, price=0.69)
     _mock_edge_model(engine, single=0.0, cross=0.0)
@@ -115,9 +116,10 @@ async def test_no_direction_uses_no_token_id():
     """When NO edge dominates and conditions are met, token_id must be no_token_id."""
     engine = _make_engine()
     # YES is unlikely (prob=0.20), so NO edge is strong
-    # yes_ask=0.50 → yes_edge = 0.20 - 0.50 = -0.30 (negative)
-    # no_ask=0.46 → no_prob=0.80 → no_edge = 0.80 - 0.46 = 0.34 (positive)
-    market = _base_market()
+    # yes_ask=0.50 → yes_edge negative
+    # no_ask=0.35 (lowered so the post-PROB_CAP/cost-adjusted edge clears
+    # OPT-5's effective_min_edge for NO, ~0.19 with BTC coin addon)
+    market = _base_market(no_best_ask="0.35", no_best_bid="0.33")
 
     _mock_bayesian(engine, probability=0.20)
     _mock_kelly(engine, size=50.0)
@@ -143,8 +145,8 @@ async def test_no_direction_uses_no_token_id():
 async def test_no_direction_requires_real_book_and_healthy():
     """NO direction should only be selected when no_price_source == REAL_BOOK and health == OK."""
     engine = _make_engine()
-    # Healthy real book: no_best_ask=0.36 → REAL_BOOK, health=OK
-    market = _base_market()
+    # Healthy real book, low enough ask that edge clears OPT-5's effective_min_edge
+    market = _base_market(no_best_ask="0.35", no_best_bid="0.33")
 
     _mock_bayesian(engine, probability=0.20)  # strong NO edge
     _mock_kelly(engine, size=50.0)
@@ -285,9 +287,9 @@ async def test_signal_direction_matches_diagnostics_selected_direction_yes():
 async def test_signal_direction_matches_diagnostics_selected_direction_no():
     """For NO signals, TradeSignal.direction and diag.selected_direction must both be NO."""
     engine = _make_engine()
-    market = _base_market()
+    market = _base_market(no_best_ask="0.35", no_best_bid="0.33")
 
-    _mock_bayesian(engine, probability=0.20)  # strong NO edge at 0.36
+    _mock_bayesian(engine, probability=0.20)  # strong NO edge, clears OPT-5 min_edge
     _mock_kelly(engine, size=50.0)
     _mock_stoikov(engine, price=0.35)
     _mock_edge_model(engine, single=0.0, cross=0.0)
@@ -330,7 +332,7 @@ async def test_signal_direction_none_when_all_edges_negative():
 async def test_no_direction_never_uses_yes_token_id():
     """Guard against any regression where NO direction accidentally uses yes_token_id."""
     engine = _make_engine()
-    market = _base_market()
+    market = _base_market(no_best_ask="0.35", no_best_bid="0.33")
     yes_tok = market["yes_token_id"]
     no_tok  = market["no_token_id"]
     assert yes_tok != no_tok, "Test market must have distinct token IDs"

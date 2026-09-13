@@ -98,7 +98,7 @@ class Orchestrator:
         )
         logger.info("Subagent Coordinator initialized (Research + Signal + Reviewer)")
 
-        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", 7))  # PIVOT: raised to 7 (2 dir + 5 maker)
+        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", 5))  # CLAUDE.md: max 5 açık pozisyon (non-negotiable)
         self.min_edge = float(os.getenv("MIN_EDGE_THRESHOLD", 0.08))
         self.min_market_volume = float(os.getenv("MIN_MARKET_VOLUME", 10_000))
         self.daily_stop_loss = float(os.getenv("DAILY_STOP_LOSS_PCT", 0.15))
