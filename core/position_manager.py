@@ -24,6 +24,16 @@ _COIN_TO_PAIR = {
 DATA_FILE = Path("data/positions.json")
 LOCK_FILE = Path("data/positions.lock")
 
+
+def _now_et() -> datetime:
+    """Current wall-clock time in America/New_York, as its own mockable
+    function (matching strategies.arbitrage_engine._get_current_et_hour) so
+    tests can pin it instead of flaking based on when the suite happens to
+    run — update_positions()'s question-derived TIME_EXPIRED check compares
+    this against each position's parsed end time-of-day."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York"))
+
 # Bond positions user manually cancelled — never re-add these
 _IGNORED_MARKETS = {
     "0xf2f0cf8b7aa90c53fbd56439782d1828a2315c8d21890f4a2804a61720985cea",  # Denmark PM
@@ -248,8 +258,7 @@ class PositionManager:
                         end_h += 12
                     elif end_ampm == "AM" and end_h == 12:
                         end_h = 0
-                    from zoneinfo import ZoneInfo
-                    now_et = datetime.now(ZoneInfo("America/New_York"))
+                    now_et = _now_et()
                     market_end_min = end_h * 60 + end_m
                     now_min = now_et.hour * 60 + now_et.minute
                     # Midnight crossing fix: fark negatifse gün geçişi var
@@ -266,7 +275,6 @@ class PositionManager:
             if market is None:
                 # Gamma API conditionId lookup unreliable — use CLOB token resolution
                 # Check if market end time (from question) has passed
-                from zoneinfo import ZoneInfo
                 question = pos.get("question", "")
                 end_m = re.search(
                     r'(\d{1,2}):(\d{2})\s*(AM|PM)\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM)',
@@ -277,7 +285,7 @@ class PositionManager:
                     _, _, _, h2, m2, ap2 = end_m.groups()
                     end_hour = (int(h2) % 12) + (12 if ap2.upper() == "PM" else 0)
                     end_min = int(m2)
-                    now_et = datetime.now(ZoneInfo("America/New_York"))
+                    now_et = _now_et()
                     market_end_mins = end_hour * 60 + end_min
                     now_mins = now_et.hour * 60 + now_et.minute
                     # Market ended if current time > end time + 1 min buffer
