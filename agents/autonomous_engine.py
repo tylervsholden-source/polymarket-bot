@@ -219,10 +219,19 @@ class AutonomousDecisionEngine:
                 action = ActionType.EXECUTE_REDUCED
                 reasons.append("REVIEWER_VETO: severely reduced but not skipped")
             elif verdict_str == "REDUCE":
+                # NOTE: do NOT also fold `suggested` into size_mult here.
+                # AgentCoordinator.run_cycle() (agents/subagents/coordinator.py)
+                # already multiplies signal.size by suggested_size_pct before
+                # this signal ever reaches the orchestrator's per-signal loop.
+                # bet_size is later derived from that already-reduced
+                # signal.size (compute_bet_size(signal_size=signal.size, ...)),
+                # so re-applying `suggested` to size_mult here would shrink the
+                # live bet_size by suggested_size_pct² instead of the reviewer's
+                # intended suggested_size_pct (same double-application pattern
+                # as FIX_CONFLICT_REPORT.md's 15m double-dampening bug).
                 suggested = getattr(review_decision, 'suggested_size_pct', 0.6)
-                size_mult = min(size_mult, suggested)
                 action = ActionType.EXECUTE_REDUCED
-                reasons.append(f"REVIEWER_REDUCE: size×{suggested:.2f}")
+                reasons.append(f"REVIEWER_REDUCE: size already ×{suggested:.2f} via coordinator")
 
         # ── VOLATİLİTE REJİMİ ──
         regime_strength = getattr(signal, 'regime_strength', 0.0)
