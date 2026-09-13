@@ -1582,9 +1582,21 @@ class ArbitrageEngine:
 
         effective_min_edge = (_base_edge + _regime_addon) * _zone_edge_mult
 
+        # OPT-5: adaptive min-edge gate (CLAUDE.md kural 5 — min edge eşiği).
+        # Bu kontrol daha önce kaldırılmıştı (bkz. git blame 9b5fd52); CLAUDE.md'nin
+        # "Temel Kurallar (Değiştirme)" bölümü ve v9 OPT-5 spesifikasyonu bu eşiğin
+        # aktif olmasını gerektiriyor, o yüzden geri eklendi.
+        if edge < effective_min_edge:
+            logger.info(
+                f"EDGE_REJECT: {question[:40]} | {direction} edge={edge:.3f} < "
+                f"effective_min_edge={effective_min_edge:.3f} (base={_base_edge:.3f} "
+                f"regime_addon={_regime_addon:.3f})"
+            )
+            return None
+
         # ── SYNTHETIC NO PRICE PENALTY ─────────────────────────────────────
         # SYNTHETIC_NO_PENALTY, REGIME_NO_GATE, NEUTRAL_NO_GATE, OPT6_COOLDOWN,
-        # EDGE_REJECT, CAUTIOUS_HOUR — hepsi kaldırıldı, sinyal neyse o
+        # CAUTIOUS_HOUR — hepsi kaldırıldı, sinyal neyse o
         _cautious_hour_active = False
 
         # Stoikov giriş fiyatı
