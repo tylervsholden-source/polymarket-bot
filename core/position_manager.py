@@ -506,8 +506,16 @@ class PositionManager:
 
             # Token fiyatı: YES için YES bid, NO için gerçek NO orderbook
             if outcome == "NO":
-                # Gerçek NO orderbook fiyatını çek
-                no_tid = (market or {}).get("no_token_id")
+                # Gerçek NO orderbook fiyatını çek.
+                # BUG: client.get_market() (Gamma single-market fetch) normalize
+                # ederken yes_token_id/no_token_id'yi HİÇ set etmiyor (sadece
+                # _normalize_markets(), market taramasında kullanılıyor, set eder).
+                # market.get("no_token_id") bu yüzden burada her zaman None dönüyordu
+                # → no_book hiçbir zaman gerçekten sorgulanmıyordu → NO pozisyonları
+                # daima current_price=1-yes_ask (gecikmeli Gamma verisi) ile
+                # değerleniyordu. pos["token_id"] ise emir anında kaydedilen,
+                # her zaman doğru token id — birincil kaynak olarak onu kullan.
+                no_tid = pos.get("token_id") or (market or {}).get("no_token_id")
                 no_book = client.get_orderbook(no_tid) if no_tid else None
                 if no_book and no_book["best_bid"] > 0:
                     current_price = no_book["best_bid"]
