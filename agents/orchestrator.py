@@ -896,8 +896,17 @@ class Orchestrator:
                     self.position_manager.add_position(market_id, order, market["question"])
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1
-                    capital -= bet_size
-                    cycle_spent += bet_size
+                    # CLOB'un 5-share min-size tabani, kucuk bet_size + yuksek
+                    # fiyat kombinasyonunda gercek maliyeti (order["amount"])
+                    # istenen bet_size'in kat kat uzerine cikarabiliyor
+                    # (orn. bet_size=$1 @ price=0.90 -> gercek $4.55). bet_size
+                    # ile dusulunce bu cycle'in gercek capital/harcama
+                    # gorunumu sisirilir; sonraki sinyaller icin
+                    # compute_bet_size()'in %20 pozisyon tavani da bu sisirilmis
+                    # capital'e gore hesaplanir.
+                    real_cost = order.get("amount", bet_size)
+                    capital -= real_cost
+                    cycle_spent += real_cost
                     logger.success(
                         f"EMİR VERİLDİ [{review_decision.verdict.value}]: "
                         f"{market['question'][:50]} | "
@@ -1117,7 +1126,10 @@ class Orchestrator:
                 self.position_manager.add_position(market_id, order, question)
                 self._reentry_guard.mark_traded(market_id)
                 open_count += 1  # Sonraki emirler için güncelle
-                capital -= amount
+                # bkz. üstteki doğrudan emir yolundaki aynı düzeltme: CLOB'un
+                # 5-share min-size tabanı yüzünden gerçek maliyet (order["amount"])
+                # istenen `amount`'tan büyük olabilir.
+                capital -= order.get("amount", amount)
                 logger.success(
                     f"ONAYLANMIŞ EMİR VERİLDİ: {question[:50]} | "
                     f"${amount:.2f} @ {price:.4f}"
