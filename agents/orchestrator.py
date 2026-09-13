@@ -59,6 +59,42 @@ from agents.trade_analyzer import TradeAnalyzer
 from agents.resilience import resilient, with_retry, cycle_guard, HealthMonitor
 
 
+def compute_bet_size(
+    capital: float,
+    signal_size: float,
+    min_bet: float,
+    max_bet: float,
+    max_position_pct: float,
+    hard_max_bet: float = 4.0,
+) -> tuple[float, float]:
+    """Bet size: Kelly's signal_size clamped into a capital-scaled min/max band.
+
+    Low capital (<$20) uses a wide survival-mode band so tiny accounts stay
+    tradeable; normal capital uses a tighter band. Either way, the band is
+    clamped to max_position_pct of capital: CLAUDE.md's "Max tek pozisyon:
+    portföyün %20'si (Kelly override yapmaz)" is non-negotiable, and the
+    survival-mode floor must never override Kelly's own (already capped)
+    signal_size above that ceiling.
+
+    Returns (bet_size, effective_min) — effective_min is reused by callers
+    as the floor for later size adjustments (autonomous engine, walk-forward).
+    """
+    if capital < 20:
+        cap_pct, min_pct = 0.80, 0.40  # survival mode — $5 capital → max $4 bet
+    else:
+        cap_pct, min_pct = 0.12, 0.04  # MANTIKLI: $71 → max ~$8.5/trade
+
+    effective_min = max(1.0, min(min_bet, capital * min_pct))
+    effective_max = min(max_bet, capital * cap_pct, hard_max_bet)
+
+    position_cap = capital * max_position_pct
+    effective_min = min(effective_min, position_cap)
+    effective_max = min(effective_max, position_cap)
+
+    bet_size = max(effective_min, min(effective_max, signal_size))
+    return bet_size, effective_min
+
+
 class Orchestrator:
     def __init__(self, process_lock=None):
         self.interval = int(os.getenv("CYCLE_INTERVAL_SECONDS", 60))
@@ -673,21 +709,19 @@ class Orchestrator:
             # Capital %5 cap da uygulanır ama $5 hard cap her durumda geçerli.
             HARD_MAX_BET = 4.0  # max $4 per trade
 
-            # Dynamic min/max bet: scale with capital
-            # Low capital (<$20): allow up to 80% of capital per trade (survival mode)
-            # Normal capital: max 3% per trade
-            if capital < 20:
-                _cap_pct = 0.80  # survival mode — $5 capital → max $4 bet
-                _min_pct = 0.40
-            else:
-                _cap_pct = 0.12  # MANTIKLI: $71 → max ~$8.5/trade
-                _min_pct = 0.04  # min ~$3 per trade
-            _effective_min = max(1.0, min(self._min_bet, capital * _min_pct))
-            _effective_max = min(self._max_bet, capital * _cap_pct, HARD_MAX_BET)
-            if _effective_max < 1.0:
+            # Dynamic min/max bet: scale with capital (see compute_bet_size for the
+            # survival-mode band and the CLAUDE.md 20%-of-capital ceiling it respects).
+            bet_size, _effective_min = compute_bet_size(
+                capital=capital,
+                signal_size=signal.size,
+                min_bet=self._min_bet,
+                max_bet=self._max_bet,
+                max_position_pct=self.position_manager.max_position_pct,
+                hard_max_bet=HARD_MAX_BET,
+            )
+            if bet_size < 1.0:
                 logger.warning(f"Capital too low for any trade: ${capital:.2f}")
                 break
-            bet_size = max(_effective_min, min(_effective_max, signal.size))
 
             # ── AUTONOMOUS ENGINE SIZE ADJUSTMENT ──
             if _auto_size_mult < 1.0:
