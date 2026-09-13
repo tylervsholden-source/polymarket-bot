@@ -598,8 +598,8 @@ class Orchestrator:
             })())
         self._record_shadow_decisions(candidates, _raw_for_journal, min_bet_override)
 
-        # ── COIN_LIMIT: max 5 coin/slot ──
-        all_signals = self._limit_coins_per_period(all_signals, max_per_period=5)
+        # ── COIN_LIMIT (OPT-2): max 1 coin/slot — korelasyon %99, 2 coin = 2x risk 1x bilgi ──
+        all_signals = self._limit_coins_per_period(all_signals, max_per_period=1)
 
         # Apply COIN_LIMIT to approved_signals too (BUG FIX: execution loop
         # was using coord_result.approved_signals which bypassed COIN_LIMIT)
@@ -1303,7 +1303,7 @@ class Orchestrator:
         m = tf_pattern.search(question)
         return m.group(1).upper().replace(" ", "") if m else "unknown"
 
-    def _limit_coins_per_period(self, signals: list, max_per_period: int = 2) -> list:
+    def _limit_coins_per_period(self, signals: list, max_per_period: int = 1) -> list:
         """Aynı zaman diliminde max N coin'e izin ver (korelasyon riski azaltma).
 
         Lesson #21: All coins move together — 5 coins in same period = 5x risk, 1x info.
