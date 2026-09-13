@@ -342,8 +342,12 @@ class ReviewerAgent(BaseAgent):
                 reasons.append(f"NO edge {sig.edge:.3f} < 0.15 (33% WR history)")
 
             # Regime overextended + counter-trade
-            # FIX-A: Use exact match instead of substring (COUNTER_REGIME_NO would match incorrectly)
-            if "REGIME_OVEREXTENDED" in sig.risk_flags and any(f == "COUNTER_REGIME" for f in sig.risk_flags):
+            # signal_agent_v2._detect_risk_flags only ever emits COUNTER_REGIME_NO /
+            # COUNTER_REGIME_YES, never bare "COUNTER_REGIME" — match by prefix so
+            # this VETO can actually fire (an exact match here is always false).
+            if "REGIME_OVEREXTENDED" in sig.risk_flags and any(
+                f.startswith("COUNTER_REGIME") for f in sig.risk_flags
+            ):
                 verdict = ReviewVerdict.VETO
                 reasons.append("Counter-regime trade in overextended regime")
 
