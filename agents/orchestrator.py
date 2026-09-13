@@ -91,6 +91,11 @@ def compute_bet_size(
     effective_min = min(effective_min, position_cap)
     effective_max = min(effective_max, position_cap)
 
+    # A caller-supplied floor (e.g. the dashboard's min_bet control) can exceed
+    # the ceiling above for large-capital accounts — min_pct's floor scales
+    # faster with capital than hard_max_bet does. Never let the floor win.
+    effective_min = min(effective_min, effective_max)
+
     bet_size = max(effective_min, min(effective_max, signal_size))
     return bet_size, effective_min
 
@@ -711,10 +716,13 @@ class Orchestrator:
 
             # Dynamic min/max bet: scale with capital (see compute_bet_size for the
             # survival-mode band and the CLAUDE.md 20%-of-capital ceiling it respects).
+            # min_bet_override is the dashboard's live min_bet control (docs/architecture.md:
+            # "min_bet: dashboard 1/5/10/20$ -> orchestrator okur -> bet_size = max(min_bet, kelly)");
+            # it used to be read into the shadow journal only and never reached real sizing.
             bet_size, _effective_min = compute_bet_size(
                 capital=capital,
                 signal_size=signal.size,
-                min_bet=self._min_bet,
+                min_bet=min_bet_override,
                 max_bet=self._max_bet,
                 max_position_pct=self.position_manager.max_position_pct,
                 hard_max_bet=HARD_MAX_BET,
