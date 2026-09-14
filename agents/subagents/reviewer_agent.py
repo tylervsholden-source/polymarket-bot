@@ -116,6 +116,7 @@ Your job is to critically evaluate each trade proposal and decide: APPROVE, VETO
 ## Response Format
 For EACH trade, respond with EXACTLY this JSON format:
 {
+  "trade_number": <the trade's number from "--- Trade #N ---", as an integer>,
   "verdict": "APPROVE" | "VETO" | "REDUCE",
   "confidence": 0.0-1.0,
   "suggested_size_pct": 0.0-1.0,
@@ -123,7 +124,9 @@ For EACH trade, respond with EXACTLY this JSON format:
   "risk_assessment": "brief risk summary"
 }
 
-If multiple trades, return a JSON array of these objects.
+If multiple trades, return a JSON array of these objects — one per trade,
+each with its correct "trade_number" (required, used to match your
+decision back to the right trade; do not omit or renumber trades).
 Be concise. No explanations outside the JSON."""
 
 
@@ -268,7 +271,33 @@ class ReviewerAgent(BaseAgent):
             if isinstance(parsed, dict):
                 parsed = [parsed]
 
-            for i, (item, sig) in enumerate(zip(parsed, signals)):
+            # Match each response item back to the trade it is FOR, using the
+            # "trade_number" Claude echoes (1-based, matching "--- Trade #N
+            # ---" in the prompt) — NOT raw array position. If Claude's array
+            # ever drops, reorders, or duplicates a trade (all observed LLM
+            # behaviors), naive zip(parsed, signals) silently applies one
+            # trade's verdict/reasoning to a DIFFERENT trade's condition_id —
+            # e.g. a thin-edge NO trade that was never actually reviewed can
+            # inherit an unrelated trade's APPROVE and get executed with live
+            # capital, while the actually-approved trade gets wrongly VETOed
+            # as "missing". Falls back to positional matching only for items
+            # that omit trade_number (e.g. an older/degraded response).
+            used_indices: set[int] = set()
+            for i, item in enumerate(parsed):
+                idx = None
+                trade_number = item.get("trade_number")
+                if isinstance(trade_number, (int, float)) and not isinstance(trade_number, bool):
+                    candidate = int(trade_number) - 1
+                    if 0 <= candidate < len(signals) and candidate not in used_indices:
+                        idx = candidate
+                if idx is None and i < len(signals) and i not in used_indices:
+                    idx = i
+                if idx is None:
+                    continue
+
+                used_indices.add(idx)
+                sig = signals[idx]
+
                 verdict_str = item.get("verdict", "VETO").upper()
                 try:
                     verdict = ReviewVerdict(verdict_str)
