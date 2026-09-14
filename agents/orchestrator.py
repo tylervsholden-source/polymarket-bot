@@ -923,6 +923,7 @@ class Orchestrator:
                     self.position_manager.add_position(market_id, order, market["question"])
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1
+                    directional_count += 1
                     # CLOB'un 5-share min-size tabani, kucuk bet_size + yuksek
                     # fiyat kombinasyonunda gercek maliyeti (order["amount"])
                     # istenen bet_size'in kat kat uzerine cikarabiliyor
