@@ -100,6 +100,29 @@ def compute_bet_size(
     return bet_size, effective_min
 
 
+def apply_risk_size_multiplier(bet_size: float, multiplier: float) -> float:
+    """Apply AutonomousDecisionEngine's risk-based size_multiplier to bet_size.
+
+    Bug (22nd daily review): the call site used to re-clamp the result up to
+    compute_bet_size()'s `effective_min` — i.e.
+    `bet_size = max(effective_min, bet_size * multiplier)`. `effective_min`
+    exists to keep a *Kelly-derived* signal_size within a tradeable
+    capital-scaled band; it has nothing to do with how far the autonomous
+    engine is allowed to shrink bet_size once it has decided a signal is
+    risky (REVIEWER_VETO ×0.25, CRITICAL/DRAWDOWN ×0.3-0.5, LOSS_STREAK
+    ×0.5-0.6, SURVIVAL_MODE ×0.3). Whenever bet_size already sat at or near
+    effective_min — the common case for small accounts, since
+    compute_bet_size() floors signal_size up to effective_min in the first
+    place — multiplying by e.g. 0.25 and then re-clamping back up to
+    effective_min silently threw the entire reduction away, defeating the
+    exact protection the multiplier exists to apply. The walk-forward and
+    adaptive-bet-multiplier adjustments a few lines below this call site
+    apply their own multipliers directly with no such re-clamp; this makes
+    the autonomous engine's adjustment consistent with them.
+    """
+    return bet_size * multiplier
+
+
 class Orchestrator:
     def __init__(self, process_lock=None):
         self.interval = int(os.getenv("CYCLE_INTERVAL_SECONDS", 60))
@@ -758,7 +781,7 @@ class Orchestrator:
             # ── AUTONOMOUS ENGINE SIZE ADJUSTMENT ──
             if _auto_size_mult < 1.0:
                 original_bet = bet_size
-                bet_size = max(_effective_min, bet_size * _auto_size_mult)
+                bet_size = apply_risk_size_multiplier(bet_size, _auto_size_mult)
                 logger.info(
                     f"[AUTONOMOUS] Size adjust: ${original_bet:.2f} × {_auto_size_mult:.2f} "
                     f"= ${bet_size:.2f}"
