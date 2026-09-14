@@ -1493,10 +1493,14 @@ class ArbitrageEngine:
 
         # GATE 0: ADX < 20 = yönsüz piyasa → fake breakout riski çok yüksek
         # Data: HYPE ADX=18 P=0.917 → LOSS, BNB ADX=20 tech=-0.07 → LOSS
-        # ADX < 20 = no trend, 5dk window'da noise dominant
-        if adx < 20 and edge < 0.25:
+        # ADX < 20 = no trend, 5dk window'da noise dominant.
+        # trade_edge kullan — `edge` bu noktada henüz set edilmemiş (satır ~1570'te
+        # ilk atanıyor), yani her zaman 404'teki 0.0 varsayılanıydı ve edge<0.25
+        # her zaman True olup gate'i "genuine mispricing override"sız bir
+        # `if adx < 20: return None`'a indirgiyordu.
+        if adx < 20 and trade_edge < 0.25:
             logger.info(
-                f"LOW_ADX_BLOCK: {question[:40]} | ADX={adx:.0f}<20 edge={edge:.3f}<0.25 "
+                f"LOW_ADX_BLOCK: {question[:40]} | ADX={adx:.0f}<20 edge={trade_edge:.3f}<0.25 "
                 f"→ blocked (no trend, fake breakout risk)"
             )
             return None
