@@ -191,6 +191,14 @@ class SmartTraderTracker:
             if not isinstance(positions, list):
                 return False
 
+            # Bu trader için önceki refresh'ten kalan pozisyonları temizle —
+            # API artık kapatılmış pozisyonları döndürmüyor, cache'de stale
+            # kalırsa get_signal() kapatılmış pozisyonu sonsuza dek "açık"
+            # sayıp bayesian_prob'u yanlış yönde beslemeye devam eder.
+            name = trader["name"]
+            for market_positions in self._positions.values():
+                market_positions.pop(name, None)
+
             now = datetime.now(timezone.utc)
             added = 0
             for pos in positions:
