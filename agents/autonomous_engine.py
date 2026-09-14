@@ -354,28 +354,33 @@ class AutonomousDecisionEngine:
         perf.capital = capital
         perf.initial_capital = float(os.getenv("INITIAL_CAPITAL", 500))
 
-        # Win/Loss say
-        wins = [t for t in closed_trades if t.get("pnl", 0) > 0]
-        losses = [t for t in closed_trades if t.get("pnl", 0) <= 0]
+        # Win/Loss say — NEUTRAL (unfilled/cancelled GTC order, USDC refunded,
+        # pnl=0 — see position_manager._close_position_neutral()) is neither
+        # a win nor a loss. Classifying by raw pnl<=0 counted every NEUTRAL
+        # close as a LOSS, which strategies/kelly_criterion.py's own
+        # update_streak() already avoids by checking `result` instead.
+        wins = [t for t in closed_trades if t.get("result") == "WIN"]
+        losses = [t for t in closed_trades if t.get("result") == "LOSS"]
         perf.win_count = len(wins)
         perf.loss_count = len(losses)
-        perf.win_rate = perf.win_count / max(perf.total_trades, 1)
+        perf.win_rate = perf.win_count / max(perf.win_count + perf.loss_count, 1)
 
         # Ortalama edge
         edges = [t.get("edge", 0) for t in closed_trades if t.get("edge")]
         perf.avg_edge = sum(edges) / max(len(edges), 1)
 
-        # Ardışık kayıp/kazanç
+        # Ardışık kayıp/kazanç — NEUTRAL closes are skipped (not counted, do
+        # not break the streak), matching kelly_criterion.update_streak().
         perf.consecutive_losses = 0
         perf.consecutive_wins = 0
         for t in reversed(closed_trades):
-            pnl = t.get("pnl", 0)
-            if pnl > 0:
+            result = t.get("result", "")
+            if result == "WIN":
                 if perf.consecutive_losses == 0:
                     perf.consecutive_wins += 1
                 else:
                     break
-            elif pnl <= 0:
+            elif result == "LOSS":
                 if perf.consecutive_wins == 0:
                     perf.consecutive_losses += 1
                 else:
