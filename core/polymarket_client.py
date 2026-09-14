@@ -85,9 +85,21 @@ class PolymarketClient:
             logger.warning(f"Allowance kontrolu basarisiz: {e}")
 
     def get_real_balance(self) -> float:
-        """Polymarket CLOB'dan gerçek USDC bakiyesini döner ($)."""
+        """Polymarket CLOB'dan gerçek USDC bakiyesini döner ($).
+
+        BUG FIX: "bakiye alınamadı" (no CLOB configured, or the balance call
+        raised) used to return 0.0 — indistinguishable from a genuine $0.00
+        balance. Orchestrator._sync_real_balance() (called unconditionally
+        every cycle) has an `if balance < 0: return` guard specifically to
+        skip a failed fetch, but since this never returned negative, a single
+        transient API error (or running with no wallet configured — the
+        documented no-API-key simulation mode) caused it to overwrite
+        position_manager's tracked capital down to just the locked-position
+        total, silently destroying the rest of the account's capital.
+        Returning -1.0 on failure lets that existing guard work as intended.
+        """
         if not self._clob:
-            return 0.0
+            return -1.0
         try:
             from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
             params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
@@ -98,7 +110,7 @@ class PolymarketClient:
             return balance
         except Exception as e:
             logger.warning(f"Bakiye alınamadı: {e}")
-            return 0.0
+            return -1.0
 
     # ------------------------------------------------------------------ #
     # Market Data (Gamma API — auth gerekmez)
