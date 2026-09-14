@@ -413,12 +413,21 @@ class AutonomousDecisionEngine:
     # ADAPTİF PARAMETRE AYARLAMA
     # ═══════════════════════════════════════════════════════════════════
 
-    def get_adaptive_params(self) -> dict:
+    def get_adaptive_params(self, capital: float | None = None) -> dict:
         """
         Performansa göre dinamik parametre önerileri.
         Orchestrator bu değerleri okuyup uygulayabilir.
+
+        capital: en güncel gerçek sermaye. PerformanceSnapshot.capital SADECE
+        evaluate() bir sinyalle (closed_trades doluyken) çağrıldığında set edilir;
+        bu fonksiyon orchestrator.run()'da HER döngüde (sinyal olsun olmasın,
+        ilk trade kapanmadan önce dahil) çağrılıyor. capital verilmezse taze bir
+        deploy'da perf.capital 0.0'da kalır ve SURVIVAL modu (min_edge_no 0.18→0.25,
+        bet×0.3) yanlışlıkla kalıcı olarak tetiklenir.
         """
         perf = self._performance
+        if capital is not None:
+            perf.capital = capital
         params = {
             "min_edge_yes": 0.08,
             "min_edge_no": 0.15,

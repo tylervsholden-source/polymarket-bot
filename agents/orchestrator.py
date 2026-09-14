@@ -411,8 +411,12 @@ class Orchestrator:
             if backoff > 0:
                 logger.warning(f"HEALTH_BACKOFF: +{backoff:.0f}s (ardışık hatalar)")
 
-            # AutonomousEngine adaptif interval
-            adaptive = self.autonomous_engine.get_adaptive_params()
+            # AutonomousEngine adaptif interval — gerçek sermayeyi geç, yoksa
+            # perf.capital ilk trade kapanana kadar 0.0'da kalıp SURVIVAL modunu
+            # yanlışlıkla kalıcı hale getirir (bkz. get_adaptive_params docstring)
+            adaptive = self.autonomous_engine.get_adaptive_params(
+                self.position_manager.available_capital()
+            )
             if adaptive.get("cycle_interval_seconds", self.interval) != self.interval:
                 wait_time = adaptive["cycle_interval_seconds"] + backoff
                 logger.info(f"ADAPTIVE_INTERVAL: {wait_time:.0f}s (aggression={adaptive['aggression']})")
