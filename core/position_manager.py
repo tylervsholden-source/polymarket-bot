@@ -570,7 +570,18 @@ class PositionManager:
                 else:
                     current_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else pos["entry_price"]
             else:
-                current_price = float(market.get("best_bid", pos["entry_price"]) or pos["entry_price"])
+                # BUG: get_market()/_normalize_markets() HER ZAMAN best_bid'i float'a
+                # normalize eder (kotasyon yoksa 0.0 default'uyla) — yani dict key'i
+                # hiçbir zaman gerçekten eksik olmuyor ve `market.get("best_bid",
+                # pos["entry_price"])` default'u asla tetiklenmiyordu; her zaman
+                # dict'teki (belki 0.0) değeri dönüyordu. Ardından `or pos["entry_price"]`
+                # gerçek bir "bid tam 0.0" kotasyonunu (YES token'ı çökmüş, kaybediyor)
+                # "kotasyon yok" ile ayırt edemeden entry_price'a geri düşüyordu — bu da
+                # gerçek bir büyük kaybı gizleyip 45dk'lık TIMEOUT_HEURISTIC'in pozisyonu
+                # LOSS yerine NEUTRAL kapatmasına (capital şişmesi, daily stop-loss'un
+                # atlanması) yol açıyordu. NO dalındaki (34. review) düzeltmeyle aynı
+                # mantık: "kotasyon yok" sadece bid VE ask ikisi de 0 iken geçerli.
+                current_price = _yes_bid_raw if (_yes_bid_raw > 0 or _yes_ask_raw > 0) else pos["entry_price"]
 
             amount = pos["amount"]
             entry = pos["entry_price"]
