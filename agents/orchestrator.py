@@ -920,7 +920,12 @@ class Orchestrator:
                     self._order_timestamps.append(time.time())
                     order["outcome"] = signal.direction
                     order["token_id"] = token_id or ""
-                    self.position_manager.add_position(market_id, order, market["question"])
+                    self.position_manager.add_position(
+                        market_id, order, market["question"],
+                        edge=signal.edge,
+                        confluence_score=signal.confluence_score,
+                        risk_flags=signal.risk_flags,
+                    )
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1
                     directional_count += 1
