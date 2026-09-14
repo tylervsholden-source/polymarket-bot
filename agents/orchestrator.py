@@ -2033,6 +2033,17 @@ class Orchestrator:
             new_capital = balance + locked
             old_capital = self.position_manager.data.get("capital", 0)
 
+            # PositionManager.daily_loss_exceeded() (CLAUDE.md'nin -%15 günlük
+            # stop-loss kuralı) gün başı sermayeyi "capital - daily.pnl" olarak
+            # hesaplar. _close_position()/_close_position_neutral() bu iki
+            # alanı hep birlikte değiştirir; burada da aynı değişmez korunmalı
+            # — yoksa bu senkron (her döngüde çalışır) capital'i daily.pnl'e
+            # dokunmadan düzeltince gün başı tahmini sessizce kayar ve gerçek
+            # bir -%15 ihlali daily.pnl'in eski değerinde gizlenip stop-loss
+            # hiç tetiklenmeyebilir (ya da tam tersi, sahte bir kayıp üretir).
+            self.position_manager._roll_daily_if_needed()
+            self.position_manager.data["daily"]["pnl"] += (new_capital - old_capital)
+
             # Capital'i güncelle
             self.position_manager.data["capital"] = round(new_capital, 4)
             self.position_manager._save()
