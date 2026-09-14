@@ -177,12 +177,14 @@ class PositionManager:
         return market_id in self.data["positions"]
 
     def add_position(self, market_id: str, order: dict, question: str,
-                     strategy: str = "directional"):
+                     strategy: str = "directional", edge: float | None = None,
+                     confluence_score: float | None = None,
+                     risk_flags: list | None = None):
         if market_id in _IGNORED_MARKETS:
             logger.debug(f"IGNORED: {question[:40]} (blacklisted bond)")
             return
         from datetime import datetime, timezone
-        self.data["positions"][market_id] = {
+        pos = {
             "order_id": order["order_id"],
             "question": question,
             "outcome": order.get("outcome", "YES"),
@@ -191,8 +193,18 @@ class PositionManager:
             "status": order["status"],
             "token_id": order.get("token_id", ""),
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "opened_at": _time.time(),
             "strategy": strategy,
         }
+        # Sinyal meta verisi (TradeAnalyzer'in gercek trade'lerde de root-cause/
+        # pattern analizi yapabilmesi icin) — sadece cagiran taraf saglarsa yaz.
+        if edge is not None:
+            pos["edge"] = edge
+        if confluence_score is not None:
+            pos["confluence_score"] = confluence_score
+        if risk_flags is not None:
+            pos["risk_flags"] = risk_flags
+        self.data["positions"][market_id] = pos
         self._save()
         logger.info(f"Pozisyon eklendi [{strategy}]: {question[:50]}")
 
@@ -644,6 +656,8 @@ class PositionManager:
         pos["pnl"] = 0.0
         pos["payout"] = pos["amount"]
         pos["result"] = "NEUTRAL"
+        pos["resolved_at"] = datetime.now(timezone.utc).isoformat()
+        pos["closed_at"] = _time.time()
 
         # Capital değişmez — USDC zaten iade edildi
         self.data["closed"].append(pos)
@@ -690,6 +704,7 @@ class PositionManager:
         # CLOB-verified flag: bu trade CLOB tokens.winner ile resolve edildi
         pos["pnl_verified"] = True
         pos["resolved_at"] = datetime.now(timezone.utc).isoformat()
+        pos["closed_at"] = _time.time()
 
         # Sermayeyi sadece PnL kadar güncelle — principal zaten locked olarak sayılıyordu
         self.data["capital"] += pnl

@@ -128,7 +128,7 @@ class TradeAnalyzer:
             direction=trade.get("outcome", trade.get("direction", "")),
             pnl=float(trade.get("pnl", 0)),
             entry_price=float(trade.get("price", trade.get("entry_price", 0))),
-            exit_price=float(trade.get("exit_price", trade.get("resolution_price", 0))),
+            exit_price=float(trade.get("exit_price", trade.get("resolution_price", trade.get("close_price", 0)))),
         )
 
         # Win/Loss/Neutral belirle — position_manager'ın verdiği gerçek sonucu kullan
