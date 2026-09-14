@@ -155,18 +155,18 @@ HARİCİ CONTEXT VERİSİ
 GEÇMİŞ İSABET İSTATİSTİĞİ
 ═══════════════════════════════════════
 {hit_summary}
-{f"""
+{f'''
 ═══════════════════════════════════════
 GLOBAL PİYASA ENDEKSLERİ (Güncel)
 ═══════════════════════════════════════
 {index_ctx}
-""" if index_ctx else ""}
-{f"""
+''' if index_ctx else ""}
+{f'''
 ═══════════════════════════════════════
 TEKNIK ANALIZ MODELLERI (Candlestick)
 ═══════════════════════════════════════
 Tespit Edilen Formasyonlar: {', '.join(market.get('patterns', []))}
-""" if market.get('patterns') else ""}
+''' if market.get('patterns') else ""}
 ═══════════════════════════════════════
 ANALİZ TALİMATI
 ═══════════════════════════════════════
