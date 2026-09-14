@@ -2009,26 +2009,27 @@ class Orchestrator:
             if balance < 0:
                 return
 
-            # locked = sadece henüz resolve OLMAMIŞ pozisyonlar
-            # Süresi geçmiş marketlerin payout'u zaten CLOB bakiyeye yansımış,
-            # bunları locked'a dahil etmek double-count yapar.
-            from datetime import datetime, timezone
-            now_utc = datetime.now(timezone.utc)
-            locked = 0.0
-            for p in self.position_manager.data.get("positions", {}).values():
-                amt = p.get("amount", 0)
-                # Market end time'ı parse et
-                question = p.get("question", "")
-                try:
-                    from control_plane.entry_window_guard import parse_market_times
-                    _, end_utc = parse_market_times(question)
-                    if end_utc and now_utc > end_utc:
-                        # Market süresi geçmiş — payout CLOB'a düşmüş olabilir
-                        # locked'a EKLEMİYORUZ
-                        continue
-                except Exception:
-                    pass
-                locked += amt
+            # locked = tüm hâlâ AÇIK pozisyonlar (data["positions"] içindeki her
+            # şey). Eskiden market end_time'ı geçmiş pozisyonlar burada hariç
+            # tutuluyordu ("payout CLOB bakiyeye yansımış, double-count olur"
+            # varsayımıyla) — ama update_positions() bu senkrondan HEMEN ÖNCE,
+            # aynı cycle içinde çalışıp resolve edebildiği her pozisyonu zaten
+            # data["positions"]'dan silip data["closed"]'a taşıyor (pnl'i de
+            # capital'e ekleyerek). Bu yüzden buraya kadar hâlâ data["positions"]
+            # içinde kalan bir pozisyon — end_time'ı geçmiş olsa bile — tanım
+            # gereği CLOB tarafından henüz resolve EDİLMEMİŞ demektir (bkz.
+            # position_manager.update_positions()'daki WAITING_RESOLUTION /
+            # STALE_UNRESOLVED / 45dk timeout mantığı): USDC'si henüz gerçek
+            # CLOB bakiyesine düşmemiştir, hâlâ kilitlidir. Onu locked'dan hariç
+            # tutmak double-count'u önlemiyordu — capital'i (ve dolayısıyla
+            # available_capital()'ı) o pozisyonun tutarı kadar sessizce
+            # eksik hesaplatıyordu, resolve olana kadar her cycle'da diskteki
+            # capital'e yazılıyordu (Kelly boyutlandırma, SURVIVAL-mode eşiği ve
+            # günlük -%15 stop-loss'un paydası bunu okuyor).
+            locked = sum(
+                p.get("amount", 0)
+                for p in self.position_manager.data.get("positions", {}).values()
+            )
             new_capital = balance + locked
             old_capital = self.position_manager.data.get("capital", 0)
 

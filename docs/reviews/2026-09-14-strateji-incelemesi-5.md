@@ -1,140 +1,107 @@
-# Günlük Strateji İncelemesi — 2026-09-14 (32. çalışma)
+# Günlük Strateji İncelemesi — 2026-09-14
 
 ## Hedef
 Mevcut sermayenin %10'u kadar kazanç. Günlük görev talimatı, hedefe ulaşmak
 için gereken kararları alma ve uygulama yetkisi veriyor.
 
 ## Durum özeti
-- Bu oturum açıldığında `claude/brave-faraday-myvsz9` branch'i zaten
-  `origin/main` (`eb170aa`, 31. çalışmanın sonucu — PR #57) ile birebir
-  aynıydı, bekleyen PR yoktu. Taban test suite: `pytest tests/ -q` →
-  **672 passed, 2 skipped**.
-- Önceki turlarda "temiz" olarak işaretlenen alanlar (`coordinator.py`,
-  `signal_agent_v2.py`, `kelly_criterion.py::update_streak`,
-  `polymarket_client.py`'nin daha önce bakılan kısımları, `main.py`,
-  `backtesting/engine.py`) hariç tutularak, o zamana kadar hiç ayrıntılı
-  incelenmemiş canlı-yol dosyalarında (`strategies/arbitrage_engine.py`,
-  `strategies/bayesian.py`, `strategies/edge_model.py`,
-  `strategies/stoikov.py`, `strategies/monte_carlo.py`,
-  `agents/market_classifier.py`, `agents/resilience.py`,
-  `agents/smart_trader_tracker.py`, `agents/autonomous_engine.py`'nin
-  MED/LOW/SURVIVAL dalları, `core/position_manager.py`'nin kalan kısımları)
-  yeni bir tur inceleme yapıldı.
+- Oturum açıldığında `origin/main` (`eb170aa`, 31. çalışmanın sonucu —
+  PR #57, aynı zamanda #52-#56'yı da merge etmişti) ile bu branch birebir
+  aynıydı; bekleyen fark yoktu.
+- Paralel bir oturumdan gelen **PR #58** (32. çalışma) açık ve
+  unmerged: `core/polymarket_client.py::get_real_balance()`'ın hata
+  yollarında `0.0` döndürmesi (gerçek $0 bakiyeden ayırt edilemiyor).
+  Bu PR farklı bir branch'te (`claude/brave-faraday-myvsz9`) olduğu için
+  bu oturumun kapsamı dışında bırakıldı — kendi düzeltmemi onunla
+  çakışmayacak şekilde seçtim.
 
-## ⚠️ KRİTİK — CANLI SERMAYE MUHASEBESİNİ DOĞRUDAN BOZAN BULGU
-Bu turun bulgusu, `docs/architecture.md`'nin de vurguladığı üzere
-`position_manager`'ın kendi P&L hesabının güvenilmez kanıtlandığı (752
-yanlış resolution → $670 tracking hatası) ve bu yüzden **CLOB bakiyesinin
-tek doğruluk kaynağı** ilan edildiği mekanizmanın ta kendisinde. Yani hata,
-projenin "sermaye muhasebesini düzeltmek için eklenen" korumanın içinde —
-ve döngü başına (60-120sn'de bir) koşulsuz çalışıyor.
-
-## Bugün yapılan işlem: `get_real_balance()` başarısız çağrıda gerçek $0 bakiye ile ayırt edilemeyen `0.0` döndürüyordu
+## Bugün yapılan işlem: `_sync_real_balance()`, resolve olmamış ama süresi geçmiş pozisyonları "locked" sermayeden sessizce düşürüyordu
 
 ### Hata
-`core/polymarket_client.py::PolymarketClient.get_real_balance()`:
+`agents/orchestrator.py::Orchestrator._sync_real_balance()`, gerçek CLOB
+bakiyesine eklenecek `locked` tutarını hesaplarken, market bitiş zamanı
+geçmiş her pozisyonu "payout zaten CLOB bakiyesine yansımıştır, tekrar
+saymak double-count olur" varsayımıyla `locked`'a **dahil etmiyordu**:
+
 ```python
-def get_real_balance(self) -> float:
-    if not self._clob:
-        return 0.0          # CLOB yapılandırılmamış — "bilinmiyor" değil, "$0" gibi okunuyor
-    try:
-        ...
-        return balance
-    except Exception as e:
-        logger.warning(f"Bakiye alınamadı: {e}")
-        return 0.0          # geçici API hatası da aynı sentinel'i döndürüyor
+_, end_utc = parse_market_times(question)
+if end_utc and now_utc > end_utc:
+    continue   # locked'a eklenmiyor
 ```
 
-`agents/orchestrator.py::Orchestrator._sync_real_balance()` — `run()`
-içinde başlangıçta bir kez (satır 366) ve her cycle sonunda (satır 406)
-koşulsuz çağrılıyor, live/sim modundan bağımsız:
-```python
-balance = self.client.get_real_balance()
-if balance < 0:
-    return                         # başarısız çağrıyı atlamak İÇİN var
-...
-new_capital = balance + locked
-self.position_manager.data["capital"] = round(new_capital, 4)
-self.position_manager._save()
-```
+Bu varsayım yanlış: `update_positions()` her cycle'da `_sync_real_balance()`'dan
+**önce** çalışıyor ve resolve edebildiği her pozisyonu zaten
+`data["positions"]`'dan silip `data["closed"]`'a taşıyor (pnl'ini de
+`capital`'e ekleyerek — bkz. `agents/orchestrator.py:561` ve
+`run()` içindeki çağrı sırası, satır 366/406). Yani `_sync_real_balance()`
+çalıştığında `data["positions"]` içinde hâlâ duran bir pozisyon — bitiş
+zamanı geçmiş olsa bile — tanım gereği CLOB tarafından **henüz resolve
+edilmemiş** demektir (`position_manager.update_positions()`'daki
+WAITING_RESOLUTION / STALE_UNRESOLVED / 45dk timeout mantığı tam olarak bu
+durumu ele almak için var — 5-15 dakikalık kripto up/down marketlerinde
+60-120sn'lik cycle'a karşı rutin bir durum). Onun USDC'si henüz gerçek
+CLOB bakiyesine düşmemiştir, hâlâ kilitlidir — tıpkı diğer tüm açık
+pozisyonlar gibi (`position_manager.locked_capital()`/`available_capital()`
+zaten böyle davranıyor, hiçbir end-time istisnası yok).
 
-`if balance < 0: return` koruması, `get_real_balance()`'ın başarısızlığı
-negatif bir sentinel ile bildirmesi **niyetiyle** yazılmış — ama fonksiyon
-hiçbir zaman negatif döndürmüyor. Yani:
-- CLOB client hiç yapılandırılmamışsa (ör. `docs/api_guide.md`'nin resmen
-  belgelediği "API key olmadan da çalışır" simülasyon modu),
-- veya tam yapılandırılmış canlı bir hesapta CLOB bakiye endpoint'i geçici
-  bir hata fırlatırsa (ağ blip'i, rate limit, vb.),
+Somut senaryo: `capital=$50`, bitiş zamanı geçmiş ama henüz resolve
+olmamış tek bir $4'lük açık pozisyon. Gerçek CLOB bakiyesi $46 (o $4 hâlâ
+kilitli). Hatalı kod `locked=$0` hesaplıyordu (hariç tutulduğu için) →
+`new_capital = 46+0 = $46`, pozisyon nihayet resolve olana kadar her
+cycle'da diskteki `capital`'e $4'lük bir kayıp yazılıyordu. Bu, Kelly
+boyutlandırmasını, `AutonomousDecisionEngine`'in SURVIVAL-mode eşiğini ve
+`PositionManager.daily_loss_exceeded()`'ı (CLAUDE.md'nin dokunulmaz
+günlük -%15 stop-loss kuralının paydası `capital - daily.pnl`) sessizce
+bozuyordu.
 
-`0.0`, `if balance < 0` korumasından geçip **gerçek bakiye gibi** işleniyor.
-Sonuç: `capital`, sadece o an açık (henüz resolve olmamış) pozisyonların
-toplamına (`locked`) eşitlenip **diske kaydediliyor** — gerçek sermayenin
-geri kalanı sessizce yok ediliyor. Bu bozuk `capital` değeri doğrudan Kelly
-pozisyon boyutlandırmasını, `AutonomousDecisionEngine`'in SURVIVAL-mode
-eşiğini ve CLAUDE.md'nin taviz vermediği günlük -%15 stop-loss'unu
-uygulayan `PositionManager.daily_loss_exceeded()`'i besliyor.
-
-`git blame` orijinal `feat` commit'ine (`9b5fd52`) kadar izlendi — CLOB
-bakiyesinin "tek gerçek kaynak" yapıldığı mimari karar bu commit'te
-geldi, ama başarısızlık sentinel'i hiçbir zaman doğru kodlanmamış; önceki
-31 günlük incelemenin hiçbiri bu fonksiyona dokunmamış.
+`git blame` ile orijinal `feat` commit'ine (`9b5fd52`) kadar izlendi;
+önceki 31 günlük incelemenin hiçbiri (ve açık PR #58'in de) bu satırlara
+dokunmamış — `get_real_balance()`'ın kendisi değil, onu çağıran
+`_sync_real_balance()`'ın `locked` hesaplaması farklı bir hata.
 
 ### Düzeltme
-Her iki başarısızlık dönüşü `0.0` yerine `-1.0` yapıldı — `_sync_real_
-balance()`'ta zaten var olan `if balance < 0` korumasıyla birebir
-eşleşiyor. Başarılı bir çağrıda gerçek $0.00 bakiye hâlâ tam olarak `0.0`
-dönüyor (ayrı bir testle doğrulandı). `_sync_real_balance()`'ın kendisi ve
-`locked` hesaplama mantığı dokunulmadı.
+End-time'a dayalı hariç tutma mantığı tamamen kaldırıldı; `locked`, artık
+`position_manager.locked_capital()` ile aynı invaryantı kullanıyor —
+`data["positions"]` içindeki her pozisyonun `amount`'ı toplanıyor:
 
-`tests/test_balance_sync_failure_sentinel.py` eklendi (5 test):
-1. CLOB yapılandırılmamışken sentinel negatif mi.
-2. CLOB çağrısı exception fırlatınca sentinel negatif mi.
-3. Gerçek $0 bakiyede hâlâ tam `0.0` dönüyor mu (regresyon değil).
-4. Uçtan uca: gerçek `Orchestrator._sync_real_balance()` çağrısı — başarısız
-   fetch sonrası `capital` $500'den bozulmadan kalıyor mu (asıl senaryo).
-5. Uçtan uca non-regresyon: başarılı bir fetch hâlâ `capital`'i doğru
-   güncelliyor mu (`balance + locked`).
+```python
+locked = sum(
+    p.get("amount", 0)
+    for p in self.position_manager.data.get("positions", {}).values()
+)
+```
+
+Başka hiçbir davranış değiştirilmedi (`get_real_balance()`, `balance < 0`
+erken-çıkış koruması, `new_capital = balance + locked` hesaplaması ve
+sonrası dokunulmadı).
+
+`tests/test_sync_balance_excludes_unresolved_past_due_position.py` eklendi
+(2 test):
+1. Asıl regresyon: bitiş zamanı geçmiş ama hâlâ açık bir pozisyonun
+   `_sync_real_balance()` sonrası hâlâ locked sayıldığını (`capital`
+   sabit $50 kaldığını) doğrular.
+2. Non-regresyon: bitiş zamanı henüz gelmemiş (parse edilemeyen) bir
+   pozisyonun davranışının değişmediğini doğrular.
 
 ## Doğrulama
-- Fix öncesi (`git stash` ile sadece kaynak dosya fix'i geri alınmış):
-  `pytest tests/test_balance_sync_failure_sentinel.py -v` → **3 failed, 2
-  passed** — asıl entegrasyon testi `capital was corrupted to 5.0` diye
-  fail ediyor (log: `CAPITAL_SYNC: $500.0000 → $5.0000`), tam yukarıda
-  anlatılan sermaye yok etme senaryosunu birebir üretiyor.
-- Fix sonrası: aynı dosya → **5/5 pass**.
-- Tam suite (fix sonrası): `pytest tests/ -q` → **677 passed, 2 skipped**
-  (672'den 677'ye — sadece bu turun 5 yeni testi, sıfır regresyon).
-- `git diff core/polymarket_client.py` → iki satırlık değişiklik (`0.0` →
-  `-1.0`, her iki başarısızlık dalında) + açıklayıcı docstring; `_clob`
-  bağlantı mantığı, başarılı yol, `_sync_real_balance()` dokunulmadı.
+- Fix öncesi (`git stash` ile `agents/orchestrator.py` geri alınmış):
+  yeni testlerden biri **fail** — `capital was corrupted to 46.0`
+  (log: `CAPITAL_SYNC: $50.0000 → $46.0000 (CLOB=$46.0000 + locked=$0.0000)`),
+  tam olarak açıklanan senaryoyu yeniden üretiyor.
+- Fix sonrası: `pytest tests/test_sync_balance_excludes_unresolved_past_due_position.py -v`
+  → **2/2 pass**.
+- Tam suite (fix sonrası): `pytest tests/ -q` → **1506 passed, 4 skipped**,
+  sıfır regresyon.
 - Test çalıştırmalarının yan etkisi olan `data/autonomous_state.json`
   commit öncesi eski haline döndürüldü.
 
-## İncelenip hata bulunamayan alanlar (bu turda)
-- `strategies/arbitrage_engine.py`, `strategies/bayesian.py`,
-  `strategies/edge_model.py`, `strategies/stoikov.py`,
-  `strategies/monte_carlo.py`, `strategies/spread_model.py`,
-  `strategies/quality_filter.py`, `strategies/orderbook_analyzer.py`
-- `agents/market_classifier.py`, `agents/resilience.py`,
-  `agents/smart_trader_tracker.py`, `agents/hit_rate_tracker.py`
-- `agents/autonomous_engine.py`'nin MED/LOW risk dalları, SURVIVAL modu,
-  drawdown/volatilite adaptasyonu (HIGH dalı 28. çalışmada, reviewer
-  verdict entegrasyonu 29. çalışmada zaten düzeltildi)
-- `agents/orchestrator.py`'nin `directional_count` ve stop-loss UTC
-  midnight dışındaki kalan cycle mantığı
-- `core/position_manager.py`'nin kalan açma/kapama muhasebesi
-
-Detaylar için arka plandaki inceleme oturumunun tam raporuna bakılabilir
-(bu PR'ın açıklamasında özetlenmiştir).
-
 ## Sonuç
-32. çalışma, `position_manager`'ın güvenilmez P&L hesabına karşı "CLOB
-bakiyesi tek doğruluk kaynağıdır" diye eklenen korumanın kendisinde kritik
-bir hata buldu: başarısız bir bakiye çağrısı gerçek bir $0 bakiyeyle
-ayırt edilemiyordu, bu yüzden her geçici API hatası (ya da API key'siz
-simülasyon modu) canlı `capital`'i sessizce sadece kilitli pozisyon
-toplamına düşürüp diske yazıyordu — Kelly boyutlandırma, SURVIVAL-mode ve
-günlük -%15 stop-loss'un hepsini bozan bir sınıf hatası. Zaten var olan
-`if balance < 0` korumasıyla eşleşecek şekilde iki satırlık minimal bir
-değişiklikle (`0.0` → `-1.0` sentinel) kapatıldı, beş regresyon testiyle
-kilitlendi.
+33. çalışma, gerçek CLOB bakiyesini `capital`'in tek doğruluk kaynağı
+yapan `_sync_real_balance()` içinde, `get_real_balance()`'ın kendisinden
+bağımsız ikinci bir hata buldu: süresi geçmiş ama henüz resolve olmamış
+pozisyonların `locked` sermayeden sessizce düşürülmesi. Tek satırlık
+semantik bir düzeltmeyle (yaklaşık 15 satırlık yanlış istisna mantığı
+kaldırılarak) `position_manager.locked_capital()` ile tutarlı hale
+getirildi, iki regresyon testiyle kilitlendi. PR #58 (32. çalışma, farklı
+branch) hâlâ bağımsız olarak bekliyor — merge edilirken bu fix ile
+çakışma olmaz (farklı fonksiyon bloğu).
