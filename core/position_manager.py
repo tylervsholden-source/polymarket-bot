@@ -452,7 +452,20 @@ class PositionManager:
                     self._close_position_neutral(market_id)
                 continue
 
-            yes_ask = float(market.get("best_ask", 0) or 0) or (1.0 - float(market.get("best_bid", 0) or 0))
+            # BUG: Gamma hiç kotasyon döndürmediğinde (bestAsk VE bestBid ikisi de
+            # 0/eksik — 5dk'lık kripto marketlerinde kapanışa yakın rutin) eski ifade
+            # `0 or (1.0 - 0)` = 1.0 üretiyordu, yani "YES 100 sent" anlamına gelen
+            # uydurma bir fiyat. Aşağıdaki NO dalı bunu `1.0 - 1.0 = 0.00`'a çevirip
+            # pozisyonu tamamen değersiz gösteriyordu; aynı daldaki
+            # `else pos["entry_price"]` koruması tam da bu "fiyat bilinmiyor"
+            # durumu için yazılmıştı ama `yes_ask > 0` olduğu için hiç çalışmıyordu
+            # (YES dalı zaten entry_price'a düşüyor). Sonuç: current_price=0.0 diske
+            # yazılıyor ve 45dk'lık TIMEOUT_HEURISTIC `_last_price < 0.20` dalına
+            # düşerek pozisyonu NEUTRAL yerine TAM KAYIP olarak kapatıyordu.
+            # 1-best_bid yedeği yalnızca gerçek bir YES bid'i varken kullanılmalı.
+            _yes_ask_raw = float(market.get("best_ask", 0) or 0)
+            _yes_bid_raw = float(market.get("best_bid", 0) or 0)
+            yes_ask = _yes_ask_raw or (1.0 - _yes_bid_raw if _yes_bid_raw > 0 else 0.0)
             outcome = pos.get("outcome", "YES").upper()
 
             # ── Market resolved → resolution outcome'dan close price belirle ──
