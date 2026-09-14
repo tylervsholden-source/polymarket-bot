@@ -56,12 +56,20 @@ class WalkForwardValidator:
         test_trades = closed_trades[-self.test_window:]
         train_trades = closed_trades[-(total_needed):-self.test_window]
 
-        # Calculate win rates
-        train_wins = sum(1 for t in train_trades if t.get("pnl", 0) > 0)
-        test_wins = sum(1 for t in test_trades if t.get("pnl", 0) > 0)
+        # Calculate win rates — NEUTRAL (unfilled/cancelled GTC order, USDC
+        # refunded, pnl=0 — see position_manager._close_position_neutral())
+        # is neither a win nor a loss. Classifying by raw pnl>0 counted every
+        # NEUTRAL close as a LOSS in the denominator, diluting train/test WR
+        # for a routine execution outcome rather than a real losing trade.
+        # Same bug class already fixed in agents/autonomous_engine.py (#44)
+        # and agents/trade_analyzer.py (#46); walk_forward.py was missed.
+        train_wins = sum(1 for t in train_trades if t.get("result") == "WIN")
+        train_losses = sum(1 for t in train_trades if t.get("result") == "LOSS")
+        test_wins = sum(1 for t in test_trades if t.get("result") == "WIN")
+        test_losses = sum(1 for t in test_trades if t.get("result") == "LOSS")
 
-        train_wr = train_wins / len(train_trades) if train_trades else 0
-        test_wr = test_wins / len(test_trades) if test_trades else 0
+        train_wr = train_wins / max(train_wins + train_losses, 1)
+        test_wr = test_wins / max(test_wins + test_losses, 1)
 
         # Calculate average edge (PnL as proxy)
         train_avg_pnl = sum(t.get("pnl", 0) for t in train_trades) / len(train_trades) if train_trades else 0
