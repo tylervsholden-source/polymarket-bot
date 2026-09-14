@@ -80,17 +80,32 @@ class TopTraderTracker:
         market_trades = defaultdict(lambda: {"yes_vol": 0.0, "no_vol": 0.0, "yes_n": 0, "no_n": 0})
 
         for t in trades:
-            cid = t.get("market", t.get("condition_id", ""))
+            # BUG: data-api.polymarket.com/trades keys the market id as
+            # "conditionId" (camelCase) — never "market" or "condition_id".
+            # (agents/copytrade.py hits this same endpoint and already reads
+            # "conditionId" correctly.) cid was always "" here, so every
+            # trade hit `continue`, market_trades stayed permanently empty,
+            # and get_signal()/get_boost() always returned the NEUTRAL/0.0
+            # default — the Top Trader Copy Signal silently contributed
+            # nothing to bayesian_prob in strategies/arbitrage_engine.py.
+            cid = t.get("conditionId", "")
             if not cid:
                 continue
 
+            # `side` is BUY/SELL of whichever outcome token was traded — it
+            # is NOT the outcome itself. It must be combined with `outcome`
+            # (UP/DOWN or YES/NO) to know the real direction, exactly like
+            # agents/copytrade.py does for this same endpoint. Reading side
+            # alone (the previous code) would have flipped the signal for
+            # every SELL-of-YES / BUY-of-NO trade once cid was fixed.
             side = t.get("side", "").upper()
+            outcome = t.get("outcome", "").upper()
             size = float(t.get("size", 0))
 
-            if side in ("BUY", "YES", "1"):
+            if (side == "BUY" and outcome in ("YES", "UP")) or (side == "SELL" and outcome in ("NO", "DOWN")):
                 market_trades[cid]["yes_vol"] += size
                 market_trades[cid]["yes_n"] += 1
-            elif side in ("SELL", "NO", "0"):
+            elif (side == "SELL" and outcome in ("YES", "UP")) or (side == "BUY" and outcome in ("NO", "DOWN")):
                 market_trades[cid]["no_vol"] += size
                 market_trades[cid]["no_n"] += 1
 
