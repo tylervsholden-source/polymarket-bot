@@ -223,7 +223,12 @@ class AutonomousDecisionEngine:
                 # Veto'yu tamamen atlama — sadece agresif küçült
                 # Bot durmadan devam etmeli ama veto'd trade'e dikkat
                 size_mult = min(size_mult, 0.25)
-                action = ActionType.EXECUTE_REDUCED
+                # Preserve an earlier SKIP (e.g. STREAK_FILTER) — same guard as
+                # the HIGH/CRITICAL risk branches above. Without it, a
+                # low-edge signal that triggered STREAK_FILTER's SKIP is
+                # exactly the kind ReviewerAgent tends to VETO, silently
+                # turning the intended skip back into an executed trade.
+                action = ActionType.EXECUTE_REDUCED if action != ActionType.SKIP else action
                 reasons.append("REVIEWER_VETO: severely reduced but not skipped")
             elif verdict_str == "REDUCE":
                 # NOTE: do NOT also fold `suggested` into size_mult here.
@@ -237,7 +242,7 @@ class AutonomousDecisionEngine:
                 # intended suggested_size_pct (same double-application pattern
                 # as FIX_CONFLICT_REPORT.md's 15m double-dampening bug).
                 suggested = getattr(review_decision, 'suggested_size_pct', 0.6)
-                action = ActionType.EXECUTE_REDUCED
+                action = ActionType.EXECUTE_REDUCED if action != ActionType.SKIP else action
                 reasons.append(f"REVIEWER_REDUCE: size already ×{suggested:.2f} via coordinator")
 
         # ── VOLATİLİTE REJİMİ ──
