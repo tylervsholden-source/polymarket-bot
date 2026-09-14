@@ -131,8 +131,13 @@ class TradeAnalyzer:
             exit_price=float(trade.get("exit_price", trade.get("resolution_price", 0))),
         )
 
-        # Win/Loss belirle
-        analysis.outcome = "WIN" if analysis.pnl > 0 else "LOSS"
+        # Win/Loss/Neutral belirle — position_manager'ın verdiği gerçek sonucu kullan
+        # (dolmamış emir/iade → NEUTRAL, pnl==0 ile LOSS karıştırılmamalı)
+        result = trade.get("result")
+        if result in ("WIN", "LOSS", "NEUTRAL"):
+            analysis.outcome = result
+        else:
+            analysis.outcome = "WIN" if analysis.pnl > 0 else "LOSS"
 
         # Signal data varsa zenginleştir
         if signal_data:
@@ -192,6 +197,9 @@ class TradeAnalyzer:
             if analysis.direction == "YES":
                 return "YES_BASE_RATE: YES trade'lerin yüksek WR (%72) ile tutarlı"
             return "CORRECT_DIRECTION: Yön tahmini doğru"
+
+        elif analysis.outcome == "NEUTRAL":
+            return "UNFILLED_NEUTRAL: Emir dolmadı/iade edildi — kazanç/kayıp yok"
 
         else:
             # Kayıp sebepleri
@@ -345,7 +353,7 @@ class TradeAnalyzer:
         stats.occurrences += 1
         if analysis.outcome == "WIN":
             stats.wins += 1
-        else:
+        elif analysis.outcome == "LOSS":
             stats.losses += 1
         stats.total_pnl += analysis.pnl
         stats.avg_pnl = stats.total_pnl / stats.occurrences
