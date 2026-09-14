@@ -208,10 +208,25 @@ class PositionManager:
         self._save()
         logger.info(f"Pozisyon eklendi [{strategy}]: {question[:50]}")
 
-    def daily_loss_exceeded(self, threshold: float) -> bool:
+    def _roll_daily_if_needed(self) -> bool:
+        """UTC gün değiştiyse daily PnL bucket'ını sıfırla. Sıfırlandıysa True döner.
+
+        _close_position()/_close_position_neutral() ve daily_loss_exceeded()
+        tarafından paylaşılır: hangisi önce çağrılırsa gün geçişini o
+        yakalar. Böylece update_positions() (her döngünün başında çalışır,
+        daily_loss_exceeded() kontrolünden ÖNCE) gece yarısını geçen bir
+        pozisyonu kapatırsa, PnL'i eski günün bucket'ına yazıp bir sonraki
+        daily_loss_exceeded() çağrısında sıfırlanarak kaybolmaz — günlük
+        -%15 stop-loss'un sessizce atlatılmasına yol açardı.
+        """
         today = str(datetime.now(timezone.utc).date())
         if self.data["daily"]["date"] != today:
             self.data["daily"] = {"date": today, "pnl": 0}
+            return True
+        return False
+
+    def daily_loss_exceeded(self, threshold: float) -> bool:
+        if self._roll_daily_if_needed():
             self._save()
         # Günün başındaki sermaye = şu anki capital - bugünkü PnL
         day_start_capital = self.data["capital"] - self.data["daily"]["pnl"]
@@ -651,6 +666,8 @@ class PositionManager:
             self.data["positions"].pop(market_id, None)
             return
 
+        self._roll_daily_if_needed()
+
         self.data["positions"].pop(market_id)
         pos["close_price"] = pos["entry_price"]
         pos["pnl"] = 0.0
@@ -696,6 +713,8 @@ class PositionManager:
         shares = amount / entry
         payout = shares * token_close_price
         pnl = payout - amount
+
+        self._roll_daily_if_needed()
 
         pos["close_price"] = round(token_close_price, 4)
         pos["pnl"] = round(pnl, 2)
