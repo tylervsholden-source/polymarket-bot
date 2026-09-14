@@ -39,6 +39,9 @@ pytest_results.txt
 run_tests_results.txt
 project_snapshot.zip
 
+# Claude Code agent worktrees (transient, harness-managed)
+.claude/worktrees/
+
 # IDE
 .vscode/
 .idea/
