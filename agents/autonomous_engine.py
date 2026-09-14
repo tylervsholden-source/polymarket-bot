@@ -202,7 +202,13 @@ class AutonomousDecisionEngine:
             reasons.append("MED_RISK: size×0.75")
         elif risk_level == RiskLevel.HIGH:
             size_mult = min(size_mult, 0.50)
-            action = ActionType.EXECUTE_REDUCED
+            # Preserve an earlier SKIP (e.g. STREAK_FILTER) — same guard as
+            # the CRITICAL branch below. Without it, a low-edge signal that
+            # triggered STREAK_FILTER's SKIP almost always also scores HIGH
+            # here (low edge alone contributes to risk_score), silently
+            # turning the intended skip back into an executed, merely
+            # smaller, trade.
+            action = ActionType.EXECUTE_REDUCED if action != ActionType.SKIP else action
             reasons.append("HIGH_RISK: size×0.50")
         elif risk_level == RiskLevel.CRITICAL:
             size_mult = min(size_mult, 0.50)
