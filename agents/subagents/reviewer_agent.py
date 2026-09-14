@@ -52,7 +52,24 @@ class ReviewDecision:
 
     @property
     def approved(self) -> bool:
-        return self.verdict in (ReviewVerdict.APPROVE, ReviewVerdict.APPROVE_WITH_WARNING, ReviewVerdict.REDUCE)
+        # VETO is included here (despite the name) because AutonomousDecisionEngine
+        # ("Bot ASLA durmaz" — orchestrator.py's own comment documents
+        # "REVIEWER_VETO x0.25" as one of its size-reduction branches) is the
+        # component that actually decides what to do with a VETO: it severely
+        # shrinks the position (size_multiplier=0.25) rather than skipping it
+        # outright. That branch in autonomous_engine.py's evaluate() can only
+        # ever run if the VETO'd (signal, decision) pair survives past this
+        # property into coord_result.approved_signals -> orchestrator's
+        # execution loop -> evaluate(review_decision=...). Excluding VETO here
+        # silently dropped every vetoed signal before evaluate() ever saw it,
+        # making the "severely reduced but not skipped" VETO branch dead code
+        # and turning every VETO into an unconditional skip instead.
+        return self.verdict in (
+            ReviewVerdict.APPROVE,
+            ReviewVerdict.APPROVE_WITH_WARNING,
+            ReviewVerdict.REDUCE,
+            ReviewVerdict.VETO,
+        )
 
 
 @dataclass
