@@ -466,6 +466,7 @@ class PolymarketClient:
                 return None
 
             # GTC: emir hemen dolmayabilir — 30sn bekle, dolmamışsa iptal et
+            filled_size = size  # gercekte doldurulan miktar (partial fill icin duzeltilir)
             if status != "matched":
                 logger.info(f"GTC emir gönderildi ({order_id}), fill bekleniyor (max 45sn)...")
                 filled = False
@@ -477,9 +478,19 @@ class PolymarketClient:
                             cur_status = order_info.get("status", "")
                             size_matched = float(order_info.get("size_matched", 0) or 0)
                             logger.info(f"GTC poll: status={cur_status} matched={size_matched:.2f}/{size:.2f}")
-                            if cur_status == "matched" or size_matched >= size * 0.95:
+                            if cur_status == "matched":
                                 status = "matched"
                                 filled = True
+                                break
+                            if size_matched >= size * 0.95:
+                                status = "matched"
+                                filled = True
+                                # Partial fill (<100%) kabul edildi — gercek maliyeti
+                                # hesaplarken hedeflenen `size` degil gercekten
+                                # doldurulan `size_matched` kullanilmali, yoksa
+                                # capital/cost muhasebesi doldurulmayan payi da
+                                # harcanmis gibi sayar.
+                                filled_size = size_matched
                                 break
                     except Exception as poll_err:
                         logger.debug(f"GTC poll hatası: {poll_err}")
@@ -528,8 +539,9 @@ class PolymarketClient:
                 "status": status, "question": question[:80],
             })
 
-            # Return actual cost (size may have been adjusted for min notional)
-            actual_amount = round(size * price, 4)
+            # Return actual cost (size may have been adjusted for min notional,
+            # and/or filled_size may be < size on an accepted partial fill)
+            actual_amount = round(filled_size * price, 4)
             return {
                 "order_id": order_id,
                 "market_id": market_id,
