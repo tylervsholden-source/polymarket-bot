@@ -75,14 +75,7 @@ class TradeClassifier:
             return {"error": f"Not enough data: {len(closed)} trades (need 20+)"}
 
         # Extract features and labels
-        X, y = [], []
-        for trade in closed:
-            features = self._extract_features(trade)
-            if features is None:
-                continue
-            result = 1 if trade.get("result") == "WIN" else 0
-            X.append(features)
-            y.append(result)
+        X, y = self._build_training_set(closed)
 
         if len(X) < 20:
             return {"error": f"Not enough valid trades: {len(X)}"}
@@ -137,6 +130,50 @@ class TradeClassifier:
             f"top={top_features[0][0]}({top_features[0][1]:.2f})"
         )
         return result
+
+    @staticmethod
+    def _result_label(trade: dict) -> int | None:
+        """Map a closed trade's result to a WIN/LOSS training label.
+
+        Returns 1 for WIN, 0 for LOSS, and None for anything else — most
+        importantly NEUTRAL (order never filled before the market ended,
+        USDC refunded, pnl == 0.0 — see
+        PositionManager._close_position_neutral) — so callers can skip
+        the trade entirely instead of mislabeling it as a LOSS.
+        """
+        result = trade.get("result")
+        if result == "WIN":
+            return 1
+        if result == "LOSS":
+            return 0
+        return None
+
+    def _build_training_set(self, closed: list[dict]) -> tuple[list[list[float]], list[int]]:
+        """Build (features, label) training pairs from closed trades.
+
+        Bug (29th daily review): this used to label every trade
+        `1 if trade.get("result") == "WIN" else 0`, so NEUTRAL closes —
+        which carry no win/loss information at all — were trained as
+        LOSS (label 0), identical to the "NEUTRAL-counted-as-LOSS" bug
+        class already fixed in agents/trade_analyzer.py and
+        agents/autonomous_engine.py. This model's predict() runs every
+        cycle in strategies/arbitrage_engine.py and directly halves the
+        live Kelly bet size (ML_CAUTION) whenever ml_score < -0.5, so a
+        model trained on mislabeled NEUTRAL closes systematically
+        under-sizes (or wrongly boosts) real trades.
+        """
+        X: list[list[float]] = []
+        y: list[int] = []
+        for trade in closed:
+            features = self._extract_features(trade)
+            if features is None:
+                continue
+            label = self._result_label(trade)
+            if label is None:
+                continue
+            X.append(features)
+            y.append(label)
+        return X, y
 
     def predict(self, trade_params: dict) -> float:
         """
