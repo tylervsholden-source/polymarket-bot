@@ -242,8 +242,15 @@ class TradeClassifier:
             # Edge proxy: distance from 0.5 (how confident the market was)
             price_distance = abs(entry_price - 0.5)
 
-            # Implied edge (for historical: entry vs 0.5)
-            edge = abs(entry_price - 0.5)
+            # Real signal edge, stored on the position since the 28th daily
+            # review (core/position_manager.py::add_position()). Falls back
+            # to the distance-from-0.5 proxy only for legacy closed trades
+            # that predate that field — otherwise this must match what
+            # _extract_features_live() feeds the same model slot at
+            # inference (params.get("edge", ...)), or the model is trained
+            # on one quantity and scored against a different one.
+            raw_edge = trade.get("edge")
+            edge = float(raw_edge) if raw_edge is not None else abs(entry_price - 0.5)
 
             # Is this the market favorite? (price > 0.5 = favorite)
             is_favorite = 1.0 if entry_price > 0.5 else 0.0
