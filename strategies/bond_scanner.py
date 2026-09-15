@@ -121,11 +121,14 @@ class BondScanner:
 
         # Check NO side: YES is very cheap → NO is near-certain
         # NO price ~ 1 - YES_ask. If YES_ask <= 0.07, NO is ~0.93+
+        # get_all_active_markets() never populates no_best_ask (unlike the
+        # directional get_active_markets() path), so this estimate is always
+        # synthetic. FIX (matching arbitrage_engine.py's FIX-3): bare
+        # 1.0 - yes_price ignores the bid/ask spread (real NO_ask ≈ 1 -
+        # YES_bid, not 1 - YES_ask) and was already proven too optimistic
+        # there — same +0.02 conservative pad applied here.
         if yes_price <= (1.0 - self.PROB_THRESHOLD) and no_token:
-            no_price_est = 1.0 - yes_price  # approximate NO price
-            # But we need actual NO ask price for accurate entry
-            # Use best_bid as proxy for NO availability
-            # Conservative: use estimated NO price
+            no_price_est = round(1.0 - yes_price + 0.02, 4)  # was 1.0 - yes_price (too optimistic)
             if self.PROB_THRESHOLD <= no_price_est <= self.MAX_PRICE:
                 yld = (1.0 - no_price_est) / no_price_est
                 if yld >= self.MIN_YIELD:
