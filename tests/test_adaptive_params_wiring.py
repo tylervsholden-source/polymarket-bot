@@ -46,10 +46,23 @@ def test_run_wires_adaptive_min_edge_and_bet_multiplier():
 
 
 def test_cycle_applies_adaptive_bet_multiplier_to_bet_size():
+    # 45th daily review: _cycle() used to do a bare `bet_size *=
+    # self._adaptive_bet_multiplier`, which (for AGGRESSIVE mode's 1.15x)
+    # could push bet_size back above CLAUDE.md's 20%-of-capital position cap
+    # that compute_bet_size() had just enforced — see
+    # tests/test_adaptive_bet_multiplier_position_cap.py. The multiplier is
+    # now applied via apply_adaptive_bet_multiplier(), which re-clamps to
+    # that same cap; assert _cycle() routes through it rather than
+    # multiplying bet_size directly (or just logging/discarding it).
     src = inspect.getsource(Orchestrator._cycle)
-    assert "bet_size *= self._adaptive_bet_multiplier" in src, (
-        "_cycle() must multiply the real bet_size by the adaptive engine's "
-        "max_bet_multiplier, not just log/discard it"
+    assert "bet_size = apply_adaptive_bet_multiplier(" in src, (
+        "_cycle() must apply the adaptive engine's max_bet_multiplier to the "
+        "real bet_size via apply_adaptive_bet_multiplier() (re-clamped to the "
+        "20% position cap), not just log/discard it or multiply it unclamped"
+    )
+    assert "bet_size *= self._adaptive_bet_multiplier" not in src, (
+        "a bare multiply here would bypass apply_adaptive_bet_multiplier()'s "
+        "20%-of-capital position-cap re-clamp"
     )
 
 
