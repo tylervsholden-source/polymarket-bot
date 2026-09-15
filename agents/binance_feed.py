@@ -1513,6 +1513,16 @@ class BinanceFeed:
             "consecutive_bullish": iv_data.get("consecutive_bullish", 0),
             "bounce_signal": iv_data.get("bounce_signal", False),
             "pre_bounce_streak": iv_data.get("pre_bounce_streak", 0),
+            # Bullish exhaustion (computed alongside bounce detection above and
+            # cached in iv_data, but never forwarded here — strategies/
+            # arbitrage_engine.py._evaluate_market() reads these via
+            # spot.get("bullish_exhaustion", False)/spot.get(
+            # "bullish_exhaustion_magnitude", 0.0), so the missing keys always
+            # fell back to the default and its EXHAUSTION_NO_ACTIVATE gate
+            # (legitimate NO-entry on an overextended bullish run) never fired
+            # live, identical in shape to the OPT-7 field-mismatch bug).
+            "bullish_exhaustion": iv_data.get("bullish_exhaustion", False),
+            "bullish_exhaustion_magnitude": iv_data.get("bullish_exhaustion_magnitude", 0.0),
             # ta library indicators
             "adx": iv_data.get("adx", 25.0),
             "adx_plus": iv_data.get("adx_plus", 0.0),
