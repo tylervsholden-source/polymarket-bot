@@ -1497,6 +1497,16 @@ class BinanceFeed:
             # ── New technical indicators ──
             "bb_width":     iv_data.get("bb_width", 0.0),
             "bb_pos":       iv_data.get("bb_pos", 0.5),
+            # bb_squeeze/bb_breakout are computed alongside bb_width/bb_pos above
+            # and cached in iv_data, but were never forwarded here —
+            # strategies/arbitrage_engine.py._evaluate_market() reads these via
+            # spot.get("bb_squeeze", False)/spot.get("bb_breakout", 0.0), so the
+            # missing keys always fell back to the default and
+            # strategies/bayesian.py's Bollinger breakout/squeeze signal
+            # (bb_breakout * (1.5 if bb_squeeze else 1.0)) never fired live —
+            # identical in shape to the bullish_exhaustion field-mismatch bug.
+            "bb_squeeze":   iv_data.get("bb_squeeze", False),
+            "bb_breakout":  iv_data.get("bb_breakout", 0.0),
             "ema_cross":    iv_data.get("ema_cross", 0.0),
             "atr_pct":      iv_data.get("atr_pct", 0.0),
             "stoch_k":      iv_data.get("stoch_k", 50.0),
