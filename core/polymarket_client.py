@@ -517,10 +517,23 @@ class PolymarketClient:
                         try:
                             verify = self._clob.get_order(order_id)
                             v_status = verify.get("status", "") if verify else ""
+                            v_size_matched = float((verify or {}).get("size_matched", 0) or 0)
                             if v_status == "matched":
                                 logger.warning(f"GTC emir cancel sırasında doldu! {order_id}")
                                 status = "matched"
                                 filled = True
+                            elif v_size_matched > 0:
+                                # Cancel sadece kalan (doldurulmamış) kısmı iptal eder —
+                                # cancel öncesi eşleşen pay gerçek, geri alınamaz USDC
+                                # harcamasıdır. Bunu yok saymak pozisyonu hiç kaydetmeden
+                                # gerçek parayı kaybettirir (bkz. GTC_TIMEOUT_CANCELLED).
+                                logger.warning(
+                                    f"GTC emir iptal edildi ama kısmi doldu: {order_id} "
+                                    f"matched={v_size_matched:.2f}/{size:.2f} — kabul ediliyor"
+                                )
+                                status = "matched"
+                                filled = True
+                                filled_size = v_size_matched
                             elif v_status in ("cancelled", "expired", ""):
                                 logger.info(f"GTC emir iptal onaylandı: {order_id} status={v_status}")
                             else:
