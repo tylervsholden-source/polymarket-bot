@@ -35,6 +35,7 @@ class MonteCarloSimulator:
         self,
         edge: float,               # Net edge per trade (EV_net)
         capital: float,            # Starting capital
+        price: float = 0.5,        # Entry price of the token bought (YES or NO)
         n_trades: int = 100,       # Number of trades to simulate
         fill_rate: float = 0.85,   # Expected order fill rate
         slippage_std: float = 0.004,  # Slippage std deviation
@@ -45,6 +46,11 @@ class MonteCarloSimulator:
         Run N simulations of the arbitrage strategy.
         Each simulation randomizes fills, slippage, and edge estimation.
         """
+        # Same b = (1/price) - 1 payout ratio as kelly_criterion.py's position_size():
+        # buying `bet` notional of a token priced at `price` yields `bet/price` payout
+        # on a win, i.e. profit = bet * ((1/price) - 1).
+        b = (1.0 / price) - 1.0 if 0.0 < price < 1.0 else 1.0
+
         final_returns: list[float] = []
         max_drawdowns: list[float] = []
         win_rates: list[float] = []
@@ -82,8 +88,8 @@ class MonteCarloSimulator:
                 # edge = prob - 0.5 in simplified terms: prob = 0.5 + edge/2
                 win_prob = min(0.90, 0.50 + net_edge / 2.0)
                 if random.random() < win_prob:
-                    # Win: payout approximated as 1:1 on the bet
-                    w += bet * net_edge * 2.0
+                    # Win: real prediction-market payout, bet/price - bet == bet * b
+                    w += bet * b
                     wins += 1
                 else:
                     w -= bet

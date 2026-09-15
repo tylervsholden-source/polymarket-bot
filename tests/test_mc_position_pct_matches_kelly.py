@@ -27,7 +27,7 @@ def test_mc_call_uses_same_default_as_kelly(monkeypatch, tmp_path):
         return MonteCarloResult(0, 0, 0, 0, 0, 0, True)
 
     engine.mc.simulate = _fake_simulate
-    engine._maybe_run_monte_carlo(edge=0.20, capital=1000.0)
+    engine._maybe_run_monte_carlo(edge=0.20, price=0.50, capital=1000.0)
 
     kelly_default = KellyCriterion().max_position_pct
     pm_default = pm_mod.PositionManager().max_position_pct

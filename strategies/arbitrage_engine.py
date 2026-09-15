@@ -295,12 +295,12 @@ class ArbitrageEngine:
     # Monte Carlo
     # ------------------------------------------------------------------ #
 
-    def _maybe_run_monte_carlo(self, edge: float, capital: float) -> bool:
+    def _maybe_run_monte_carlo(self, edge: float, price: float, capital: float) -> bool:
         import time
         now = time.time()
         if self._mc_result is None or (now - self._mc_last_run) > self._mc_interval:
             self._mc_result = self.mc.simulate(
-                edge=edge, capital=capital, n_trades=100,
+                edge=edge, capital=capital, price=price, n_trades=100,
                 fill_rate=0.85,
                 position_size_pct=float(os.getenv("MAX_POSITION_PCT", 0.20)),
             )
@@ -405,7 +405,16 @@ class ArbitrageEngine:
         signals.sort(key=lambda s: s.edge, reverse=True)
 
         if signals:
-            self._maybe_run_monte_carlo(signals[0].edge, capital)
+            top = signals[0]
+            mc_viable = self._maybe_run_monte_carlo(top.edge, top.entry_price, capital)
+            if not mc_viable:
+                # SHADOW MODE: Monte Carlo gate is observation-only for now — logs the
+                # flag but does not filter signals. See docs/reviews for the rollout
+                # plan (payout formula fix -> shadow-mode observation -> real gating).
+                logger.warning(
+                    f"MC_SHADOW: viable=False for top signal (edge={top.edge:.3f}, "
+                    f"price={top.entry_price:.3f}) — shadow mode, NOT blocking trade"
+                )
 
         return signals
 
