@@ -30,11 +30,23 @@ the real whale signal whenever flow concentrated on the NO/Down side.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from agents.whale_tracker import WhaleTracker
 
 
 def _tracker() -> WhaleTracker:
     return WhaleTracker()
+
+
+def _recent_ts() -> str:
+    """A timestamp safely inside WhaleTracker's 6h smart-money window,
+    regardless of what time this test happens to run at (a hardcoded
+    absolute timestamp would fall outside the window and flake once
+    the wall clock passes it)."""
+    return (datetime.now(timezone.utc) - timedelta(minutes=30)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def test_buy_of_down_outcome_counts_as_bearish_not_bullish():
@@ -47,14 +59,14 @@ def test_buy_of_down_outcome_counts_as_bearish_not_bullish():
             "outcome": "Down",
             "size": 20_000,
             "price": 0.5,
-            "timestamp": "2026-09-15T12:00:00Z",
+            "timestamp": _recent_ts(),
         },
         {
             "side": "BUY",
             "outcome": "Down",
             "size": 20_000,
             "price": 0.5,
-            "timestamp": "2026-09-15T12:00:00Z",
+            "timestamp": _recent_ts(),
         },
     ]
 
@@ -79,7 +91,7 @@ def test_sell_of_up_outcome_counts_as_bearish():
             "outcome": "Up",
             "size": 1_000,
             "price": 0.6,
-            "timestamp": "2026-09-15T12:00:00Z",
+            "timestamp": _recent_ts(),
         },
     ]
 
@@ -98,14 +110,14 @@ def test_buy_of_up_outcome_still_counts_as_bullish():
             "outcome": "Up",
             "size": 20_000,
             "price": 0.5,
-            "timestamp": "2026-09-15T12:00:00Z",
+            "timestamp": _recent_ts(),
         },
         {
             "side": "BUY",
             "outcome": "Up",
             "size": 20_000,
             "price": 0.5,
-            "timestamp": "2026-09-15T12:00:00Z",
+            "timestamp": _recent_ts(),
         },
     ]
 

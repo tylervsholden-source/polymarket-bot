@@ -295,12 +295,12 @@ class ArbitrageEngine:
     # Monte Carlo
     # ------------------------------------------------------------------ #
 
-    def _maybe_run_monte_carlo(self, edge: float, capital: float) -> bool:
+    def _maybe_run_monte_carlo(self, edge: float, capital: float, price: float = 0.50) -> bool:
         import time
         now = time.time()
         if self._mc_result is None or (now - self._mc_last_run) > self._mc_interval:
             self._mc_result = self.mc.simulate(
-                edge=edge, capital=capital, n_trades=100,
+                edge=edge, capital=capital, price=price, n_trades=100,
                 fill_rate=0.85,
                 position_size_pct=float(os.getenv("MAX_POSITION_PCT", 0.20)),
             )
@@ -405,7 +405,24 @@ class ArbitrageEngine:
         signals.sort(key=lambda s: s.edge, reverse=True)
 
         if signals:
-            self._maybe_run_monte_carlo(signals[0].edge, capital)
+            mc_viable = self._maybe_run_monte_carlo(
+                signals[0].edge, capital, signals[0].entry_price
+            )
+            if not mc_viable:
+                # SHADOW MODE: payout formula was only just corrected
+                # (2026-09-15, 50th review) — log what the gate would do
+                # without blocking trades yet, so a few cycles of live
+                # data can confirm it isn't over-tripping before it's
+                # allowed to actually filter signals (MC_GATE_ENFORCE=true).
+                if os.getenv("MC_GATE_ENFORCE", "false").lower() == "true":
+                    logger.warning(
+                        f"MC_GATE: Monte Carlo not viable, blocking {len(signals)} sinyal"
+                    )
+                    return []
+                logger.info(
+                    "MC_GATE_SHADOW: Monte Carlo not viable — would block "
+                    f"{len(signals)} sinyal (enforcement off, MC_GATE_ENFORCE=false)"
+                )
 
         return signals
 
