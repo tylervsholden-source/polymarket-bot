@@ -770,7 +770,7 @@ class Orchestrator:
                         process_lock=self._process_lock,
                         control_file="data/control.json",
                         readiness_file="data/readiness_verdict.json",
-                        daily_loss_exceeded=False,  # devre dışı — kullanıcı talebi (2026-03-21)
+                        daily_loss_exceeded=self.position_manager.daily_loss_exceeded(self.daily_stop_loss),
                         open_position_count=open_count,
                         max_open_positions=self.max_open_positions,
                         order_timestamps=self._order_timestamps,
@@ -955,13 +955,13 @@ class Orchestrator:
         _lock = self._process_lock
         capital = self.position_manager.available_capital()
         open_count = self.position_manager.open_position_count()
-        daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
+        daily_stop = self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
 
         for order_req in approved:
             # Re-fetch capital/open_count per order (stale after previous execution)
             capital = self.position_manager.available_capital()
             open_count = self.position_manager.open_position_count()
-            daily_stop = False  # devre dışı — kullanıcı talebi (2026-03-21)
+            daily_stop = self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
 
             market_id = order_req.get("market_id", "")
             token_id = order_req.get("token_id", "")
@@ -1863,28 +1863,33 @@ class Orchestrator:
             if balance < 0:
                 return
 
-            # locked = sadece henüz resolve OLMAMIŞ pozisyonlar
-            # Süresi geçmiş marketlerin payout'u zaten CLOB bakiyeye yansımış,
-            # bunları locked'a dahil etmek double-count yapar.
-            from datetime import datetime, timezone
-            now_utc = datetime.now(timezone.utc)
-            locked = 0.0
-            for p in self.position_manager.data.get("positions", {}).values():
-                amt = p.get("amount", 0)
-                # Market end time'ı parse et
-                question = p.get("question", "")
-                try:
-                    from control_plane.entry_window_guard import parse_market_times
-                    _, end_utc = parse_market_times(question)
-                    if end_utc and now_utc > end_utc:
-                        # Market süresi geçmiş — payout CLOB'a düşmüş olabilir
-                        # locked'a EKLEMİYORUZ
-                        continue
-                except Exception:
-                    pass
-                locked += amt
+            # locked = tüm hâlâ AÇIK pozisyonlar. update_positions() bu senkrondan
+            # HEMEN ÖNCE, aynı cycle içinde çalışıp resolve edebildiği her
+            # pozisyonu zaten data["positions"]'dan silip data["closed"]'a taşır
+            # (pnl'i capital'e ekleyerek). Buraya kadar hâlâ data["positions"]
+            # içinde kalan bir pozisyon — end_time'ı geçmiş olsa bile — CLOB
+            # tarafından henüz resolve EDİLMEMİŞ demektir: USDC'si henüz gerçek
+            # bakiyeye düşmemiştir, hâlâ kilitlidir. end_time'a göre hariç tutmak
+            # capital'i (Kelly boyutlandırma, SURVIVAL eşiği ve günlük -%15
+            # stop-loss'un paydası) o pozisyon tutarı kadar eksik hesaplatır.
+            locked = sum(
+                p.get("amount", 0)
+                for p in self.position_manager.data.get("positions", {}).values()
+            )
             new_capital = balance + locked
             old_capital = self.position_manager.data.get("capital", 0)
+
+            # PositionManager.daily_loss_exceeded() (CLAUDE.md'nin -%15 günlük
+            # stop-loss kuralı) gün başı sermayeyi "capital - daily.pnl" olarak
+            # hesaplar. _close_position()/_close_position_neutral() bu iki
+            # alanı hep birlikte değiştirir; burada da aynı değişmez korunmalı
+            # — yoksa bu senkron capital'i daily.pnl'e dokunmadan düzeltince
+            # gerçek bir -%15 ihlali daily.pnl'in eski değerinde gizlenip
+            # stop-loss hiç tetiklenmeyebilir.
+            today = str(datetime.now(timezone.utc).date())
+            if self.position_manager.data["daily"]["date"] != today:
+                self.position_manager.data["daily"] = {"date": today, "pnl": 0}
+            self.position_manager.data["daily"]["pnl"] += (new_capital - old_capital)
 
             # Capital'i güncelle
             self.position_manager.data["capital"] = round(new_capital, 4)
@@ -1983,7 +1988,6 @@ class Orchestrator:
                 created = pos.get("created_at", "")
                 if created:
                     try:
-                        from datetime import datetime, timezone
                         age = (datetime.now(timezone.utc) - datetime.fromisoformat(created)).total_seconds()
                         if age < 120:  # 2 dakikadan genç → ghost değil, API gecikmesi
                             continue
