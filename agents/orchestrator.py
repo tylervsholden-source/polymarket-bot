@@ -123,6 +123,33 @@ def apply_risk_size_multiplier(bet_size: float, multiplier: float) -> float:
     return bet_size * multiplier
 
 
+def apply_adaptive_bet_multiplier(
+    bet_size: float,
+    multiplier: float,
+    capital: float,
+    max_position_pct: float,
+) -> float:
+    """Apply AutonomousDecisionEngine.get_adaptive_params()'s performance-based
+    max_bet_multiplier to bet_size, re-clamped to CLAUDE.md's non-negotiable
+    20%-of-capital position cap ("Max tek pozisyon: portföyün %20'si — Kelly
+    override yapmaz").
+
+    Bug: AGGRESSIVE mode (win_rate>65%, 10+ trades) sets max_bet_multiplier to
+    1.15. compute_bet_size() already clamps bet_size to
+    min(HARD_MAX_BET, capital*max_position_pct) — for capital below roughly
+    $33 that position cap binds tighter than the flat $4.00 HARD_MAX_BET, so
+    multiplying by 1.15 here pushed bet_size back above the cap (e.g.
+    capital=$15 → cap=$3.00 → 1.15x = $3.45, still under the $4 HARD_MAX_BET
+    check that ran after this, so nothing caught it). Same "boost applied
+    after the cap, never re-clamped" shape as the GOLDEN_HOUR/GOOD_HOUR bug
+    (39th daily review) in strategies/arbitrage_engine.py, just at a
+    different multiplier and call site.
+    """
+    adjusted = bet_size * multiplier
+    position_cap = capital * max_position_pct
+    return min(adjusted, position_cap)
+
+
 class Orchestrator:
     def __init__(self, process_lock=None):
         self.interval = int(os.getenv("CYCLE_INTERVAL_SECONDS", 60))
@@ -803,7 +830,12 @@ class Orchestrator:
             # DEFENSIVE/SURVIVAL'da gerçek sipariş boyutu küçülmüyordu.
             if self._adaptive_bet_multiplier != 1.0:
                 original_bet = bet_size
-                bet_size *= self._adaptive_bet_multiplier
+                bet_size = apply_adaptive_bet_multiplier(
+                    bet_size,
+                    self._adaptive_bet_multiplier,
+                    capital,
+                    self.position_manager.max_position_pct,
+                )
                 logger.info(
                     f"[ADAPTIVE] Bet multiplier: ${original_bet:.2f} × "
                     f"{self._adaptive_bet_multiplier:.2f} = ${bet_size:.2f}"
