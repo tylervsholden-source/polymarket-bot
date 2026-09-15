@@ -1783,6 +1783,13 @@ class ArbitrageEngine:
                 _gh_original = size
                 size = size * 1.15
                 logger.info(f"GOOD_HOUR: {question[:40]} {_gh_hour}:00 ET → ${_gh_original:.2f}→${size:.2f} (×1.15)")
+            # Re-apply the hard cap: the boost above is documented as
+            # "capped at max_bet" but multiplying after MAX_BET_CAP already
+            # ran can otherwise push size past _MAX_BET (e.g. $4.00 × 1.30 =
+            # $5.20), a real oversized live position.
+            if size > _MAX_BET:
+                logger.info(f"MAX_BET_CAP_POST_BOOST: {question[:40]} ${size:.2f} → ${_MAX_BET:.2f}")
+                size = _MAX_BET
         except Exception:
             pass
 
