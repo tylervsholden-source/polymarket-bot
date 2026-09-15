@@ -1234,12 +1234,22 @@ class Orchestrator:
                     strategy="bond",
                 )
                 self._reentry_guard.mark_traded(opp.condition_id)
-                bond_capital -= bet_size
+                # bkz. yukarıdaki doğrudan emir yolu (_cycle) ve _execute_approved_orders()
+                # ile aynı düzeltme: CLOB'un 5-share min-size tabanı, küçük bet_size +
+                # yüksek fiyat (bond'lar 0.93-0.97 bandında) kombinasyonunda gerçek
+                # maliyeti (order_result["amount"]) istenen bet_size'ın üzerine
+                # çıkarabiliyor (örn. bet_size=$4 @ price=0.95 -> size 5-share tabanına
+                # yuvarlanır -> gerçek $4.75). bet_size ile düşülünce bu döngünün yerel
+                # bond_capital sayacı gerçekte harcanandan fazla kalan gösterir ve aynı
+                # _bond_cycle() çağrısı içinde gerçekte karşılanamayacak bir sonraki
+                # bond emrine izin verebilir (sıradaki gerçek bakiye senkronuna kadar).
+                real_cost = order_result.get("amount", bet_size)
+                bond_capital -= real_cost
                 bond_positions += 1
                 placed += 1
                 logger.success(
                     f"BOND_ORDER: {opp.question[:50]} | {opp.side} @ {opp.price:.3f} | "
-                    f"yield={opp.expected_yield:.1%} | ${bet_size:.2f} | "
+                    f"yield={opp.expected_yield:.1%} | ${real_cost:.2f} | "
                     f"resolve in {opp.days_to_resolve:.1f}d"
                 )
 
