@@ -1156,6 +1156,7 @@ class Orchestrator:
             if order:
                 self._order_timestamps.append(time.time())
                 order["outcome"] = direction
+                order["token_id"] = token_id or ""
                 self.position_manager.add_position(market_id, order, question)
                 self._reentry_guard.mark_traded(market_id)
                 open_count += 1  # Sonraki emirler için güncelle

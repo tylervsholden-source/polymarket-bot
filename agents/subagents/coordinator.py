@@ -411,6 +411,15 @@ class AgentCoordinator:
             sig.confluence_score = self.signal_agent._compute_confluence(sig)
             sig.risk_flags = self.signal_agent._detect_risk_flags(sig)
 
+        # signal_result.signals was sorted by confluence_score before this
+        # enrichment ran (pre-research, edge-only). Re-sort now that the
+        # scores above reflect real whale/smart-money/regime/orderflow data,
+        # so downstream caps (MAX_DIRECTIONAL, cycle risk budget) that walk
+        # this list in order and break early still pick highest-confluence
+        # first, not whichever signal happened to score highest before any
+        # research existed.
+        signal_result.signals.sort(key=lambda s: s.confluence_score, reverse=True)
+
         return signal_result
 
     def _extract_symbols(self, candidates: list[dict]) -> set[str]:
