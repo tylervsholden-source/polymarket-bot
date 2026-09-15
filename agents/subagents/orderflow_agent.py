@@ -29,6 +29,15 @@ from agents.subagents.base_agent import BaseAgent
 
 
 # ── INDICATOR WEIGHTS (tunable) ──────────────────────────────────────
+# NOTE: "velocity" is intentionally NOT a directional vote here.
+# calc_trade_velocity() measures raw trade *count* change with no buy/sell
+# direction at all (unlike calc_cvd(), which does check is_buy per trade).
+# A burst of panic *selling* raises trade count exactly as much as a buying
+# frenzy, so folding it into the weighted bias sum with a "positive =
+# bullish" sign let a spike in activity mask or even flip a real bearish
+# OBI/CVD reading into NEUTRAL right when the market was moving hardest.
+# trade_velocity is still computed and reported on OrderFlowData for
+# diagnostics; it no longer votes on bias direction/label.
 BIAS_WEIGHTS = {
     "ema": 10,
     "obi": 8,
@@ -36,7 +45,6 @@ BIAS_WEIGHTS = {
     "vwap": 5,
     "ha_streak": 6,
     "walls": 4,
-    "velocity": 3,
 }
 
 TOTAL_WEIGHT = sum(BIAS_WEIGHTS.values())
@@ -245,8 +253,9 @@ def compute_bias_score(
     # HA streak: ±5 = full signal
     scores["ha_streak"] = max(-100, min(100, ha_streak * 20))
 
-    # Velocity: positive = increasing activity
-    scores["velocity"] = max(-100, min(100, velocity * 30))
+    # velocity is deliberately excluded from the directional score — see
+    # the BIAS_WEIGHTS comment above. It is still accepted as a parameter
+    # (and stored on OrderFlowData by the caller) purely for diagnostics.
 
     # Weighted average
     weighted_sum = sum(scores[k] * BIAS_WEIGHTS[k] for k in scores if k in BIAS_WEIGHTS)
