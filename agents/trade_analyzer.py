@@ -24,6 +24,7 @@ from loguru import logger
 @dataclass
 class TradeAnalysis:
     """Tek bir trade'in detaylı analizi."""
+    order_id: str = ""
     market_id: str = ""
     question: str = ""
     direction: str = ""
@@ -98,6 +99,7 @@ class TradeAnalyzer:
     def __init__(self):
         self._analyses: list[TradeAnalysis] = []
         self._patterns: dict[str, PatternStats] = {}
+        self._analyzed_order_ids: set[str] = set()
         self._load_history()
         logger.info("[TradeAnalyzer] Initialized — post-trade analysis active")
 
@@ -122,7 +124,17 @@ class TradeAnalyzer:
         Returns:
             TradeAnalysis — detaylı analiz sonucu
         """
+        order_id = trade.get("order_id", "")
+        if order_id and order_id in self._analyzed_order_ids:
+            # Zaten analiz edilmiş (process restart sonrası tekrar oynatılan closed trade) —
+            # pattern stats'i tekrar sayıp bozmamak için atla.
+            for existing in reversed(self._analyses):
+                if existing.order_id == order_id:
+                    return existing
+            return TradeAnalysis(order_id=order_id, outcome=trade.get("result", ""))
+
         analysis = TradeAnalysis(
+            order_id=order_id,
             market_id=trade.get("market_id", trade.get("condition_id", "")),
             question=trade.get("question", ""),
             direction=trade.get("outcome", trade.get("direction", "")),
@@ -168,6 +180,8 @@ class TradeAnalyzer:
             self._update_pattern_stats(analysis)
 
         # Kaydet
+        if order_id:
+            self._analyzed_order_ids.add(order_id)
         self._analyses.append(analysis)
         self._save_history()
 
@@ -414,6 +428,18 @@ class TradeAnalyzer:
         except Exception as e:
             logger.debug(f"[TradeAnalyzer] Pattern load failed: {e}")
 
+        # Zaten analiz edilmiş order_id'leri geri yükle — process restart sonrası
+        # aynı closed trade'lerin pattern stats'e tekrar sayılmasını önler.
+        try:
+            if self.ANALYSIS_FILE.exists():
+                with open(self.ANALYSIS_FILE) as f:
+                    for entry in json.load(f):
+                        oid = entry.get("order_id", "")
+                        if oid:
+                            self._analyzed_order_ids.add(oid)
+        except Exception as e:
+            logger.debug(f"[TradeAnalyzer] Analysis history load failed: {e}")
+
     def _save_history(self):
         """Analizleri diske kaydet."""
         try:
@@ -423,6 +449,7 @@ class TradeAnalyzer:
             recent = self._analyses[-200:] if len(self._analyses) > 200 else self._analyses
             analyses_data = [
                 {
+                    "order_id": a.order_id,
                     "market_id": a.market_id,
                     "question": a.question,
                     "direction": a.direction,
