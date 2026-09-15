@@ -19,12 +19,25 @@ This locks in the fix: evaluate() must still mark the decision as
 EXECUTE_REDUCED (for downstream logging/classification) but must not clamp
 size_multiplier below what the *other* independent risk factors already
 imply, purely on account of the REDUCE verdict.
+
+Both cases below freeze evaluate()'s `time.gmtime()` read to a fixed
+daytime UTC hour. Without that, this test was itself flaky: evaluate()'s
+own LOW_LIQUIDITY_HOURS factor (agents/autonomous_engine.py) independently
+applies `size_mult = min(size_mult, 0.7)` whenever it runs between UTC
+0-6, which silently failed the "no other risk factors active" assertion
+below for a quarter of every day (and correspondingly masked the very
+double-application regression this test exists to catch, since a real
+regression during those hours would surface as the same, seemingly
+"expected", mismatch).
 """
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 from agents.autonomous_engine import ActionType, AutonomousDecisionEngine
+
+_DAYTIME_UTC = time.struct_time((2026, 1, 1, 12, 0, 0, 3, 1, 0))
 
 
 def _clean_signal(edge: float = 0.15, direction: str = "YES") -> SimpleNamespace:
@@ -43,7 +56,8 @@ def _reduce_decision(suggested_size_pct: float) -> SimpleNamespace:
     return SimpleNamespace(verdict="REDUCE", suggested_size_pct=suggested_size_pct)
 
 
-def test_reduce_verdict_does_not_shrink_size_multiplier_below_suggested():
+def test_reduce_verdict_does_not_shrink_size_multiplier_below_suggested(monkeypatch):
+    monkeypatch.setattr(time, "gmtime", lambda *a: _DAYTIME_UTC)
     engine = AutonomousDecisionEngine()
     decision = engine.evaluate(
         signal=_clean_signal(),
@@ -66,7 +80,8 @@ def test_reduce_verdict_does_not_shrink_size_multiplier_below_suggested():
     assert decision.should_execute
 
 
-def test_reduce_verdict_still_composes_with_independent_risk_factors():
+def test_reduce_verdict_still_composes_with_independent_risk_factors(monkeypatch):
+    monkeypatch.setattr(time, "gmtime", lambda *a: _DAYTIME_UTC)
     engine = AutonomousDecisionEngine()
     # regime_strength > 0.80 independently caps size_multiplier at 0.5 —
     # that cap must still apply; it just shouldn't be *additionally*
