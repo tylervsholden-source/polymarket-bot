@@ -333,12 +333,32 @@ class MakerEngine:
         return placed
 
     async def _cancel_all_standing(self, client) -> int:
-        """Cancel all standing maker orders."""
+        """Cancel all standing maker orders.
+
+        cancel_order() returning False conflates two very different cases:
+        a real cancel error, and "already matched by the CLOB, nothing left
+        to cancel" — the far more common case for a resting GTC order that
+        did its job. Discarding the order either way silently dropped a
+        real fill: on_fill() (the only thing that updates self._inventory /
+        check_paired_profit()) was never called. Check the real order
+        status before deleting, same fill-detection pattern already used
+        by PositionManager._check_order_filled().
+        """
         cancelled = 0
-        for order_id in list(self._standing.keys()):
+        for order_id, order in list(self._standing.items()):
             if client.cancel_order(order_id):
                 cancelled += 1
-            del self._standing[order_id]
+                del self._standing[order_id]
+                continue
+
+            order_data = await client.get_order_status(order_id)
+            status = ((order_data or {}).get("status") or "").upper()
+            size_matched = float((order_data or {}).get("size_matched", 0) or 0)
+            if status in ("MATCHED", "FILLED") or size_matched > 0:
+                fill_size = size_matched if size_matched > 0 else order.size
+                self.on_fill(order_id, order.price, fill_size)
+            else:
+                del self._standing[order_id]
         return cancelled
 
     def on_fill(self, order_id: str, price: float, size: float):
