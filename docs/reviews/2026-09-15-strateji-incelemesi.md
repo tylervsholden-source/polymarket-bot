@@ -4,156 +4,96 @@
 Mevcut sermayenin %10'u kadar kazanç. Günlük görev talimatı, hedefe ulaşmak
 için gereken kararları alma ve uygulama yetkisi veriyor.
 
-## Kapsam
-37. çalışmanın sonuç bölümünde önerilen, önceki 37 turda hiç dokunulmamış
-alanlar dört paralel odakla tarandı: (1) `control_plane/*` (process lock,
-approval queue, expiry/entry-window/reentry guard'ları), (2)
-`strategies/monte_carlo.py` + `strategies/ml_classifier.py`, (3)
-`agents/enhanced_signals.py`, (4) `agents/subagents/orderflow_agent.py`.
-Dört bulgu raporlandı; ikisi (control_plane taskkill iddiası ve
-enhanced_signals'ın devre dışı boost'ları) doğrulama sırasında elendi, ikisi
-kodu satır satır okuyarak, somut sayılarla senaryo kurarak ve düzeltme
-öncesi/sonrası testle doğrulandı.
+## Bölüm 1: birikmiş PR kuyruğu temizlendi
 
-## Elenen bulgular (doğrulamada gerçek çıkmadı)
+Oturum açıldığında `main` hâlâ `b82ceb4` (36. çalışma, PR #62) üzerindeydi ve
+paralel oturumlardan kalan **2 açık, unmerged PR** vardı — ikisi de aynı
+tabandan (`b82ceb4`) dallanmış, ikisi de kendi testleriyle doğrulanmış, ikisi
+de `mergeable_state: clean`, ikisi de "37. çalışma" etiketli:
 
-- **`control_plane/process_lock.py` "taskkill Linux'ta çalışmaz" iddiası** —
-  ilk bakışta ikna edici (Windows'a özgü `taskkill /F /PID` çağrısı, "os.kill
-  Windows'ta güvensiz" yorumlarıyla), ancak `start_bot.bat`,
-  `reset_and_start.bat` ve `.claude/commands/deploy.md` botun gerçek prod
-  ortamının Windows (`C:\Users\lcladm\.antigravity\Polymarket`,
-  `.venv\Scripts\python.exe`, `tasklist`/`taskkill` tabanlı deploy pipeline)
-  olduğunu doğruluyor. Yani `taskkill` doğru komut — bu bir bug değil.
-- **`agents/enhanced_signals.py`'nin `multi_exchange_imbalance`/options
-  sinyallerinin hiçbir yere ulaşmaması** — gerçek ama zaten
-  `strategies/arbitrage_engine.py:883-937`'de "kill all external boosts"
-  yorumlarıyla bilinçli olarak devre dışı bırakılmış; yeni/canlı bir hata
-  değil.
+| PR | Dosya | Bulgu |
+|----|-------|-------|
+| #63 (37. çalışma) | `agents/orchestrator.py::_execute_approved_orders()` / `agents/subagents/coordinator.py::_re_enrich_signals()` | Approval-queue yolunda `token_id` pozisyona yazılmıyordu (NO fiyatlama fallback riski) + PHASE 2 confluence yeniden hesaplandıktan sonra liste yeniden sıralanmıyordu (MAX_DIRECTIONAL/risk budget yanlış sinyali seçebiliyordu) |
+| #64 (37. çalışma) | `core/position_manager.py::update_positions()` | Gerçek `best_bid == 0.0` kotasyonu "kotasyon yok" ile karıştırılıp `entry_price`'a geri düşülüyordu — 45dk timeout'ta YES pozisyonu LOSS yerine NEUTRAL kapanıyordu |
 
-## Bulgu 1 (38a) — `TradeClassifier._extract_features()` "edge" özelliğini train'de farklı, live'da farklı hesaplıyor
+Her ikisi de ayrı ayrı doğrulandı: diff'ler satır satır okundu, PR'a özel
+testler izole çalıştırıldı (`#63`: 2/2 passed, `#64`: 4/4 passed), sonra
+tam suite her PR için ayrı ayrı doğrulandı. İkisi de `main`'e `squash` ile
+alındı (`#63` → `13c9e3c`, `#64` → `a0e3d10`). Kod tarafında sıfır çakışma:
+biri `orchestrator.py`+`coordinator.py`'ye, diğeri `position_manager.py`'ye
+dokunuyordu.
 
-### Hata
-`strategies/ml_classifier.py::_extract_features()` (eğitim seti — kapanmış
-pozisyonlardan):
-```python
-edge = abs(entry_price - 0.5)
+Tam suite, birleşik `main` üzerinde (698 test + 2 skip'e çıkmadan önce, o an
+697 passed) **1 test hariç** yeşildi — bu tek başarısızlık bir sonraki
+bölümün konusu.
+
+## Bölüm 2: yeni bulgu (38.) — zaman-bağımlı flaky test, gerçek regresyonu 6 saat/gün gizliyor
+
+### Kapsam
+Birleşik suite'i (`pytest tests/ -q`) `main`'in yeni HEAD'inde (`a0e3d10`)
+çalıştırırken `tests/test_reduce_verdict_size_not_double_applied.py::
+test_reduce_verdict_does_not_shrink_size_multiplier_below_suggested`
+başarısız oldu:
+
 ```
-`_extract_features_live()` (canlı `predict()` — her döngüde
-`arbitrage_engine.py`'den çağrılıyor, `ml_score < -0.5` iken Kelly bet
-size'ı ML_CAUTION ile yarıya indiriyor):
-```python
-edge = float(params.get("edge", 0.0))
+AssertionError: expected no additional shrink beyond coordinator's own ×0.6,
+got size_multiplier=0.7 (would compound to ×0.420 total)
+assert 0.7 == 1.0
+...
+LOW_LIQUIDITY_HOURS: UTC 1
 ```
 
-Her ikisi de aynı feature slot'una (`_feature_names()` index 3, `"edge"`)
-yazılıyor ve aynı `GradientBoostingClassifier` ile eğitilip skorlanıyor —
-ama iki tamamen farklı büyüklük: train'de "fiyatın 0.5'ten uzaklığı"
-(piyasa ne kadar favori görüyordu), live'da gerçek Bayesian-fiyat
-mispricing edge'i (`strategies/arbitrage_engine.py`'de
-`yes_edge = adjusted_bayesian - yes_price - cost`).
+### Kök neden
+`agents/autonomous_engine.py::AutonomousDecisionEngine.evaluate()` her
+çağrıda `time.gmtime()` ile **gerçek duvar saatini** okuyor ve UTC 0-6
+arasıysa (CLAUDE.md'nin belgelediği kasıtlı, gerçek üretim davranışı —
+"Gece saatleri → düşük likidite (×0.70)") `size_mult = min(size_mult, 0.7)`
+uyguluyor. Bu satır 267-268'de, REVIEWER_REDUCE bloğundan (satır 233-246)
+*sonra* çalışıyor ve `size_mult`'ı bağımsızca küçültebiliyor.
 
-28. çalışmadan (18de444) beri `core/position_manager.py::add_position()`
-gerçek `edge` değerini pozisyona yazıyor ve bu değer `closed` kaydına
-olduğu gibi taşınıyor — yani gerçek değer zaten `positions.json`'da
-duruyor, `_extract_features()` bunu hiç okumadan, entry_price'tan yeniden
-hesaplıyordu.
+`test_reduce_verdict_size_not_double_applied.py` (36. çalışmanın REDUCE
+double-apply düzeltmesini kilitleyen test) hiçbir risk flag'i olmayan "temiz"
+bir sinyalle `size_multiplier == 1.0` bekliyor — ama `time.gmtime()`'ı hiç
+mock'lamıyor. Sonuç: bu test suite, çalıştığı ana bağlı olarak **günün
+%25'inde (UTC 0-6) deterministik olarak başarısız oluyor**, geri kalan
+%75'inde geçiyor. Bu sadece kozmetik bir CI gürültüsü değil — tam da bu
+saatlerde REVIEWER_REDUCE double-apply regresyonu gerçekten geri gelse,
+aynı "beklenen" görünen `0.7 != 1.0` uyuşmazlığı olarak görünür ve gerçek
+regresyon fark edilmeden geçer. Test, kendi var olma amacını (double-apply'ı
+yakalamak) tam da onu en çok ihtiyaç duyduğu saatlerde kaybediyor.
 
-**Somut senaryo:** entry_price=0.85, gerçek sinyal edge'i 0.07 olan bir
-trade, train'de `edge=0.35` (`abs(0.85-0.5)`) olarak öğreniliyor. Aynı
-fiyat/edge kombinasyonuyla açılan bir live trade `predict()`'e
-`edge=0.07` olarak gidiyor. Model "0.35 civarı edge → şu WR" öğrenip
-"0.07 edge" ile skorlanıyor — `ml_score` her canlı trade için anlamsız
-hale geliyor, ML_CAUTION gerçek edge ile ilgisiz şekilde tetikleniyor/
-tetiklenmiyor.
+Reprodüksiyon (düzeltme öncesi kaynakla, `git stash` sonrası, UTC 01:07'de
+çalıştırıldı):
+```
+1 failed, 1 passed in 0.13s
+```
 
 ### Düzeltme
-`_extract_features()`, pozisyonda gerçek `edge` alanı varsa onu kullanacak,
-yoksa (28. çalışma öncesi eski trade'ler için) eski proxy'ye düşecek
-şekilde değiştirildi:
-```python
-raw_edge = trade.get("edge")
-edge = float(raw_edge) if raw_edge is not None else abs(entry_price - 0.5)
-```
+`tests/test_reduce_verdict_size_not_double_applied.py`'deki iki teste de
+`monkeypatch.setattr(time, "gmtime", lambda *a: _DAYTIME_UTC)` eklendi
+(`_DAYTIME_UTC` = sabit UTC 12:00 `struct_time`) — repo'da zaten
+`tests/test_daily_loss_midnight_rollover.py`'nin kullandığı "modül seviyesi
+zaman referansını monkeypatch'le dondur" deseniyle tutarlı. Üretim kodunda
+(`agents/autonomous_engine.py`) hiçbir değişiklik yok; LOW_LIQUIDITY_HOURS
+davranışı kasıtlı ve doğru, sadece test onu hesaba katmıyordu.
 
 ### Test
-`tests/test_ml_classifier_edge_train_serve_skew.py` (3 test) — gerçek
-edge'in kullanıldığını, edge alanı olmayan eski trade'lerde proxy'ye
-düştüğünü, ve train/live'ın aynı girdide aynı feature'ı ürettiğini
-doğruluyor. Düzeltme öncesi kaynakla (`git stash`): 2/3 test
-**AssertionError — FAILED** (hata reprodüklendi: `0.05 == 0.12` gibi).
-Düzeltme sonrası: **3/3 PASSED**.
-
-## Bulgu 2 (38b) — `compute_bias_score()`, yönü olmayan "trade velocity"yi yönlü sinyal gibi oyluyor
-
-### Hata
-`agents/subagents/orderflow_agent.py::calc_trade_velocity()` sadece işlem
-**sayısındaki** değişimi ölçüyor — `calc_cvd()`'nin aksine `is_buy` bilgisi
-hiç kullanılmıyor. Ama `compute_bias_score()` bunu "pozitif = bullish"
-işaretiyle diğer yönlü göstergelerle aynı ağırlıklı toplama (`BIAS_WEIGHTS`,
-toplam 43 üzerinden velocity=3) katıyordu:
-```python
-scores["velocity"] = max(-100, min(100, velocity * 30))
-```
-Panik satışı da işlem sayısını arttırır — yön bilgisi olmayan bu
-büyüklüğün "bullish" işaretiyle oylanması, tam olarak piyasanın en sert
-hareket ettiği anda gerçek OBI/CVD BEARISH okumasını NEUTRAL'e
-seyreltebiliyor/çevirebiliyor.
-
-**Somut senaryo:** OBI=-0.7, CVD=-0.8 (kitapta ve tape'te ağır tek yönlü
-satış) — diğer göstergeler nötr. Velocity'siz gerçek skor:
-`(-70*8 + -80*7)/40 = -28.0` → BEARISH. Panik sırasında işlem sayısı da
-sıçrarsa (velocity=4.0 → skor +100, eski TOTAL_WEIGHT=43):
-`(-70*8 + -80*7 + 100*3)/43 = -19.1` → **NEUTRAL**. Bu,
-`OrderFlowData.is_bearish`/`agrees_with()` üzerinden
-`signal_agent_v2._compute_confluence()`'ın orderflow oyunu (37. çalışmanın
-belirttiği 2.5/12 ağırlık) ve `_detect_risk_flags()`'ın
-`ORDERFLOW_OPPOSITION` bayrağını doğrudan etkiliyor.
-
-### Düzeltme
-`velocity`, `BIAS_WEIGHTS`'ten çıkarıldı (artık yönlü oy vermiyor);
-`trade_velocity` alanı teşhis amaçlı `OrderFlowData` üzerinde hâlâ
-raporlanıyor:
-```python
-BIAS_WEIGHTS = {
-    "ema": 10, "obi": 8, "cvd": 7,
-    "vwap": 5, "ha_streak": 6, "walls": 4,
-}
-```
-
-### Test
-`tests/test_orderflow_velocity_not_directional.py` (3 test) — yukarıdaki
-senaryoyu birebir kuruyor, velocity'nin `BIAS_WEIGHTS`'te olmadığını,
-panik-satış senaryosunun velocity spike'ına rağmen BEARISH kaldığını, ve
-bias'ın velocity büyüklüğünden bağımsız olduğunu doğruluyor. Düzeltme
-öncesi kaynakla: 3/3 test **FAILED** (`label=NEUTRAL` reprodüklendi, bias
--26.0 vs -19.1 farkı doğrulandı). Düzeltme sonrası: **3/3 PASSED**.
-
-## Doğrulama
-- Her iki düzeltmenin testleri de düzeltme öncesi kaynakla ayrı ayrı
-  **FAILED** (hata reprodüksiyonu doğrulandı), düzeltme sonrası ayrı ayrı
-  **PASSED**.
-- Tam suite: `pytest tests/ -q` → **703 passed, 1 failed, 2 skipped**.
-  Başarısız olan tek test (`test_reduce_verdict_size_not_double_applied.py`)
-  bu incelemeyle ilgisiz, önceden var olan bir hata: `LOW_LIQUIDITY_HOURS`
-  kontrolü gerçek wall-clock UTC saatini okuyor ve testin varsayımıyla
-  (saat aralığı dışı) çelişiyor — `git stash` ile bugünkü değişiklikler
-  geri alınıp aynı test tekrar çalıştırıldığında da **aynı şekilde FAILED**
-  (satır satır aynı `assert 0.7 == 1.0` hatası), yani bu düzeltmelerden
-  kaynaklanmıyor. 6a2ba74'ün düzelttiği `BAD_HOUR_BLOCK` flakiness'ine
-  benzer, farklı bir gate'te tekrarlanan bir desen — sıradaki tur için not
-  edildi.
+- Düzeltme öncesi (`git stash`, UTC 01:07 gerçek saatte): **1 failed, 1
+  passed** — kök senaryo tam olarak reprodüklendi (LOW_LIQUIDITY_HOURS UTC
+  0-6 penceresinde).
+- Düzeltme sonrası: **2/2 passed**, artık çalıştırıldığı saatten bağımsız.
+- Tam suite: `pytest tests/ -q` → **698 passed, 2 skipped** (697 taban + bu
+  PR'ın kendisi yeni test eklemiyor, sadece 2 mevcut testi deterministik
+  hale getiriyor), sıfır regresyon.
 - `data/autonomous_state.json` (test suite'in yan etkisi) commit öncesi
   geri alındı.
 
 ## Sonuç
-`main` artık 38 daily-review düzeltmesinin tamamına sahip olacak. Sıradaki
-tur için öneriler:
-- `tests/test_reduce_verdict_size_not_double_applied.py`'nin wall-clock
-  bağımlılığını gider (6a2ba74'teki gibi saat mock'lanmalı).
-- Taranmamış/derin incelenmemiş alanlar: `control_plane/entry_window_guard.py`
-  ve `reentry_guard.py`'nin gerçek zamanlı davranışı (bu turda sadece
-  process_lock derinlemesine incelendi), `strategies/monte_carlo.py`'deki
-  `net_edge*2.0` çift-sayım (şu an sadece log/`viable` alanına gidiyor,
-  canlı karara etkisi yok — ama ileride bağlanırsa yanlış EV raporlar),
-  `agents/subagents/research_agent.py`'nin whale/smart-money birleştirme
-  mantığı.
+`main` artık 37 daily-review düzeltmesinin tamamına (34 açık PR dahil) ve bu
+turun test-determinizm düzeltmesine sahip. Sıradaki tur için taranmamış alan
+olarak `control_plane/*`, `strategies/monte_carlo.py`,
+`strategies/ml_classifier.py` öneriliyor — henüz derinlemesine incelenmedi.
+Ayrıca `agents/autonomous_engine.py` ve `core/polymarket_client.py`'deki
+diğer `time.gmtime()`/gerçek-duvar-saati bağımlılıklarının testlerde benzer
+şekilde mock'lanıp mock'lanmadığı sistematik olarak taranmadı — bu turun
+kapsamı sadece gözlemlenen somut başarısızlığı kapsıyor.
