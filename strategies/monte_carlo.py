@@ -35,6 +35,7 @@ class MonteCarloSimulator:
         self,
         edge: float,               # Net edge per trade (EV_net)
         capital: float,            # Starting capital
+        price: float = 0.50,       # Entry price of the token being bought (YES or NO ask)
         n_trades: int = 100,       # Number of trades to simulate
         fill_rate: float = 0.85,   # Expected order fill rate
         slippage_std: float = 0.004,  # Slippage std deviation
@@ -45,6 +46,11 @@ class MonteCarloSimulator:
         Run N simulations of the arbitrage strategy.
         Each simulation randomizes fills, slippage, and edge estimation.
         """
+        # Polymarket pays $1/share on a win; buying `bet` at `price` buys
+        # bet/price shares, so win profit is bet * (1-price)/price and loss
+        # is the full bet. Clamp away from 0/1 to keep the payout finite.
+        price = min(max(price, 0.02), 0.98)
+
         final_returns: list[float] = []
         max_drawdowns: list[float] = []
         win_rates: list[float] = []
@@ -78,12 +84,12 @@ class MonteCarloSimulator:
 
                 total_trades += 1
 
-                # Win probability based on edge
-                # edge = prob - 0.5 in simplified terms: prob = 0.5 + edge/2
-                win_prob = min(0.90, 0.50 + net_edge / 2.0)
+                # True win probability implied by price + net edge
+                # (edge = true_prob - price - costs  =>  true_prob = price + net_edge)
+                win_prob = min(0.97, max(0.03, price + net_edge))
                 if random.random() < win_prob:
-                    # Win: payout approximated as 1:1 on the bet
-                    w += bet * net_edge * 2.0
+                    # Win: bet/price shares bought, each resolves to $1
+                    w += bet * (1.0 - price) / price
                     wins += 1
                 else:
                     w -= bet
