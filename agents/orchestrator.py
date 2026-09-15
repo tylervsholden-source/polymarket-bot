@@ -1017,7 +1017,19 @@ class Orchestrator:
         # ═══════════════════════════════════════════════════════════════
 
         # Phase A: Market Making — refresh two-sided quotes (every cycle)
-        if self._maker_enabled and self._maker_engine and self._is_live_trading():
+        # Must respect the same daily stop-loss / process-lock / account-wide
+        # position-cap guards as Phase B (bond, 43rd daily review) and
+        # _execute_approved_orders() — otherwise a losing day that trips the
+        # -15% stop-loss (or a stale process lock) would not stop maker's
+        # real GTC orders.
+        if (
+            self._maker_enabled
+            and self._maker_engine
+            and self._is_live_trading()
+            and not self.position_manager.daily_loss_exceeded(self.daily_stop_loss)
+            and (self._process_lock is None or self._process_lock.is_mine())
+            and self.position_manager.open_position_count() < self.max_open_positions
+        ):
             try:
                 maker_capital = self.position_manager.pool_available("maker")
                 # Use ALL markets (not just candidates) — maker needs wider selection
