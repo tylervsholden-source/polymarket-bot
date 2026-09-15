@@ -180,6 +180,21 @@ def _detect_timeframe(question: str) -> str:
     return "1h"  # varsayılan
 
 
+# TradeClassifier.predict()'e beslenen window_minutes özelliği — training
+# tarafında ml_classifier.TradeClassifier._parse_window() sorudan gerçek
+# başlangıç/bitiş saatlerini parse edip dakika farkını döner (4h market için
+# ~240). Bu eşleme _time_remaining_fraction()'daki window_map (300/900/3600/
+# 14400sn = 5/15/60/240dk) ile aynı dört bucket'ı kapsamalı — "4h" burada
+# eksikti ve `.get(timeframe, 15)` varsayılanına düşüyordu, yani canlıdaki
+# her 4h sinyali modele window_minutes=15 (gerçek: ~240) besliyordu. İzole
+# test edilebilmesi için ayrı fonksiyon (bkz. _momentum_decel_blocks_no).
+_ML_WINDOW_MINUTES_MAP = {"5m": 5, "15m": 15, "1h": 60, "4h": 240}
+
+
+def _ml_window_minutes(timeframe: str) -> float:
+    return _ML_WINDOW_MINUTES_MAP.get(timeframe, 15)
+
+
 def _momentum_decel_blocks_no(direction: str, momentum_decelerating: bool) -> bool:
     """OPT-3: Momentum Deceleration Guard (CLAUDE.md v9 — "Tümü Aktif").
 
@@ -1739,7 +1754,7 @@ class ArbitrageEngine:
             "asset": _asset_short, "direction": direction,
             "entry_price": trade_price, "edge": edge,
             "hour_et": _hour_et, "minute_et": _minute_et,
-            "window_minutes": {"5m": 5, "15m": 15, "1h": 60}.get(timeframe, 15),
+            "window_minutes": _ml_window_minutes(timeframe),
         })
         # ML gate: strong LOSS prediction → reduce size by 50%
         # FIX: thin liquidity (OB_ILLIQUID or ADX<15) → ML boost capped at 50% confidence
