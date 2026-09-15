@@ -71,6 +71,20 @@ class WhaleTracker:
             price = float(trade.get("price", 0) or 0)
             usdc_value = size * price
             side = str(trade.get("side", "")).upper()
+            outcome = str(trade.get("outcome", "")).upper()
+
+            # `side` (BUY/SELL) tek başına yön değil, hangi outcome token'ının
+            # alınıp satıldığını gösterir. Gerçek yön için `outcome` (YES/UP
+            # veya NO/DOWN) ile birleştirilmeli — agents/top_trader_signal.py
+            # ve agents/copytrade.py bu aynı data-api şemasını aynı şekilde
+            # işliyor. side'ı tek başına okumak, NO/DOWN tarafında yoğunlaşan
+            # whale alımlarını BULLISH gibi raporlar (yön tersine döner).
+            is_bullish_trade = (side == "BUY" and outcome in ("YES", "UP")) or (
+                side == "SELL" and outcome in ("NO", "DOWN")
+            )
+            is_bearish_trade = (side == "SELL" and outcome in ("YES", "UP")) or (
+                side == "BUY" and outcome in ("NO", "DOWN")
+            )
 
             # Trade zamanı
             ts = trade.get("timestamp") or trade.get("createdAt") or ""
@@ -88,16 +102,16 @@ class WhaleTracker:
 
             total_volume += usdc_value
 
-            if side == "BUY":
+            if is_bullish_trade:
                 large_buys += 1
-            elif side == "SELL":
+            elif is_bearish_trade:
                 large_sells += 1
 
             # Akıllı para: $10K+, son 6 saat
             if usdc_value >= SMART_MONEY_USDC and trade_time and trade_time >= cutoff_6h:
-                if side == "BUY":
+                if is_bullish_trade:
                     smart_money_buys += 1
-                elif side == "SELL":
+                elif is_bearish_trade:
                     smart_money_sells += 1
 
         # Yön kararı (akıllı para varsa onu önceliklendir)
