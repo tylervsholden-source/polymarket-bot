@@ -1035,7 +1035,17 @@ class Orchestrator:
                 logger.error(f"MAKER_CYCLE error: {maker_err}")
 
         # Phase B: Bond scan — every 5th cycle (~5 min)
-        if self._bond_enabled and self._bond_scanner and self._cycle_count % 5 == 0:
+        # Must respect the same master live-trading switch as Phase A
+        # (maker) and every other real-order path (_cycle direct orders,
+        # _execute_approved_orders) — otherwise turning off control.json's
+        # live_trading (e.g. dashboard pause, or LIVE_TRADING_ENABLED/
+        # readiness failing) does not stop bond orders from being placed.
+        if (
+            self._bond_enabled
+            and self._bond_scanner
+            and self._cycle_count % 5 == 0
+            and self._is_live_trading()
+        ):
             try:
                 await self._bond_cycle()
             except Exception as bond_err:
