@@ -809,6 +809,22 @@ class Orchestrator:
                 logger.warning(f"Capital too low for any trade: ${capital:.2f}")
                 break
 
+            # ── REVIEWER REDUCE ──────────────────────────────────────────
+            # agents/subagents/coordinator.py no longer bakes suggested_size_pct
+            # into signal.size (52nd daily review) — doing so fed an
+            # already-shrunk size into compute_bet_size()'s effective_min floor
+            # above, which silently re-inflated small/REDUCE'd sizes back up,
+            # discarding the reviewer's risk-based reduction. Apply it here
+            # instead, directly to bet_size with no re-clamp — same pattern as
+            # apply_risk_size_multiplier() below.
+            if review_decision.verdict == ReviewVerdict.REDUCE:
+                original_bet = bet_size
+                bet_size = apply_risk_size_multiplier(bet_size, review_decision.suggested_size_pct)
+                logger.info(
+                    f"[REVIEWER] REDUCE: ${original_bet:.2f} × "
+                    f"{review_decision.suggested_size_pct:.2f} = ${bet_size:.2f}"
+                )
+
             # ── AUTONOMOUS ENGINE SIZE ADJUSTMENT ──
             if _auto_size_mult < 1.0:
                 original_bet = bet_size

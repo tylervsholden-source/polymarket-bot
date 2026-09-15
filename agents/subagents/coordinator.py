@@ -306,14 +306,28 @@ class AgentCoordinator:
                     signal_result.signals
                 )
 
-                # Apply size reduction for REDUCE verdicts
-                for i, (sig, dec) in enumerate(result.approved_signals):
+                # REDUCE verdicts: do NOT shrink sig.size here (52nd daily review).
+                # sig.size is Kelly's raw signal_size, and it feeds directly into
+                # agents/orchestrator.py's compute_bet_size(signal_size=signal.size, ...),
+                # whose effective_min floor exists to keep a *Kelly-derived* size
+                # inside a tradeable capital-scaled band (e.g. capital<$20 floors up
+                # to ~$3). That floor cannot tell a signal that is small because
+                # Kelly's edge is thin from one the reviewer just deliberately
+                # shrank for risk reasons — pre-shrinking sig.size here let the
+                # floor silently re-inflate a REDUCE'd size back up, sometimes past
+                # Kelly's own original recommendation, discarding the reviewer's
+                # protective reduction entirely (same bug class as the 22nd daily
+                # review's apply_risk_size_multiplier() fix, via a different path).
+                # orchestrator.py now applies dec.suggested_size_pct to bet_size via
+                # apply_risk_size_multiplier() AFTER compute_bet_size(), the same
+                # no-reclamp pattern already used for REVIEWER_VETO / walk-forward /
+                # adaptive-bet multipliers.
+                for sig, dec in result.approved_signals:
                     if dec.verdict == ReviewVerdict.REDUCE:
-                        original = sig.size
-                        sig.size = round(sig.size * dec.suggested_size_pct, 2)
                         logger.info(
                             f"[Coordinator] REDUCE: {sig.condition_id[:20]} "
-                            f"${original:.2f} → ${sig.size:.2f} ({dec.suggested_size_pct:.0%})"
+                            f"${sig.size:.2f} × {dec.suggested_size_pct:.0%} "
+                            f"(applied to bet_size post-floor in orchestrator)"
                         )
 
                 result.total_approved = len(result.approved_signals)
