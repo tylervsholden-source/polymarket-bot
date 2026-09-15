@@ -1186,7 +1186,29 @@ class Orchestrator:
             _mark_order_executed(order_req["id"])
 
     async def _bond_cycle(self):
-        """Scan ALL markets for high-probability bond opportunities."""
+        """Scan ALL markets for high-probability bond opportunities.
+
+        _bond_cycle() places real orders via client.place_passive_order()
+        directly — it never calls check_live_gate(). The 42nd daily review
+        already gated the *caller* on self._is_live_trading(), but noted
+        as a follow-up that bond orders still skipped the daily -15%
+        stop-loss, process-lock, and account-wide position-cap checks that
+        check_live_gate() (and _execute_approved_orders()) enforce for
+        every other real-order path. Restored here: a losing day that
+        trips daily_loss_exceeded() (or a directional loop that fills the
+        last open-position slot earlier in this same cycle) must stop bond
+        orders exactly like it stops directional ones.
+        """
+        if self.position_manager.daily_loss_exceeded(self.daily_stop_loss):
+            logger.warning("BOND: Günlük -%15 stop-loss aşıldı, bond cycle atlanıyor.")
+            return
+        if self._process_lock is not None and not self._process_lock.is_mine():
+            logger.warning("BOND: Process lock bu process'e ait değil, bond cycle atlanıyor.")
+            return
+        if self.position_manager.open_position_count() >= self.max_open_positions:
+            logger.debug("BOND: Hesap-genelinde max pozisyon limitinde, bond cycle atlanıyor.")
+            return
+
         bond_capital = self.position_manager.pool_available("bond")
         bond_positions = self.position_manager.pool_position_count("bond")
 
@@ -1207,6 +1229,9 @@ class Orchestrator:
             if bond_capital < 3.0:
                 break
             if bond_positions >= self._bond_scanner.MAX_POSITIONS:
+                break
+            if self.position_manager.open_position_count() >= self.max_open_positions:
+                logger.debug("BOND: Hesap-genelinde max pozisyon limitine ulaşıldı, döngü durduruluyor.")
                 break
 
             # Skip if already have position in this market
