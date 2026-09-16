@@ -54,12 +54,47 @@ class ProcessLock:
                     # Hâlâ yaşıyorsa force kill (taskkill — os.kill Windows'ta güvensiz)
                     logger.warning(f"Eski bot hâlâ çalışıyor (PID {old_pid}), öldürülüyor...")
                     try:
-                        import subprocess as _sp
-                        _sp.run(["taskkill", "/F", "/PID", str(old_pid)],
-                                capture_output=True, timeout=5)
+                        if sys.platform == "win32" or os.name == "nt":
+                            import subprocess as _sp
+                            _sp.run(["taskkill", "/F", "/PID", str(old_pid)],
+                                    capture_output=True, timeout=5)
+                        else:
+                            # BUG: this branch only ever ran `taskkill`, a Windows-only
+                            # binary. On Linux/macOS (the actual deploy platform —
+                            # see INC-2026-03-15-001, which this lock exists to
+                            # prevent) `subprocess.run(["taskkill", ...])` always
+                            # raises FileNotFoundError, silently swallowed by the
+                            # bare `except Exception: pass` below. The old process
+                            # was never killed, yet execution fell through and wrote
+                            # our own PID over its lock file anyway — both processes
+                            # then believed `is_mine()` was True (it only trusts the
+                            # in-memory flag, never the file) and both placed real
+                            # orders concurrently, exactly the incident this class's
+                            # own docstring says acquire() must prevent. Use a real
+                            # POSIX kill (SIGTERM, then SIGKILL) instead.
+                            import signal as _signal
+                            os.kill(old_pid, _signal.SIGTERM)
+                            for _ in range(10):  # up to ~1s
+                                if not self._pid_alive(old_pid):
+                                    break
+                                time.sleep(0.1)
+                            if self._pid_alive(old_pid):
+                                os.kill(old_pid, _signal.SIGKILL)
                         time.sleep(1)
-                    except Exception:
-                        pass
+                    except Exception as kill_err:
+                        logger.debug(f"Eski bot öldürme hatası: {kill_err}")
+
+                    # Kill'in gerçekten işe yarayıp yaramadığını doğrula — işe
+                    # yaramadıysa lock'u sessizce çalmak iki canlı instance'ın
+                    # aynı anda emir vermesine yol açar (bkz. yukarıdaki not).
+                    # Sınıf docstring'i "Başarısızsa sys.exit(1)" diyor; eskiden
+                    # bu kod yolunda hiçbir sys.exit çağrısı yoktu.
+                    if self._pid_alive(old_pid):
+                        logger.error(
+                            f"Eski bot (PID {old_pid}) öldürülemedi — lock devralınamıyor, "
+                            "çift instance riski var. Çıkılıyor."
+                        )
+                        sys.exit(1)
                 else:
                     logger.warning(
                         f"Eski lock dosyası (PID {old_pid}, artık çalışmıyor). Temizleniyor."
