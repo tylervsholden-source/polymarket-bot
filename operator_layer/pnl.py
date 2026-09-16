@@ -135,11 +135,25 @@ def build_equity_state(
 
     initial_capital = status_data.get("initial_capital") or status_data.get("capital")
 
-    # Determine if daily stop loss triggered
+    # Determine if daily stop loss triggered.
+    #
+    # Must mirror core/position_manager.py's daily_loss_exceeded(), the
+    # function that actually gates real order placement: the daily -15%
+    # threshold is measured against *today's* start-of-day capital
+    # (day_start_capital = capital - daily.pnl), not the bot's life-of-bot
+    # initial_capital (a fixed env var set once at bot startup). Those two
+    # denominators only coincide on day one — after that, capital drifts
+    # away from initial_capital (the bot's whole purpose is 1000->3000 in
+    # 20 days), so dividing by initial_capital instead of day_start_capital
+    # makes this dashboard's DAILY_STOP_LOSS status disagree with the real
+    # enforcement in both directions (falsely "blocked" after capital has
+    # grown, falsely "clear" after capital has shrunk).
     blocked_reason: Optional[str] = None
-    initial = initial_capital or capital
-    if initial > 0 and daily_pnl < 0:
-        daily_loss_pct = abs(daily_pnl) / initial
+    day_start_capital = capital - daily_pnl
+    if day_start_capital <= 0:
+        blocked_reason = "DAILY_STOP_LOSS"
+    elif daily_pnl < 0:
+        daily_loss_pct = abs(daily_pnl) / day_start_capital
         if daily_loss_pct >= 0.15:
             blocked_reason = "DAILY_STOP_LOSS"
 
