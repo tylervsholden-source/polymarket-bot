@@ -193,7 +193,7 @@ class Orchestrator:
             enhanced_signals=_enhanced,
             reviewer_model=os.getenv("REVIEWER_MODEL", "claude-sonnet-4-20250514"),
             enable_research=os.getenv("ENABLE_RESEARCH_AGENT", "true").lower() == "true",
-            enable_review=os.getenv("ENABLE_REVIEWER_AGENT", "false").lower() == "true",
+            enable_review=os.getenv("ENABLE_REVIEWER_AGENT", "true").lower() == "true",
         )
         logger.info("Subagent Coordinator initialized (Research + Signal + Reviewer)")
 
