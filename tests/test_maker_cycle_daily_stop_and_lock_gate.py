@@ -105,7 +105,10 @@ def _make_orchestrator(
 
     # Hybrid strategy flags: maker enabled (under test), bond disabled.
     orch._maker_enabled = True
-    orch._maker_engine = SimpleNamespace(refresh_quotes=AsyncMock(return_value={"placed": 0, "cancelled": 0, "skipped": 0}))
+    orch._maker_engine = SimpleNamespace(
+        refresh_quotes=AsyncMock(return_value={"placed": 0, "cancelled": 0, "skipped": 0}),
+        get_committed_capital=lambda: 0.0,
+    )
     orch._bond_enabled = False
     orch._bond_scanner = None
 

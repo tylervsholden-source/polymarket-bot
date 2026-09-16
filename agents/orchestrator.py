@@ -1079,7 +1079,16 @@ class Orchestrator:
             and self.position_manager.open_position_count() < self.max_open_positions
         ):
             try:
-                maker_capital = self.position_manager.pool_available("maker")
+                # pool_available("maker") only reads PositionManager's shared
+                # ledger, which maker fills never enter — subtract what
+                # MakerEngine itself already has committed to real standing
+                # orders / unresolved fills, or refresh_quotes() re-commits
+                # the same capital again on every cycle.
+                maker_capital = max(
+                    0.0,
+                    self.position_manager.pool_available("maker")
+                    - self._maker_engine.get_committed_capital(),
+                )
                 # Use ALL markets (not just candidates) — maker needs wider selection
                 maker_stats = await self._maker_engine.refresh_quotes(
                     markets=markets if markets else [],
