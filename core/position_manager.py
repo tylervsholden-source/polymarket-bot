@@ -565,7 +565,16 @@ class PositionManager:
                 # her zaman doğru token id — birincil kaynak olarak onu kullan.
                 no_tid = pos.get("token_id") or (market or {}).get("no_token_id")
                 no_book = client.get_orderbook(no_tid) if no_tid else None
-                if no_book and no_book["best_bid"] > 0:
+                # BUG: `no_book["best_bid"] > 0` treated a real, live book with a
+                # genuinely empty bid side (best_bid=0.0 — nobody bidding, e.g. the
+                # NO token is worthless near expiry) identically to "no book at
+                # all" (no_book is None), discarding real market data and falling
+                # back to the stale/synthetic price — or all the way to
+                # entry_price if yes_ask was also 0. Same class of "real zero vs.
+                # missing quote" bug already fixed for the YES branch below (37th
+                # daily review): trust the book whenever it was actually fetched
+                # (either side quoted), not just when best_bid happens to be > 0.
+                if no_book and (no_book["best_bid"] > 0 or no_book["best_ask"] > 0):
                     current_price = no_book["best_bid"]
                 else:
                     current_price = round(1.0 - yes_ask, 4) if yes_ask > 0 else pos["entry_price"]
