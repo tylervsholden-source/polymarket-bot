@@ -923,7 +923,14 @@ class Orchestrator:
 
                 # ── 11-NOKTA LİVE GATE KONTROLÜ (sadece canlı modda) ──
                 if self._is_live_trading():
-                    end_iso = market.get("end_date_iso", "")
+                    # endDate (full timestamp) tercih edilir; Gamma'nın
+                    # endDateIso alanı sadece tarih ("2026-03-16", "T" yok).
+                    # ExpiryGuard.hours_to_close() tarih-only string'i
+                    # gün sonuna (23:59) pad'leyerek zaten doğru işliyor,
+                    # bu yüzden gate'i "T" varlığına değil end_iso'nun
+                    # dolu olmasına bağla — yoksa expiry_guard hiç
+                    # çalışmadan sessizce "geçti" sayılır.
+                    end_iso = market.get("endDate") or market.get("end_date_iso", "")
                     gate_result = check_live_gate(
                         process_lock=self._process_lock,
                         control_file="data/control.json",
@@ -935,8 +942,8 @@ class Orchestrator:
                         max_orders_per_hour=self._max_orders_per_hour,
                         market_id=market_id,
                         reentry_guard=self._reentry_guard,
-                        market={"condition_id": market_id, "end_date_iso": end_iso} if "T" in end_iso else None,
-                        expiry_guard=self._expiry_guard if "T" in end_iso else None,
+                        market={"condition_id": market_id, "end_date_iso": end_iso} if end_iso else None,
+                        expiry_guard=self._expiry_guard if end_iso else None,
                         is_approved=True,
                         available_capital=capital,
                         required_capital=bet_size,
@@ -1186,6 +1193,10 @@ class Orchestrator:
                 continue
 
             # ── 11-NOKTA LİVE GATE KONTROLÜ (re-check after approval delay) ──
+            # bkz. yukarıdaki doğrudan emir yolu: end_date_iso tarih-only
+            # olabilir ("T" içermez), gate'i buna bağlamak expiry_guard'ı
+            # sessizce atlatıyordu.
+            _order_end_iso = order_req.get("end_date_iso", "")
             gate_result = check_live_gate(
                 process_lock=_lock,
                 control_file="data/control.json",
@@ -1197,8 +1208,8 @@ class Orchestrator:
                 max_orders_per_hour=self._max_orders_per_hour,
                 market_id=market_id,
                 reentry_guard=self._reentry_guard,
-                market={"condition_id": market_id, "end_date_iso": order_req.get("end_date_iso", "")} if "T" in order_req.get("end_date_iso", "") else None,
-                expiry_guard=self._expiry_guard if "T" in order_req.get("end_date_iso", "") else None,
+                market={"condition_id": market_id, "end_date_iso": _order_end_iso} if _order_end_iso else None,
+                expiry_guard=self._expiry_guard if _order_end_iso else None,
                 is_approved=True,  # Zaten approved listesinden geldi
                 available_capital=capital,
                 required_capital=amount,
