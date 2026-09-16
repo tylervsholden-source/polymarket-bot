@@ -1613,7 +1613,15 @@ class ArbitrageEngine:
 
         # Note: trade_edge already includes cost adjustment (applied at lines ~820-830)
         # Single market arb (rare: YES + NO < 1)
-        single_edge = self.edge_model.single_market_edge(yes_price, no_price)
+        # BUG (56th daily review): this used the crude `no_price` proxy from
+        # line 435 (1 - yes_bid_price, computed before the real NO orderbook
+        # was even read) instead of `no_price_ask` (the real orderbook ask,
+        # or the FIX-3 synthetic with spread padding) computed above. Since
+        # 1-yes_bid is always >= the true no_price_ask (bid <= ask), this
+        # made single_edge = 1-(yes_price+no_price)-cost permanently <= 0,
+        # so genuine single-market arbitrage (real YES_ask + real NO_ask < 1,
+        # a guaranteed-profit trade) could never be detected or sized.
+        single_edge = self.edge_model.single_market_edge(yes_price, no_price_ask)
 
         # Net edge: cost düşüldükten sonra pozitif olmalı — EV-negatif trade açmayız
         edge = max(trade_edge, single_edge)

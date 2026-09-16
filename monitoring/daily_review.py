@@ -299,15 +299,35 @@ def write_readiness_verdict(report: DailyReviewReport, path: str) -> None:
     path   : destination file path (e.g. "data/readiness_verdict.json")
     """
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+
+    def _check_to_dict(c) -> dict:
+        return {
+            "name": c.name,
+            "level": c.level.value,
+            "metric_value": c.metric_value,
+            "message": c.message,
+        }
+
     payload = {
         "verdict":        report.readiness.verdict.value,
         "verdict_reason": report.readiness.verdict_reason,
         "generated_utc":  report.generated_utc.isoformat(),
         "date_label":     report.date_label,
         "total_records":  report.total_records,
-        "blockers":       [c.name for c in report.readiness.blockers],
-        "fails":          [c.name for c in report.readiness.fails],
-        "warns":          [c.name for c in report.readiness.warns],
+        "evidence_sufficient": report.readiness.evidence_sufficient,
+        # operator_layer/readiness_view.py's build_readiness_state() reads
+        # each of these as a list of {name, level, metric_value, message}
+        # dicts (via _build_check_row()). Writing bare check-name strings
+        # here (the previous behavior) made _build_check_row() call
+        # str.get(...) and crash with AttributeError as soon as any check
+        # actually produced a blocker/fail/warn — i.e. on every readiness
+        # snapshot except a clean TINY_PILOT_CANDIDATE, exactly when an
+        # operator most needs the dashboard to explain why live trading is
+        # blocked.
+        "checks":         [_check_to_dict(c) for c in report.readiness.checks],
+        "blockers":       [_check_to_dict(c) for c in report.readiness.blockers],
+        "fails":          [_check_to_dict(c) for c in report.readiness.fails],
+        "warns":          [_check_to_dict(c) for c in report.readiness.warns],
     }
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
