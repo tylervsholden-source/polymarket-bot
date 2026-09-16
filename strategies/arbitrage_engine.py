@@ -1451,22 +1451,50 @@ class ArbitrageEngine:
                 # 5m bearish + 4h bullish = mean reversion → flip to NO
                 if _yes_viable:
                     _yes_viable = False
-                if not _no_viable:
+                # Same price/data-quality gate every other NO-activation path
+                # in this function enforces (e.g. EXHAUSTION_NO_ACTIVATE) —
+                # without it this block could flip NO on to a SYNTHETIC/stale
+                # or UNTRADABLE book.
+                if (not _no_viable and no_edge > 0
+                        and no_price_source == NoPriceSource.REAL_BOOK
+                        and no_side_health == "OK"
+                        and no_price_ask >= _NO_MIN_ASK):
                     _no_viable = True
-                logger.info(
-                    f"TF_CONFLICT_FLIP_NO: {question[:35]} | "
-                    f"5m={_avg_5m:+.2f}% (bearish) vs 4h={_avg_4h:+.2f}% (bullish) → NO bias"
-                )
+                    logger.info(
+                        f"TF_CONFLICT_FLIP_NO: {question[:35]} | "
+                        f"5m={_avg_5m:+.2f}% (bearish) vs 4h={_avg_4h:+.2f}% (bullish) → NO bias"
+                    )
+                elif not _no_viable:
+                    logger.info(
+                        f"TF_CONFLICT_NO_BLOCKED: {question[:35]} | "
+                        f"5m={_avg_5m:+.2f}% vs 4h={_avg_4h:+.2f}% conflict, but NO fails "
+                        f"price/quality gate (ask={no_price_ask:.2f}, "
+                        f"source={no_price_source}, health={no_side_health})"
+                    )
             if _avg_5m > 0.10 and _avg_4h < -0.30:
                 # 5m bullish + 4h bearish = mean reversion → flip to YES
                 if _no_viable:
                     _no_viable = False
-                if not _yes_viable:
+                # Same YES price-ceiling gate every other YES-activation path
+                # in this function enforces (e.g. CANDLE_YES_ACTIVATE) —
+                # without it this block could flip YES on above _YES_MAX_PRICE,
+                # the exact "YES@0.61: win=$0.39, lose=$0.61" risk/reward the
+                # cap exists to prevent.
+                if (not _yes_viable and yes_edge > 0
+                        and yes_price <= _YES_MAX_PRICE
+                        and yes_price >= _YES_MIN_PRICE):
                     _yes_viable = True
-                logger.info(
-                    f"TF_CONFLICT_FLIP_YES: {question[:35]} | "
-                    f"5m={_avg_5m:+.2f}% (bullish) vs 4h={_avg_4h:+.2f}% (bearish) → YES bias"
-                )
+                    logger.info(
+                        f"TF_CONFLICT_FLIP_YES: {question[:35]} | "
+                        f"5m={_avg_5m:+.2f}% (bullish) vs 4h={_avg_4h:+.2f}% (bearish) → YES bias"
+                    )
+                elif not _yes_viable:
+                    logger.info(
+                        f"TF_CONFLICT_YES_BLOCKED: {question[:35]} | "
+                        f"5m={_avg_5m:+.2f}% vs 4h={_avg_4h:+.2f}% conflict, but YES fails "
+                        f"price gate (price={yes_price:.2f}, "
+                        f"bounds=[{_YES_MIN_PRICE:.2f},{_YES_MAX_PRICE:.2f}])"
+                    )
 
             # ── MACRO TREND GATE (15-candle) ─────────────────────────────
             # Dead cat bounce koruması: son 5 mum yeşil olsa bile,
