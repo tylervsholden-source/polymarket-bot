@@ -650,6 +650,15 @@ class ArbitrageEngine:
             )
             bayesian_prob = 1 - _PROB_CAP
 
+        # Aggregate-cap baseline: captured BEFORE any external boost (SmartMoney,
+        # TopTrader, OB_Depth, KalshiArb, Enhanced) is applied, so the ±0.04
+        # aggregate cap below can actually bound their *combined* effect. Using
+        # `_pre_boost_prob` (captured later, after SM/TT/OB/Kalshi already ran —
+        # see its own comment) for this purpose would make the cap a no-op for
+        # exactly those four signals, since bayesian_prob - _pre_boost_prob is
+        # always ~0 by construction.
+        _prob_before_external_boosts = bayesian_prob
+
         # Smart money boost (reduced: 0.05 → 0.02, volume-gated)
         try:
             if self.smart_trader is not None:
@@ -975,10 +984,14 @@ class ArbitrageEngine:
         # ── AGGREGATE BOOST CAP ──────────────────────────────────────────
         # Allow external boosts (whale, smart trader, orderflow) to modify probability
         # but cap total boost at ±0.04 to prevent runaway.
-        _total_external_boost = bayesian_prob - _pre_boost_prob
+        # Baseline is `_prob_before_external_boosts` (pre-SmartMoney/TopTrader/
+        # OB_Depth/KalshiArb), not `_pre_boost_prob` — the latter is captured
+        # after those four already applied, which would make this cap a no-op
+        # for their combined effect (see comment above its definition).
+        _total_external_boost = bayesian_prob - _prob_before_external_boosts
         if abs(_total_external_boost) > _TOTAL_BOOST_CAP:
             _clamped = max(-_TOTAL_BOOST_CAP, min(_TOTAL_BOOST_CAP, _total_external_boost))
-            bayesian_prob = _pre_boost_prob + _clamped
+            bayesian_prob = _prob_before_external_boosts + _clamped
             logger.info(
                 f"BOOST_CAP: {question[:35]} | total_boost={_total_external_boost:+.4f} "
                 f"capped to {_clamped:+.4f} → prob={bayesian_prob:.3f}"
