@@ -2449,10 +2449,22 @@ class Orchestrator:
                 execution_adjusted_ev = gross_ev
                 if is_execute and gross_ev is not None:
                     try:
+                        # NO-direction signals must be priced on the NO side (1-yes_prob
+                        # vs. _ask_no), not the YES side — passing YES prob/price for a
+                        # NO trade computes the wrong market's mispricing entirely and
+                        # corrupts execution_adjusted_ev (feeds mean_ev_haircut_pct →
+                        # check_ev_haircut_pct → readiness verdict) for NO trades, the
+                        # dominant direction in this bot per docs/architecture.md.
+                        if sig_match.direction == "NO":  # type: ignore[union-attr]
+                            _er_prob = round(1.0 - yes_prob, 6)
+                            _er_ask = _ask_no
+                        else:
+                            _er_prob = yes_prob
+                            _er_ask = ask_yes
                         er = compute_executable_ev(
                             side=sig_match.direction,  # type: ignore[union-attr]
-                            calibrated_event_probability=yes_prob,
-                            ask_price=ask_yes,
+                            calibrated_event_probability=_er_prob,
+                            ask_price=_er_ask,
                             fee_pct=0.02,
                             intended_size_usdc=intended_size,
                             liquidity_usdc=liquidity,
