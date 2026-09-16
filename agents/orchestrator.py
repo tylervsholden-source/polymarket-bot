@@ -2486,8 +2486,22 @@ class Orchestrator:
                 else:
                     _rejection_reason = "NO_SIGNAL_PRODUCED"
 
+                # DecisionSummary.decision must be a TradeDecisionType.value
+                # (EXECUTE_YES / EXECUTE_NO / REJECT, see shadow_runner/types.py's
+                # own docstring) — the same vocabulary the paper_strict/paper_loose
+                # shadow harness (shadow_runner/runner.py) writes. Consumers such as
+                # monitoring/daily_review.py's would-trade list, shadow_runner/
+                # reporting.py, and monitoring/metrics.py all match on
+                # ("EXECUTE_YES", "EXECUTE_NO") to identify live executes; a bare
+                # "EXECUTE" literal never matches, so every real live EXECUTE
+                # decision written here was silently invisible to those consumers.
+                if is_execute:
+                    _decision_value = "EXECUTE_YES" if sig_match.direction == "YES" else "EXECUTE_NO"  # type: ignore[union-attr]
+                else:
+                    _decision_value = "REJECT"
+
                 decision_summary = DecisionSummary(
-                    decision="EXECUTE" if is_execute else "REJECT",
+                    decision=_decision_value,
                     rejection_reason=_rejection_reason,
                     policy_mode="live",
                     passes_final_gate=is_execute,
