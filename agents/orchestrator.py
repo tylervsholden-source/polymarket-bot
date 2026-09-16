@@ -782,6 +782,13 @@ class Orchestrator:
                     f"(bounce riski) | {market['question'][:50]}"
                 )
                 continue
+            # BUG: the "2 ardışık NO WIN → half-kelly" half of this guard (see
+            # comment above and _consecutive_wins_per_coin's docstring at
+            # __init__) was never implemented — only the >=3 SKIP branch used
+            # _coin_streak. A streak of exactly 2 fell through with no size
+            # reduction at all, leaving full-size bets exposed to the same
+            # bounce risk the >=3 branch exists to guard against.
+            _coin_win_guard_half_kelly = (_coin_streak == 2 and signal.direction == "NO")
 
             # Bet size: Kelly belirler, min/max cap uygula
             if signal.size <= 0:
@@ -808,6 +815,14 @@ class Orchestrator:
             if bet_size < 1.0:
                 logger.warning(f"Capital too low for any trade: ${capital:.2f}")
                 break
+
+            if _coin_win_guard_half_kelly:
+                original_bet = bet_size
+                bet_size = apply_risk_size_multiplier(bet_size, 0.5)
+                logger.info(
+                    f"CONSEC_WIN_GUARD: {_coin} {_coin_streak} ardışık NO WIN → "
+                    f"half-kelly ${original_bet:.2f} → ${bet_size:.2f} (bounce riski)"
+                )
 
             # ── REVIEWER REDUCE ──────────────────────────────────────────
             # agents/subagents/coordinator.py no longer bakes suggested_size_pct
