@@ -225,8 +225,10 @@ class SmartTraderTracker:
                 if size < 0.001:
                     continue
                 outcome = str(pos.get("outcome", "") or "").upper()
-                # YES = long (+), NO = effectively short (-)
-                net = size if outcome == "YES" else -size
+                # Up-or-down marketlerde outcome "UP"/"DOWN" gelir, "YES"/"NO" degil
+                # (bkz. whale_tracker.py, top_trader_signal.py, polymarket_client.py._verify_outcome_order)
+                # YES/UP = long (+), NO/DOWN = effectively short (-)
+                net = size if outcome in ("YES", "UP") else -size
                 if cid not in self._positions:
                     self._positions[cid] = {}
                 self._positions[cid][trader["name"]] = net
