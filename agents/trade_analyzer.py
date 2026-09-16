@@ -430,13 +430,37 @@ class TradeAnalyzer:
 
         # Zaten analiz edilmiş order_id'leri geri yükle — process restart sonrası
         # aynı closed trade'lerin pattern stats'e tekrar sayılmasını önler.
+        #
+        # _save_history() diske SADECE en son 200 analizi yazar (detaylı analiz
+        # geçmişinin boyutunu sınırlamak için), ama dedup için gereken bilgi
+        # sadece order_id — bunu 200'lük pencereyle sınırlamanın hiçbir nedeni
+        # yok. Eskiden order_id'ler SADECE o dosyadaki (en fazla 200) entry'den
+        # okunuyordu: bot ömrü boyunca 200'den fazla trade analiz edip yeniden
+        # başladığında, 200'lük pencerenin dışına düşen eski order_id'ler artık
+        # diskten geri yüklenemiyordu. Orchestrator._analyze_new_closed_trades()
+        # ise restart sonrası TÜM closed trade geçmişini index 0'dan tekrar
+        # oynatıyor (kendi dedup sayacı sadece bellekte) — bu yüzden o eski
+        # trade'ler "yeni" sanılıp _update_pattern_stats() tarafından tekrar
+        # sayılıyordu (43. daily review'ın çözdüğü bug'ın aynısı, sadece
+        # 200 trade'lik pencerenin dışında kalan kısmı için hâlâ mevcuttu).
+        # Artık tüm analiz edilmiş order_id'lerin tam listesi ayrı ve
+        # kırpılmadan saklanıyor.
         try:
             if self.ANALYSIS_FILE.exists():
                 with open(self.ANALYSIS_FILE) as f:
-                    for entry in json.load(f):
-                        oid = entry.get("order_id", "")
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    for oid in data.get("analyzed_order_ids", []):
                         if oid:
                             self._analyzed_order_ids.add(oid)
+                    entries = data.get("analyses", [])
+                else:
+                    # Legacy format: bare list of analysis entries.
+                    entries = data
+                for entry in entries:
+                    oid = entry.get("order_id", "")
+                    if oid:
+                        self._analyzed_order_ids.add(oid)
         except Exception as e:
             logger.debug(f"[TradeAnalyzer] Analysis history load failed: {e}")
 
@@ -464,8 +488,14 @@ class TradeAnalyzer:
                 }
                 for a in recent
             ]
+            # analyzed_order_ids kırpılmadan tam olarak saklanır (dedup için
+            # gereken tek şey order_id — detaylı analiz satırı değil), analyses
+            # ise yine son 200 ile sınırlı kalır (dosya boyutu).
             with open(self.ANALYSIS_FILE, "w") as f:
-                json.dump(analyses_data, f, indent=2)
+                json.dump({
+                    "analyzed_order_ids": sorted(self._analyzed_order_ids),
+                    "analyses": analyses_data,
+                }, f, indent=2)
 
             # Pattern stats kaydet
             pattern_data = {}
