@@ -89,10 +89,13 @@ class EdgeModel:
         Edge = 1 - (yes_price + no_price) - costs
 
         If YES + NO < 1, there's a pricing gap — buy both sides.
+        Capturing it requires TWO separate fills (one on the YES book, one
+        on the NO book), each paying its own spread + slippage, so the
+        round-trip cost is charged once per leg.
         """
         combined = yes_price + no_price
-        # Use YES price to estimate fee (mid price approximation)
-        edge = 1.0 - combined - self.total_cost(yes_price)
+        cost = self.total_cost(yes_price) + self.total_cost(no_price)
+        edge = 1.0 - combined - cost
         return int(edge * 10000) / 10000
 
     def cross_market_edge(self, bayesian_prob: float, market_price: float) -> float:
