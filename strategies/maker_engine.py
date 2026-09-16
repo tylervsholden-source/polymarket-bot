@@ -115,8 +115,23 @@ class MakerEngine:
         return dict(self._standing)
 
     def get_total_locked(self) -> float:
-        """Total capital locked in standing orders."""
+        """Total capital locked in standing (unfilled) orders."""
         return sum(o.price * o.size for o in self._standing.values())
+
+    def get_committed_capital(self) -> float:
+        """Real USDC currently at risk: standing-order notional plus the
+        cost basis of filled-but-unresolved inventory.
+
+        pool_available("maker") only knows about PositionManager's shared
+        ledger, which maker fills never enter (on_fill() only updates
+        self._inventory in-memory) — so it can never reflect capital this
+        engine has already committed to real orders. Callers must subtract
+        this from pool_available("maker") before handing capital to
+        refresh_quotes(), or the same capital gets re-committed every cycle.
+        """
+        standing = self.get_total_locked()
+        filled = sum(inv.yes_cost + inv.no_cost for inv in self._inventory.values())
+        return standing + filled
 
     # ── Internal ──
 
