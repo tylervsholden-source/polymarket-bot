@@ -85,6 +85,17 @@ class MakerEngine:
         # This is done by checking if order disappeared from CLOB without cancel
         # For now, fills are detected by position_manager externally
 
+        # `capital` is the caller's pool_available("maker") snapshot, which
+        # only ever looks at PositionManager's real positions — MakerEngine
+        # never registers a fill there, so it always sees the full pool.
+        # self._inventory (populated by on_fill(), cleared only when a
+        # market's inventory is resolved) is this engine's only record of
+        # capital already spent on filled quotes. Without subtracting it
+        # here, every refresh re-allocates the whole pool on top of capital
+        # that's already committed, over-committing the maker pool further
+        # with each cycle that lands a fill.
+        capital = max(0.0, capital - self._committed_inventory_cost())
+
         # Step 3: Select best markets to quote
         candidates = self._select_markets(markets, capital)
 
@@ -115,8 +126,12 @@ class MakerEngine:
         return dict(self._standing)
 
     def get_total_locked(self) -> float:
-        """Total capital locked in standing orders."""
+        """Total capital locked in standing (unfilled) orders."""
         return sum(o.price * o.size for o in self._standing.values())
+
+    def _committed_inventory_cost(self) -> float:
+        """Total capital already spent on filled (unresolved) inventory."""
+        return sum(inv.yes_cost + inv.no_cost for inv in self._inventory.values())
 
     # ── Internal ──
 
