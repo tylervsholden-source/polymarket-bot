@@ -76,6 +76,31 @@ def test_readiness_wrong_verdict_blocks(ctrl_file, tmp_path):
     assert result.passed is False
 
 
+def test_readiness_missing_generated_utc_blocks(ctrl_file, tmp_path):
+    """Bir readiness_verdict.json'da generated_utc alanı yoksa (manuel yazım,
+    eski format, bozuk dosya), yaş kontrolü atlanmamalı — fail-closed olmalı.
+    """
+    f = tmp_path / "readiness.json"
+    f.write_text(json.dumps({"verdict": "TINY_PILOT_CANDIDATE"}))
+    result = check_live_gate(
+        control_file=ctrl_file,
+        readiness_file=str(f),
+    )
+    assert result.passed is False
+    assert any("generated_utc" in b for b in result.blockers)
+
+
+def test_readiness_empty_generated_utc_blocks(ctrl_file, tmp_path):
+    f = tmp_path / "readiness.json"
+    f.write_text(json.dumps({"verdict": "TINY_PILOT_CANDIDATE", "generated_utc": ""}))
+    result = check_live_gate(
+        control_file=ctrl_file,
+        readiness_file=str(f),
+    )
+    assert result.passed is False
+    assert any("generated_utc" in b for b in result.blockers)
+
+
 def test_daily_stop_blocks(ctrl_file, readiness_file):
     result = check_live_gate(
         control_file=ctrl_file,
