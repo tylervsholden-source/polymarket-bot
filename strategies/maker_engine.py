@@ -277,9 +277,23 @@ class MakerEngine:
 
         placed = 0
 
+        # Inventory cap: MAX_INVENTORY_PER_SIDE is documented as a per-market,
+        # per-side ceiling on HELD inventory ("max $ per side per market"),
+        # but it was only ever used to size this cycle's order budget
+        # (per_market = min(capital/len(candidates), MAX_INVENTORY_PER_SIDE*2)
+        # in refresh_quotes()) — it was never checked against inv.yes_cost/
+        # inv.no_cost, the $ already filled and held from earlier cycles.
+        # A market that keeps getting re-selected across consecutive
+        # ~60-120s cycles (a 15m window easily spans several) had a brand
+        # new order placed on top of already-filled inventory every single
+        # cycle, so real held inventory could grow far past the stated $15
+        # limit instead of being capped by it.
+        yes_room = max(0.0, self.MAX_INVENTORY_PER_SIDE - inv.yes_cost)
+        no_room = max(0.0, self.MAX_INVENTORY_PER_SIDE - inv.no_cost)
+
         # Place YES bid
-        if yes_factor > 0 and capital_per_side * yes_factor >= 1.0:
-            yes_amount = capital_per_side * yes_factor
+        if yes_factor > 0 and yes_room > 0 and capital_per_side * yes_factor >= 1.0:
+            yes_amount = min(capital_per_side * yes_factor, yes_room)
             yes_size = round(yes_amount / yes_bid_price, 2) if yes_bid_price > 0 else 0
             if yes_size >= 5:
                 result = await client.place_passive_order(
@@ -301,8 +315,8 @@ class MakerEngine:
                     placed += 1
 
         # Place NO bid
-        if no_factor > 0 and capital_per_side * no_factor >= 1.0:
-            no_amount = capital_per_side * no_factor
+        if no_factor > 0 and no_room > 0 and capital_per_side * no_factor >= 1.0:
+            no_amount = min(capital_per_side * no_factor, no_room)
             no_size = round(no_amount / no_bid_price, 2) if no_bid_price > 0 else 0
             if no_size >= 5:
                 result = await client.place_passive_order(
