@@ -321,12 +321,16 @@ class ReviewerAgent(BaseAgent):
                 except ValueError:
                     verdict = ReviewVerdict.VETO
 
+                # Unclamped >1.0 from Claude silently turns REDUCE into a size increase downstream,
+                # since orchestrator.apply_risk_size_multiplier() intentionally never re-clamps up.
+                _suggested_size_pct = max(0.0, min(1.0, float(item.get("suggested_size_pct", 1.0))))
+
                 decisions.append(ReviewDecision(
                     condition_id=sig.condition_id,
                     verdict=verdict,
                     confidence=float(item.get("confidence", 0.5)),
                     reasoning=item.get("reasoning", ""),
-                    suggested_size_pct=float(item.get("suggested_size_pct", 1.0)),
+                    suggested_size_pct=_suggested_size_pct,
                     risk_assessment=item.get("risk_assessment", ""),
                 ))
 
