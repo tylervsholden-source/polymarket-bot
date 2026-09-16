@@ -202,19 +202,21 @@ def _check_readiness(verdict_file: str, max_age_hours: float) -> tuple[bool, str
         return False, f"verdict={verdict!r} (TINY_PILOT_CANDIDATE gerekli)"
 
     generated_str = data.get("generated_utc", "")
-    if generated_str:
-        try:
-            generated = datetime.fromisoformat(
-                str(generated_str).replace("Z", "+00:00")
-            )
-            if generated.tzinfo is None:
-                generated = generated.replace(tzinfo=timezone.utc)
-            age = datetime.now(timezone.utc) - generated
-            if age > timedelta(hours=max_age_hours):
-                hours_old = age.total_seconds() / 3600
-                return False, f"verdict {hours_old:.1f}h eski (max {max_age_hours}h)"
-        except Exception:
-            return False, "generated_utc parse hatası"
+    if not generated_str:
+        return False, "generated_utc eksik — verdict yaşı doğrulanamıyor"
+
+    try:
+        generated = datetime.fromisoformat(
+            str(generated_str).replace("Z", "+00:00")
+        )
+        if generated.tzinfo is None:
+            generated = generated.replace(tzinfo=timezone.utc)
+        age = datetime.now(timezone.utc) - generated
+        if age > timedelta(hours=max_age_hours):
+            hours_old = age.total_seconds() / 3600
+            return False, f"verdict {hours_old:.1f}h eski (max {max_age_hours}h)"
+    except Exception:
+        return False, "generated_utc parse hatası"
 
     return True, ""
 
