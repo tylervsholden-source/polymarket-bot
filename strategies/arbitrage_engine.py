@@ -1651,8 +1651,35 @@ class ArbitrageEngine:
         # a guaranteed-profit trade) could never be detected or sized.
         single_edge = self.edge_model.single_market_edge(yes_price, no_price_ask)
 
+        # BUG: `edge = max(trade_edge, single_edge)` fed single_edge straight
+        # into Kelly sizing / the min-edge gate for a ONE-SIDED position.
+        # single_market_edge() = 1-(yes_price+no_price_ask)-cost is only a
+        # real, riskless edge when BOTH sides are bought (see its own
+        # docstring: "If YES + NO < 1 ... buy both sides"). This engine only
+        # ever places a single order for `direction` (one token_id) — there
+        # is no code path anywhere that buys both tokens. Both sides being
+        # underpriced in combination says nothing about how underpriced
+        # *this* side is individually (e.g. bayesian_prob=0.50,
+        # yes_price=no_price_ask=0.46: single_edge≈0.08-cost but the real
+        # one-sided edge is only ≈0.04-cost). Using single_edge here let a
+        # one-sided bet silently clear kelly.position_size()'s `p = price +
+        # edge` and OPT-5's effective_min_edge gate on an edge that was
+        # never actually available to the trade being placed, oversizing
+        # (and sometimes only enabling) it. This was inert before the 56th
+        # daily review (single_edge was fed a proxy that made it always <=
+        # 0, so max() always picked trade_edge) but became live once that
+        # fix let single_edge be genuinely positive. Keep it as a diagnostic
+        # only, until/unless a real two-sided execution path exists.
+        if single_edge > trade_edge:
+            logger.debug(
+                f"SINGLE_ARB_INFO: {question[:40]} | single_edge={single_edge:.4f} > "
+                f"trade_edge={trade_edge:.4f}, but only {direction} is actually "
+                f"bought here — single_edge requires buying both sides to be "
+                f"real, so it is not used for sizing/gating this one-sided trade."
+            )
+
         # Net edge: cost düşüldükten sonra pozitif olmalı — EV-negatif trade açmayız
-        edge = max(trade_edge, single_edge)
+        edge = trade_edge
 
         # ── COIN-SPECIFIC EDGE PENALTY ───────────────────────────────────
         # Data: Solana 57% WR (worst), Bitcoin 65% (mediocre).
