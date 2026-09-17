@@ -647,18 +647,37 @@ class PositionManager:
                     return True
 
                 if size_matched > 0:
-                    # Kısmi dolum — amount'u gerçek harcanan USDC'ye güncelle
+                    # Kısmi dolum — amount'u gerçek harcanan USDC'ye güncelle.
+                    # size_matched * entry_price doğrudan gerçek harcamayı
+                    # verir. Önceki kod bunun yerine mevcut (önceki
+                    # dolumla zaten küçülmüş) pos["amount"]'u fill_ratio ile
+                    # çarpıyordu — bu pozisyon birden fazla kez (büyüyen
+                    # size_matched ile) tekrar kontrol edildiğinde her
+                    # seferinde küçülen bir taban üzerinden bileşik olarak
+                    # küçülüyor, gerçek harcanan USDC'yi giderek daha fazla
+                    # olduğundan az gösteriyordu.
                     entry_price = pos.get("entry_price", 0)
-                    if entry_price > 0 and original_size > 0:
-                        fill_ratio = size_matched / original_size
+                    if entry_price > 0:
                         original_amount = pos.get("amount", 0)
-                        filled_amount = round(original_amount * fill_ratio, 4)
+                        filled_amount = round(size_matched * entry_price, 4)
                         if filled_amount != original_amount:
+                            fill_pct = (
+                                size_matched / original_size if original_size > 0 else 0
+                            )
                             logger.info(
-                                f"Kısmi dolum: {fill_ratio:.0%} | "
+                                f"Kısmi dolum: {fill_pct:.0%} | "
                                 f"${original_amount:.2f} → ${filled_amount:.2f}"
                             )
                             pos["amount"] = filled_amount
+                    if clob_status == "LIVE":
+                        # Emir hâlâ borsada açık — daha fazla dolum gelebilir.
+                        # Status'u MATCHED'e sabitlersek fonksiyon başındaki
+                        # short-circuit yüzünden bu pozisyon bir daha ASLA
+                        # kontrol edilmez ve sonraki dolumlar sessizce kaçırılır
+                        # (amount gerçek harcanan USDC'nin altında donar kalır).
+                        return True
+                    # Emir artık kapalı (cancelled/expired/vb) — kısmi dolum
+                    # kalıcı, başka dolum gelmeyecek, artık sabitlemek güvenli.
                     pos["status"] = "MATCHED"
                     return True
         except Exception as e:
