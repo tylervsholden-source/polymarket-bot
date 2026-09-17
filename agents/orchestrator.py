@@ -609,6 +609,11 @@ class Orchestrator:
         # QualityFilter doğru yazılmış ama sadece scan_markets.py'de kullanılıyordu,
         # canlı orchestrator'a hiç bağlı değildi.
         markets = await self.client.get_active_markets(min_volume=self.min_market_volume)
+        # candidates' best_ask/best_bid are as of right now — this timestamp is
+        # threaded through to _record_shadow_decisions() so it can report a real
+        # snapshot_age_seconds instead of pretending prices are always instant-fresh
+        # (see that function's own comment for the downstream readiness-gate impact).
+        market_fetch_utc = datetime.now(timezone.utc)
         logger.info(f"{len(markets)} aktif market bulundu.")
 
         candidates = self._pre_filter(markets)
@@ -679,7 +684,7 @@ class Orchestrator:
                 'signal_type': es.signal_type, 'reasoning': es.reasoning,
                 'token_id': es.token_id, 'side_diagnostics': es.side_diagnostics,
             })())
-        self._record_shadow_decisions(candidates, _raw_for_journal, min_bet_override)
+        self._record_shadow_decisions(candidates, _raw_for_journal, min_bet_override, market_fetch_utc)
 
         # ── COIN_LIMIT (OPT-2): max 1 coin/slot — korelasyon %99, 2 coin = 2x risk 1x bilgi ──
         all_signals = self._limit_coins_per_period(all_signals, max_per_period=1)
@@ -2385,12 +2390,18 @@ class Orchestrator:
         candidates: list,
         signals: list,
         intended_size: float,
+        market_fetch_utc: datetime | None = None,
     ) -> None:
         """
         Write one ShadowDecisionRecord per evaluated candidate to the daily journal.
 
         Signals that produced a TradeSignal → EXECUTE.
         Candidates that didn't produce a signal → REJECT / NO_SIGNAL_PRODUCED.
+
+        market_fetch_utc: when `candidates`' best_ask/best_bid were actually
+        fetched (client.get_active_markets(), start of _cycle()). Used to
+        compute a real snapshot_age_seconds below — see that block's own
+        comment for why this can't just be "now".
         """
         if not candidates:
             return
@@ -2477,6 +2488,28 @@ class Orchestrator:
                     ),
                 )
 
+                # BUG: snapshot_age_seconds was hardcoded 0.0, i.e. every recorded
+                # candidate claimed its ask_yes/bid_yes were fetched at this exact
+                # instant. In reality they came from client.get_active_markets()
+                # at the top of _cycle() — market_fetch_utc — and everything since
+                # (NO-orderbook enrichment, the full parallel research+signal
+                # pipeline, and the sequential Claude reviewer API call) runs in
+                # between, routinely tens of seconds. compute_executable_ev()
+                # below feeds this age into compute_staleness_penalty(), whose
+                # penalty is subtracted from executable_ev; pinning age to 0
+                # always selects the minimum (freshest) staleness zone, so
+                # execution_adjusted_ev is systematically inflated. That value
+                # feeds shadow_runner/summary_metrics.py's mean_ev_haircut_pct,
+                # which shadow_runner/readiness.py::assess_readiness() passes to
+                # monitoring/readiness_checks.py::check_ev_haircut_pct() — one of
+                # the checks behind the TINY_PILOT_CANDIDATE verdict that
+                # control_plane/live_gate.py gates real order placement on. A
+                # systematically understated haircut biases that verdict toward
+                # GO. Use the real elapsed time since the price snapshot instead.
+                _snapshot_age = (
+                    max(0.0, (now - market_fetch_utc).total_seconds())
+                    if market_fetch_utc is not None else 0.0
+                )
                 pricing_snap = PricingSnapshot(
                     market_id=market_id,
                     ask_yes=ask_yes,
@@ -2484,8 +2517,8 @@ class Orchestrator:
                     ask_no=_ask_no,
                     bid_no=_bid_no,
                     liquidity=liquidity,
-                    pricing_timestamp_utc=now,
-                    snapshot_age_seconds=0.0,
+                    pricing_timestamp_utc=market_fetch_utc or now,
+                    snapshot_age_seconds=_snapshot_age,
                 )
 
                 fill_fraction = None
@@ -2511,7 +2544,7 @@ class Orchestrator:
                             fee_pct=0.02,
                             intended_size_usdc=intended_size,
                             liquidity_usdc=liquidity,
-                            snapshot_age_seconds=0.0,
+                            snapshot_age_seconds=_snapshot_age,
                             horizon_minutes=self._shadow_detect_horizon(question),
                             required_threshold=0.03,
                             policy_mode="live",
