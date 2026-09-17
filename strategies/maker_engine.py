@@ -364,30 +364,42 @@ class MakerEngine:
     async def _cancel_all_standing(self, client) -> int:
         """Cancel all standing maker orders.
 
-        cancel_order() returning False conflates two very different cases:
-        a real cancel error, and "already matched by the CLOB, nothing left
-        to cancel" — the far more common case for a resting GTC order that
-        did its job. Discarding the order either way silently dropped a
-        real fill: on_fill() (the only thing that updates self._inventory /
-        check_paired_profit()) was never called. Check the real order
-        status before deleting, same fill-detection pattern already used
-        by PositionManager._check_order_filled().
+        cancel_order() returning True only means the order's REMAINING open
+        quantity was pulled from the book — a GTC order that partially
+        filled before this cycle's refresh cancels cleanly (CLOB just
+        cancels what's left resting), so cancel_order() == True is the
+        common case for a partial fill, not evidence there wasn't one.
+        The previous version treated a successful cancel as proof of "no
+        fill, nothing to record" and skipped the status check entirely —
+        silently dropping the same class of real, spent-USDC fill that the
+        47th daily review already fixed for the cancel_order()==False branch
+        (already matched / nothing left to cancel). Both branches now check
+        the order's real status via client.get_order_status() (the same
+        fill-detection pattern used by PositionManager._check_order_filled())
+        before discarding, so a partial fill is recorded via on_fill() no
+        matter which way the cancel call itself resolved.
         """
         cancelled = 0
         for order_id, order in list(self._standing.items()):
-            if client.cancel_order(order_id):
-                cancelled += 1
-                del self._standing[order_id]
-                continue
+            cancel_ok = client.cancel_order(order_id)
 
             order_data = await client.get_order_status(order_id)
             status = ((order_data or {}).get("status") or "").upper()
-            size_matched = float((order_data or {}).get("size_matched", 0) or 0)
+            try:
+                size_matched = float((order_data or {}).get("size_matched", 0) or 0)
+            except (TypeError, ValueError):
+                size_matched = 0.0
+
             if status in ("MATCHED", "FILLED") or size_matched > 0:
                 fill_size = size_matched if size_matched > 0 else order.size
                 self.on_fill(order_id, order.price, fill_size)
-            else:
-                del self._standing[order_id]
+                if cancel_ok:
+                    cancelled += 1
+                continue
+
+            if cancel_ok:
+                cancelled += 1
+            del self._standing[order_id]
         return cancelled
 
     def on_fill(self, order_id: str, price: float, size: float):
