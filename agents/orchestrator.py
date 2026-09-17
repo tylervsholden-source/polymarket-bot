@@ -1356,7 +1356,7 @@ class Orchestrator:
                         "order_id": order_result["order_id"],
                         "outcome": opp.side,
                         "amount": order_result.get("amount", bet_size),
-                        "price": opp.price,
+                        "price": order_result.get("price", opp.price),
                         "status": order_result.get("status", "LIVE"),
                         "token_id": opp.token_id,
                     },
