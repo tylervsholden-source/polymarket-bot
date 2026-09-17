@@ -1612,9 +1612,19 @@ class ArbitrageEngine:
             )
             return None
 
-        # GATE 4: NO direction → half Kelly (data: NO edges less reliable)
-        # Bu gate aşağıda Kelly sonrası uygulanacak — burada sadece flag
-        _no_direction_penalty = (direction == "NO")
+        # GATE4_NO_PENALTY kaldırıldı — sinyal neyse o.
+        # Bu bayrak "NO edges less reliable (data: NO 18% WR)" varsayımına
+        # dayanıyordu ve Factor 2'de (aşağıda) her NO trade'de koşulsuz
+        # -0.20 Kelly-boyut cezası uyguluyordu — YES tarafında hiçbir eşdeğeri
+        # yok (Factor 3 sadece 3+ yeşil mumda ve sadece -0.10). Dosyadaki
+        # diğer tüm tek-taraflı NO blokları (COINFLIP_BLOCK, ZONE_ADAPT,
+        # REGIME_STR_CAP, BOUNCE_NO_BLOCK, ...) aynı gerekçeyle zaten
+        # kaldırılmış; bu sadece "Single confidence multiplier" refactor'ünde
+        # (yorum: "Old system... NO-dir(0.5)") gözden kaçmış. data/3day_eval.txt
+        # (son 44 gerçek trade) varsayımın artık tersini gösteriyor: NO %55.6
+        # WR / +$15.40 PnL, YES %47.1 WR / -$14.39 PnL — NO'yu sistematik
+        # olarak küçültmek kazandığı trade'lerin büyümesini bastırıp net PnL'i
+        # YES'in daha büyük kayıplarının domine etmesine bırakıyordu.
 
         # COINFLIP_BLOCK kaldırıldı — sinyal neyse o
 
@@ -1775,10 +1785,7 @@ class ArbitrageEngine:
             _confidence_mult -= 0.15
             _confidence_reasons.append(f"micro-move({abs(change_pct):.3f}%)")
 
-        # Factor 2: NO direction penalty (lower WR historically)
-        if _no_direction_penalty:
-            _confidence_mult -= 0.20
-            _confidence_reasons.append("NO-dir")
+        # FACTOR2_NO_PENALTY kaldırıldı — sinyal neyse o (bkz. GATE4_NO_PENALTY yorumu yukarıda)
 
         # Factor 3: 2+ green candles for YES (pullback risk)
         if direction == "YES" and consecutive_bullish >= 3:
