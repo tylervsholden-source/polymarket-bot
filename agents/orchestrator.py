@@ -996,6 +996,7 @@ class Orchestrator:
                         confluence_score=signal.confluence_score,
                         risk_flags=signal.risk_flags,
                         whale_direction=signal.whale_direction,
+                        regime_direction=signal.regime_direction,
                         signal_price=signal.entry_price,
                     )
                     self._reentry_guard.mark_traded(market_id)

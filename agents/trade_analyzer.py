@@ -270,11 +270,17 @@ class TradeAnalyzer:
             accuracy["whale"] = whale_correct
 
         # Regime yönü doğru muydu?
-        regime_dir = signal_data.get("regime_direction", "")
-        if regime_dir:
+        # regime_direction "UP"/"DOWN"/"NEUTRAL" olarak üretilir (research_agent,
+        # signal_agent_v2, bayesian.py), analysis.direction ise "YES"/"NO" —
+        # bunlar asla string-eşit olamaz, bu yüzden UP/DOWN'ı YES/NO'ya
+        # haritalayıp karşılaştırıyoruz (whale_direction fix'indeki desenle aynı).
+        regime_dir = str(signal_data.get("regime_direction", "")).upper()
+        if regime_dir in ("UP", "DOWN"):
             regime_correct = (
-                (regime_dir.lower() == analysis.direction.lower() and is_win) or
-                (regime_dir.lower() != analysis.direction.lower() and not is_win)
+                (regime_dir == "UP" and analysis.direction == "YES" and is_win) or
+                (regime_dir == "DOWN" and analysis.direction == "NO" and is_win) or
+                (regime_dir == "UP" and analysis.direction == "NO" and not is_win) or
+                (regime_dir == "DOWN" and analysis.direction == "YES" and not is_win)
             )
             accuracy["regime"] = regime_correct
 
