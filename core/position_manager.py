@@ -181,6 +181,7 @@ class PositionManager:
                      confluence_score: float | None = None,
                      risk_flags: list | None = None,
                      whale_direction: str | None = None,
+                     regime_direction: str | None = None,
                      signal_price: float | None = None):
         if market_id in _IGNORED_MARKETS:
             logger.debug(f"IGNORED: {question[:40]} (blacklisted bond)")
@@ -208,6 +209,8 @@ class PositionManager:
             pos["risk_flags"] = risk_flags
         if whale_direction is not None:
             pos["whale_direction"] = whale_direction
+        if regime_direction is not None:
+            pos["regime_direction"] = regime_direction
         # Pre-bump signal price (order["price"]/entry_price already includes
         # place_order()'s fill-priority bump) — ml_classifier.py needs this to
         # match what _extract_features_live() sees at inference. See its
