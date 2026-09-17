@@ -995,6 +995,7 @@ class Orchestrator:
                         edge=signal.edge,
                         confluence_score=signal.confluence_score,
                         risk_flags=signal.risk_flags,
+                        whale_direction=signal.whale_direction,
                     )
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1

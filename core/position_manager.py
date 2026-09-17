@@ -179,7 +179,8 @@ class PositionManager:
     def add_position(self, market_id: str, order: dict, question: str,
                      strategy: str = "directional", edge: float | None = None,
                      confluence_score: float | None = None,
-                     risk_flags: list | None = None):
+                     risk_flags: list | None = None,
+                     whale_direction: str | None = None):
         if market_id in _IGNORED_MARKETS:
             logger.debug(f"IGNORED: {question[:40]} (blacklisted bond)")
             return
@@ -204,6 +205,8 @@ class PositionManager:
             pos["confluence_score"] = confluence_score
         if risk_flags is not None:
             pos["risk_flags"] = risk_flags
+        if whale_direction is not None:
+            pos["whale_direction"] = whale_direction
         self.data["positions"][market_id] = pos
         self._save()
         logger.info(f"Pozisyon eklendi [{strategy}]: {question[:50]}")

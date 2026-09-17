@@ -248,13 +248,24 @@ class TradeAnalyzer:
         is_win = analysis.outcome == "WIN"
 
         # Whale yönü doğru muydu?
-        whale_dir = signal_data.get("whale_direction", "")
+        # BUG: every real producer of this field (agents/whale_tracker.py's
+        # _analyze(), agents/subagents/research_agent.py's WhaleData,
+        # agents/subagents/signal_agent_v2.py's EnrichedSignal.whale_direction)
+        # emits uppercase "BULLISH"/"BEARISH"/"NEUTRAL", but this comparison
+        # used lowercase literals — it never matched, so whale_correct was
+        # always False whenever whale_direction was non-empty. In
+        # _match_pattern(), `whale_acc is False and outcome == LOSS` then
+        # mislabeled every loss with a non-neutral whale signal as
+        # WHALE_OPPOSED_LOSS even when the whale was actually ALIGNED with
+        # the trade's direction, and WHALE_ALIGNED_WIN could never be
+        # detected on a real win (whale_acc could never be True).
+        whale_dir = str(signal_data.get("whale_direction", "")).upper()
         if whale_dir:
             whale_correct = (
-                (whale_dir == "bullish" and analysis.direction == "YES" and is_win) or
-                (whale_dir == "bearish" and analysis.direction == "NO" and is_win) or
-                (whale_dir == "bullish" and analysis.direction == "NO" and not is_win) or
-                (whale_dir == "bearish" and analysis.direction == "YES" and not is_win)
+                (whale_dir == "BULLISH" and analysis.direction == "YES" and is_win) or
+                (whale_dir == "BEARISH" and analysis.direction == "NO" and is_win) or
+                (whale_dir == "BULLISH" and analysis.direction == "NO" and not is_win) or
+                (whale_dir == "BEARISH" and analysis.direction == "YES" and not is_win)
             )
             accuracy["whale"] = whale_correct
 
