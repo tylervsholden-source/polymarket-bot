@@ -2108,18 +2108,22 @@ class Orchestrator:
                 return False
             # Staleness check
             generated_utc_str = data.get("generated_utc", "")
-            if generated_utc_str:
-                from datetime import datetime, timezone
-                generated = datetime.fromisoformat(generated_utc_str.replace("Z", "+00:00"))
-                if generated.tzinfo is None:
-                    generated = generated.replace(tzinfo=timezone.utc)
-                age = datetime.now(timezone.utc) - generated
-                if age > timedelta(hours=max_age_h):
-                    logger.warning(
-                        f"Readiness gate: verdict is {age.total_seconds()/3600:.1f}h old "
-                        f"(max {max_age_h}h) — canlı işlem engellendi."
-                    )
-                    return False
+            if not generated_utc_str:
+                logger.warning(
+                    "Readiness gate: generated_utc eksik — verdict yaşı doğrulanamıyor, canlı işlem engellendi."
+                )
+                return False
+            from datetime import datetime, timezone
+            generated = datetime.fromisoformat(generated_utc_str.replace("Z", "+00:00"))
+            if generated.tzinfo is None:
+                generated = generated.replace(tzinfo=timezone.utc)
+            age = datetime.now(timezone.utc) - generated
+            if age > timedelta(hours=max_age_h):
+                logger.warning(
+                    f"Readiness gate: verdict is {age.total_seconds()/3600:.1f}h old "
+                    f"(max {max_age_h}h) — canlı işlem engellendi."
+                )
+                return False
             return True
         except FileNotFoundError:
             logger.warning("Readiness gate: data/readiness_verdict.json bulunamadı — canlı işlem engellendi.")
