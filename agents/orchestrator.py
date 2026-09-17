@@ -2018,6 +2018,8 @@ class Orchestrator:
             # never fired in live/paper trading.
             if trade.get("result") == "WIN" and trade.get("outcome", "").upper() == "NO":
                 self._consecutive_wins_per_coin[_coin] = self._consecutive_wins_per_coin.get(_coin, 0) + 1
+            elif trade.get("result") == "NEUTRAL":
+                continue  # Unfilled/cancelled GTC order — neither win nor loss, doesn't break streak
             else:
                 _coin_done.add(_coin)  # Bu coin'in streak'i kırıldı
         _active_guards = {k: v for k, v in self._consecutive_wins_per_coin.items() if v >= 2}
