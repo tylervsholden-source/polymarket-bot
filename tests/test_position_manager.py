@@ -35,6 +35,24 @@ def test_add_position_reduces_capital(pm):
     assert pm.available_capital() == 800.0
 
 
+def test_add_position_stores_signal_price_when_given(pm):
+    """signal_price (pre-bump price) must be stored separately from entry_price
+    (post-bump fill) so ml_classifier.py can train on the same quantity
+    _extract_features_live() sees at inference — see
+    tests/test_ml_classifier_entry_price_train_serve_skew.py."""
+    order = {"order_id": "TEST-1", "outcome": "NO", "amount": 100.0, "price": 0.50, "status": "matched"}
+    pm.add_position("market-1", order, "Test Market", edge=0.10, signal_price=0.48)
+    pos = pm.data["positions"]["market-1"]
+    assert pos["entry_price"] == 0.50
+    assert pos["signal_price"] == 0.48
+
+
+def test_add_position_omits_signal_price_when_not_given(pm):
+    order = {"order_id": "TEST-1", "outcome": "YES", "amount": 100.0, "price": 0.5, "status": "LIVE"}
+    pm.add_position("market-1", order, "Test Market")
+    assert "signal_price" not in pm.data["positions"]["market-1"]
+
+
 def test_has_position(pm):
     order = {"order_id": "TEST-1", "outcome": "YES", "amount": 100.0, "price": 0.5, "status": "LIVE"}
     pm.add_position("market-1", order, "Test Market")
