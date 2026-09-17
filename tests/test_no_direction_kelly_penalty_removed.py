@@ -17,9 +17,24 @@ includes the removed "NO-dir" penalty.
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from datetime import datetime as _real_datetime, timezone as _tz
+
 import pytest
 from unittest.mock import MagicMock, patch
 from loguru import logger
+
+
+class _FrozenDatetime(_real_datetime):
+    """Freezes datetime.now() to a neutral ET hour (8AM) so the
+    GOOD_HOUR/GOLDEN_HOUR Kelly-size boosts in ArbitrageEngine._evaluate_market()
+    never fire — those are wall-clock-dependent and unrelated to what this
+    test verifies (the removed NO-direction size penalty)."""
+
+    @classmethod
+    def now(cls, tz=None):
+        # 13:00 UTC = 08:00 ET (outside _GOOD_HOURS={11,15,3,4} and
+        # _GOLDEN_HOURS={17,18,19} in strategies/arbitrage_engine.py)
+        return _real_datetime(2026, 1, 15, 13, 0, 0, tzinfo=tz or _tz.utc)
 
 
 def make_engine(min_edge=0.04):
@@ -90,7 +105,8 @@ async def test_no_direction_size_matches_yes_size_for_symmetric_edge():
     eng = make_engine()
     market = make_market(yes_price=0.70, no_best_ask=0.35, no_best_bid=0.33)
 
-    with patch.object(eng.bayesian, "estimate") as mock_est:
+    with patch("strategies.arbitrage_engine.datetime", _FrozenDatetime), \
+         patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.44, signal_strength=0.5)
         signal = await eng._evaluate_market(
             market, capital=50.0, z_score=0.0, signal_type="bayesian"
