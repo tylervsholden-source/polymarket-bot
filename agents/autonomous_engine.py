@@ -306,7 +306,6 @@ class AutonomousDecisionEngine:
         risk_score = 0  # 0-10 arası
 
         edge = getattr(signal, 'edge', 0)
-        direction = getattr(signal, 'direction', 'YES')
         risk_flags = getattr(signal, 'risk_flags', [])
         confluence = getattr(signal, 'confluence_score', 0.5)
 
@@ -318,9 +317,16 @@ class AutonomousDecisionEngine:
         elif edge < 0.12:
             risk_score += 1
 
-        # Yön faktörü (NO daha riskli)
-        if direction == "NO":
-            risk_score += 2  # NO trades historically 33% WR
+        # YÖN_FAKTÖRÜ kaldırıldı — sinyal neyse o.
+        # Bu blok "NO trades historically 33% WR" varsayımına dayanarak her
+        # NO sinyaline koşulsuz +2 risk puanı (→ bir üst risk kademesi →
+        # size_mult'ta -0.25) ekliyordu; YES tarafında eşdeğeri yok.
+        # strategies/arbitrage_engine.py'deki aynı varsayıma dayalı GATE 4/
+        # Factor 2 cezası aynı gün (commit 4358096) data/3day_eval.txt'ye
+        # (son 44 gerçek trade) dayanarak kaldırıldı: NO %55.6 WR / +$15.40
+        # PnL, YES %47.1 WR / -$14.39 PnL — varsayımın tersi. Bu dosya farklı
+        # bir sınıf/refactor olduğu için o temizlikte gözden kaçmış; aynı
+        # gerekçeyle burada da kaldırıldı.
 
         # Risk flag sayısı
         risk_score += min(len(risk_flags), 3)
