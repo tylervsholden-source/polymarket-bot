@@ -364,10 +364,18 @@ class LatencyArbEngine:
         now = time.time()
         coin_lower = coin.lower()
 
-        # Coin → symbol mapping (reverse)
+        # Coin → symbol mapping (reverse). The caller (arbitrage_engine.py)
+        # always passes sym.replace("USDT", "").lower(), e.g. "btc" for
+        # BTCUSDT — NOT the human keyword ("bitcoin"). Matching against the
+        # keyword via substring ("btc" in "bitcoin") is false for BTC, since
+        # "btc" is not a contiguous substring of "bitcoin" (it only works
+        # for coins whose keyword happens to start with the symbol prefix,
+        # like "eth" in "ethereum"), so BTC — the flagship, most-traded
+        # coin — silently always got 0.0 boost. Match against the symbol's
+        # own prefix instead, which is exactly what the caller passes.
         target_sym = None
-        for sym, kw in COIN_KEYWORDS.items():
-            if kw == coin_lower or coin_lower in kw:
+        for sym in COIN_KEYWORDS:
+            if sym.replace("USDT", "").lower() == coin_lower:
                 target_sym = sym
                 break
         if not target_sym:
