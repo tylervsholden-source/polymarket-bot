@@ -1764,8 +1764,9 @@ class Orchestrator:
             if order_id.startswith("SIM-"):
                 continue
 
-            # Market zamanlarını parse et
-            start_utc, end_utc = parse_market_times(question)
+            # Market zamanlarını parse et (reference_year=now_utc.year — bkz.
+            # control_plane/entry_window_guard.py'nin hardcoded-yıl yorumu)
+            start_utc, end_utc = parse_market_times(question, reference_year=now_utc.year)
             if not start_utc or not end_utc:
                 continue
 
