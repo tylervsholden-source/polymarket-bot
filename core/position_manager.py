@@ -179,7 +179,8 @@ class PositionManager:
     def add_position(self, market_id: str, order: dict, question: str,
                      strategy: str = "directional", edge: float | None = None,
                      confluence_score: float | None = None,
-                     risk_flags: list | None = None):
+                     risk_flags: list | None = None,
+                     signal_price: float | None = None):
         if market_id in _IGNORED_MARKETS:
             logger.debug(f"IGNORED: {question[:40]} (blacklisted bond)")
             return
@@ -204,6 +205,12 @@ class PositionManager:
             pos["confluence_score"] = confluence_score
         if risk_flags is not None:
             pos["risk_flags"] = risk_flags
+        # Pre-bump signal price (order["price"]/entry_price already includes
+        # place_order()'s fill-priority bump) — ml_classifier.py needs this to
+        # match what _extract_features_live() sees at inference. See its
+        # _extract_features() for the train/serve mismatch this fixes.
+        if signal_price is not None:
+            pos["signal_price"] = signal_price
         self.data["positions"][market_id] = pos
         self._save()
         logger.info(f"Pozisyon eklendi [{strategy}]: {question[:50]}")
