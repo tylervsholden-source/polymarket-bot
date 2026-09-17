@@ -1173,12 +1173,21 @@ class ArbitrageEngine:
                            and yes_price <= _YES_MAX_PRICE
                            and yes_price >= _YES_MIN_PRICE)
             # CRITICAL FIX: NO trades have a 37% win rate due to 5m mean reversion.
-            # Require an extreme edge (> 0.15) to even consider a NO trade, 
+            # Require an extreme edge (> 0.15) to even consider a NO trade,
             # effectively disabling most NO trades to stop the bleeding.
+            # BUG: `_spot_bearish_for_no` (the regime-adaptive "5m spot must
+            # not be rising" safeguard computed just above) was never
+            # referenced here, so it never actually gated anything — NO
+            # could be selected while spot was rising well past the
+            # regime-adaptive threshold, directly against the momentum-first
+            # strategy this module documents. Same "computed but never
+            # read" bug class as `momentum_decelerating` (OPT-3, see
+            # tests/test_opt3_momentum_decel_gate.py).
             _no_viable = (no_edge > 0.15
                           and no_price_ask >= _NO_MIN_ASK
                           and no_price_source == NoPriceSource.REAL_BOOK
-                          and no_side_health == "OK")
+                          and no_side_health == "OK"
+                          and _spot_bearish_for_no)
 
             # ══════════════════════════════════════════════════════════════
             # CANDLESTICK PATTERN INTEGRATION
