@@ -185,9 +185,22 @@ class CandlestickAnalyzer:
                 elif CA._is_bearish(c1):
                     patterns.append("BEARISH_SPINNING_TOP")
 
-        # 3. HAMMER — small body at top, long lower wick (>2x body)
+        # 3 / 5. HAMMER vs HANGING MAN — the SAME shape (small body at top,
+        # long lower wick >= 2x body). Only the preceding candle's direction
+        # tells them apart: after a down candle it is the bullish HAMMER,
+        # after an up candle the bearish HANGING_MAN — exactly the
+        # INVERTED_HAMMER / SHOOTING_STAR split below.
+        # HAMMER used to be appended unconditionally, so every hanging man
+        # (c2 bullish) emitted BOTH names and their scores (+0.5 / -0.5)
+        # cancelled to 0.0, erasing the bearish reversal signal and putting
+        # "HAMMER" into _bullish_patterns / _has_strong_bullish_pattern in
+        # strategies/arbitrage_engine.py — i.e. a bearish candle activated
+        # the YES side.
         if body1 > 0 and lw1 >= body1 * 2 and uw1 <= body1 * 0.5:
-            patterns.append("HAMMER")
+            if not is_doji and CA._is_bullish(c2):
+                patterns.append("HANGING_MAN")
+            else:
+                patterns.append("HAMMER")
 
         # 4. INVERTED HAMMER / SHOOTING STAR — small body at bottom, long upper wick
         # Requires meaningful body (not doji) to distinguish from gravestone doji
@@ -197,10 +210,7 @@ class CandlestickAnalyzer:
             if CA._is_bullish(c2):
                 patterns.append("SHOOTING_STAR")
 
-        # 5. HANGING MAN — hammer shape after uptrend (bearish signal)
-        if not is_doji and body1 > 0 and lw1 >= body1 * 2 and uw1 <= body1 * 0.5:
-            if CA._is_bullish(c2):
-                patterns.append("HANGING_MAN")
+        # 5. HANGING MAN — see rule 3 above (same shape, c2-direction split).
 
         # 7. MARUBOZU — body >= 90% of range (strong conviction)
         if range1 > 0 and body1 >= range1 * 0.9:
