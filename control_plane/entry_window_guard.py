@@ -126,7 +126,7 @@ _MONTH_MAP = {
 }
 
 
-def parse_market_start_time(question: str, reference_year: int = 2026) -> Optional[datetime]:
+def parse_market_start_time(question: str, reference_year: int | None = None) -> Optional[datetime]:
     """
     Parse market start time from question text.
 
@@ -135,7 +135,18 @@ def parse_market_start_time(question: str, reference_year: int = 2026) -> Option
 
     ET = UTC-4 (simplified; DST-aware would need pytz/zoneinfo).
     Returns None if parsing fails.
+
+    reference_year: the calendar year to assume for the (year-less) date in
+    the question text. Defaults to the real current UTC year rather than a
+    frozen literal — Polymarket question text never includes a year, so
+    hardcoding one here silently misdated every market (and, downstream,
+    permanently failed every check_entry_window() call as
+    TOO_LATE_FOR_ENTRY_WINDOW) as soon as the real calendar moved past that
+    literal. check_entry_window() instead passes the year of its own
+    (mockable) `now_utc`, so tests stay deterministic.
     """
+    if reference_year is None:
+        reference_year = datetime.now(timezone.utc).year
     time_match = _TIME_RE.search(question)
     date_match = _DATE_RE.search(question)
 
@@ -164,8 +175,14 @@ def parse_market_start_time(question: str, reference_year: int = 2026) -> Option
         return None
 
 
-def parse_market_times(question: str, reference_year: int = 2026) -> tuple[Optional[datetime], Optional[datetime]]:
-    """Parse both start and end times from question text. Returns (start_utc, end_utc)."""
+def parse_market_times(question: str, reference_year: int | None = None) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Parse both start and end times from question text. Returns (start_utc, end_utc).
+
+    See parse_market_start_time() for why `reference_year` defaults to the
+    real current UTC year instead of a hardcoded literal.
+    """
+    if reference_year is None:
+        reference_year = datetime.now(timezone.utc).year
     time_match = _TIME_RE.search(question)
     date_match = _DATE_RE.search(question)
 
@@ -237,8 +254,10 @@ def check_entry_window(
     if now_utc is None:
         now_utc = datetime.now(timezone.utc)
 
-    # Parse market start time
-    market_start = parse_market_start_time(question)
+    # Parse market start time — reference_year follows `now_utc` (real or
+    # mocked) so a question's year-less date resolves to the year actually
+    # in effect right now, not a hardcoded literal that goes stale.
+    market_start = parse_market_start_time(question, reference_year=now_utc.year)
     if market_start is None:
         return EntryWindowResult(
             passed=False,
