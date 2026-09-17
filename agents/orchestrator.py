@@ -996,6 +996,7 @@ class Orchestrator:
                         confluence_score=signal.confluence_score,
                         risk_flags=signal.risk_flags,
                         whale_direction=signal.whale_direction,
+                        signal_price=signal.entry_price,
                     )
                     self._reentry_guard.mark_traded(market_id)
                     open_count += 1
@@ -1263,7 +1264,7 @@ class Orchestrator:
                 self._order_timestamps.append(time.time())
                 order["outcome"] = direction
                 order["token_id"] = token_id or ""
-                self.position_manager.add_position(market_id, order, question)
+                self.position_manager.add_position(market_id, order, question, signal_price=price)
                 self._reentry_guard.mark_traded(market_id)
                 open_count += 1  # Sonraki emirler için güncelle
                 # bkz. üstteki doğrudan emir yolundaki aynı düzeltme: CLOB'un

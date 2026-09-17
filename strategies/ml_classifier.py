@@ -221,7 +221,22 @@ class TradeClassifier:
         try:
             question = trade.get("question", "")
             outcome = trade.get("outcome", "").upper()
-            entry_price = float(trade.get("entry_price", 0))
+
+            # `entry_price` on a closed position is the actual CLOB fill price
+            # (core/position_manager.py::add_position() <- order["price"]),
+            # which includes the +0.01-0.03 price bump core/polymarket_client.py
+            # place_order() adds for fill priority. _extract_features_live()
+            # is scored from the pre-bump signal price (arbitrage_engine.py's
+            # trade_price, never bumped) — using raw entry_price here would
+            # train price_distance_from_50/is_favorite on a systematically
+            # different quantity than inference sees, the same "train/serve
+            # skew" class of bug already fixed for `edge` below. `signal_price`
+            # (stored on the position since the 68th daily review) is the
+            # pre-bump equivalent; fall back to entry_price only for legacy
+            # closed trades that predate that field.
+            raw_signal_price = trade.get("signal_price")
+            entry_price = float(raw_signal_price) if raw_signal_price is not None \
+                else float(trade.get("entry_price", 0))
 
             if entry_price <= 0 or entry_price >= 1:
                 return None
