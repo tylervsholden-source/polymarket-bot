@@ -1450,7 +1450,25 @@ class Orchestrator:
     def _analyze_new_closed_trades(self):
         """Yeni kapanan trade'leri analiz et — bot durmadan çalışır."""
         try:
-            closed_trades = self.position_manager.data.get("closed", [])
+            # BUG (85. review): bu satır koşulsuz olarak SADECE
+            # position_manager.data["closed"] (gerçek CLOB pozisyonları)
+            # okuyordu — 82./83./84. incelemelerin _update_loss_streak(),
+            # kelly.update_streak(), walk_forward.validate() ve
+            # autonomous_engine.evaluate()/get_adaptive_params() için
+            # düzelttiği aynı bug sınıfı, TradeAnalyzer'ın tek giriş noktası
+            # olan bu kardeş çağrı noktasında hâlâ mevcuttu.
+            # _is_live_trading()==False iken (varsayılan/güncel çalışma
+            # modu — bkz. CLAUDE.md) bu liste HER ZAMAN boş kalıyor —
+            # gerçek pozisyonlar hiç açılmıyor, sim trade sonuçları
+            # self._sim_results'a yazılıyor (_check_sim_resolutions()).
+            # Sonuç: `new_count = len([]) - self._last_analyzed_count`
+            # asla pozitif olmuyor, TradeAnalyzer.analyze_trade() sim/paper
+            # modunda (fiili varsayılan) hiçbir zaman çağrılmıyordu — post-
+            # trade root-cause analizi, pattern eşleştirme ve adaptif
+            # parametre önerileri (CLAUDE.md'nin belgelediği mimari) sessizce
+            # tamamen inert kalıyordu. Ortak kaynağa (_current_closed_trades())
+            # taşındı.
+            closed_trades = self._current_closed_trades()
             new_count = len(closed_trades) - self._last_analyzed_count
 
             if new_count <= 0:
