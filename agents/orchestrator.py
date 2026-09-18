@@ -2071,10 +2071,26 @@ class Orchestrator:
 
         # OPT-6: Loss slot tracking — sadece bugünkü kayıpları say
         # Question'dan tarihi çek, bugünle karşılaştır
+        #
+        # BUG: bu blok koşulsuz olarak SADECE position_manager.data["closed"]
+        # (gerçek CLOB pozisyonları) üzerinden rebuild yapıyordu. Ama
+        # _is_live_trading()==False iken (bu botun varsayılan/güncel çalışma
+        # modu — bkz. CLAUDE.md, docs/architecture.md) gerçek trade'ler hiç
+        # açılmıyor; onun yerine _check_sim_resolutions() (bu cycle'da
+        # _update_loss_streak()'ten HEMEN ÖNCE çalışır) sonuçları
+        # self._sim_results'a yazıyor ve OPT-6 bookkeeping'ini _last_loss_slots'a
+        # incremental olarak ekliyor (bkz. o metoddaki LOSS_SLOT_TRACK). Bu
+        # blok her cycle'da koşulsuz clear() edip SADECE closed'dan (sim
+        # modunda hep boş/ilgisiz) rebuild ettiği için, aynı cycle içinde az
+        # önce eklenmiş sim-mode loss slot'unu sessizce siliyordu —
+        # _limit_coins_per_period()'daki OPT-6 dead-cat-bounce cooldown'u sim
+        # modunda hiçbir zaman tetiklenmiyordu. Kaynağı canlı/sim moduna göre
+        # seç, ikisi de aynı anda dolu olmaz.
+        loss_slot_source = closed if self._is_live_trading() else getattr(self, "_sim_results", [])
         self._last_loss_slots.clear()
         from zoneinfo import ZoneInfo as _ZI
         _today_et = datetime.now(_ZI("America/New_York")).strftime("%B %d").replace(" 0", " ")
-        for trade in closed[-20:]:
+        for trade in loss_slot_source[-20:]:
             _q = trade.get("question", "") or trade.get("market_slug", "")
             # Sadece bugünün trade'leri (question'da "March 21" gibi tarih var)
             if _today_et not in _q:
