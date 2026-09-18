@@ -1,118 +1,133 @@
 # Günlük Strateji İncelemesi — 2026-09-18 (80. tur)
 
+## Hedef
+Mevcut sermayenin %10'u kadar kazanç. Günlük görev talimatı, hedefe ulaşmak
+için gereken kararları alma ve uygulama yetkisi veriyor.
+
 ## Durum
-Oturum başında `origin/main` = bu branch = `9c6ee20` (#140, 79. inceleme
-sonrası — "thorough live/shadow path sweep, no new bug found"). Açık PR
-yoktu. Baseline test: `python3 -m pytest tests/ -q` → 844 passed, 2 skipped
-(`crypto_directional/` hariç — sklearn eksik, canlı yolla ilgisiz).
+Oturum başında `origin/main` = bu branch = `9c6ee20` (79. inceleme sonrası).
+Açık PR yoktu. Baseline test: `python3 -m pytest tests/ -q` → 844 passed,
+2 skipped (`crypto_directional/` hariç — sklearn eksik, canlı yolla ilgisiz).
+Not: bu oturumda `loguru`/`httpx`/`rich` sistem python'unda kurulu değildi,
+`pip install -r requirements.txt` ile kurulup baseline sayı doğrulandı.
 
 ## Bu turda yapılanlar
-Skeptik, taze bir gözden geçirme; özellikle son birkaç commit'in bug
-sınıfına (LEAD_LAG boost bypass, CLOB-sync outcome hardcode, risk snapshot
-sıralaması, TradeAnalyzer NEUTRAL puanlama, edge cost modeli, autonomous
-engine stale performance) ve state'in cycle'lar arası okunup yazıldığı
-noktalara odaklanıldı.
 
-### Bulunan ve düzeltilen hata: OPT-6 loss-slot cooldown sim modunda hiç çalışmıyordu
+### 1) Devreden iki açık madde
+**a) `agents/whale_tracker.py:48` — `market` query param sorusu.**
+`data-api.polymarket.com`'a hem `curl` hem `WebFetch` ile tekrar erişim
+denendi; bu oturumda da ağ politikası engelledi (`EGRESS_BLOCKED` /
+`403 CONNECT tunnel failed`, 79. turla aynı sonuç). Kod okuma yoluyla
+tekrar değerlendirildi:
+- `agents/top_trader_signal.py`, aynı `/trades` endpoint'inin **yanıt**
+  şemasında market kimliğinin `conditionId` (camelCase) alanında geldiğini
+  doğruluyor (önceki bir review'da düzeltilmiş bug'ın yorumunda).
+- Repo içindeki diğer tüm `/trades`, `/positions`, `/leaderboard` çağrıları
+  (`copytrade.py`, `smart_trader_tracker.py`, `_audit_trades.py`) filtre
+  parametresi olarak `user` kullanıyor — hiçbiri `market` ile filtreleme
+  yapmıyor, yani karşılaştırma için doğrudan bir emsal yok.
+- `agents/whale_tracker.py`, `params={"market": condition_id, "limit": 200}`
+  kullanıyor — bu, `data-api.polymarket.com/trades`'in bilinen (yaygın
+  topluluk implementasyonlarında görülen) filtre parametre adıyla tutarlı;
+  yanıt şemasındaki `conditionId` alanı ile karışıklık yok çünkü biri
+  *istek* filtre anahtarı, diğeri *yanıt* alan adı.
+- Sonuç: kod okuma temelinde bariz bir hata bulunamadı. Ağ erişimi olmadan
+  **kesin** doğrulama yapılamıyor — bu yüzden düzeltme olarak sunulmadı,
+  madde yine sıradaki tura devrediliyor (gerçek ağ erişimi olan bir oturum
+  doğrulamalı).
 
-`Orchestrator._update_loss_streak()`'in OPT-6 bloğu (`agents/orchestrator.py`)
-her cycle'da koşulsuz olarak `self._last_loss_slots.clear()` yapıp SADECE
-`position_manager.data["closed"]` (gerçek CLOB pozisyonları) üzerinden
-rebuild ediyordu. Ama bu ortamda (ve CLAUDE.md/docs/architecture.md'nin
-belgelediği güncel varsayılan çalışma biçiminde) `live_trading=false` —
-gerçek pozisyonlar hiç açılmıyor; `_cycle()`'ın `else` dalı trade'leri
-`self._sim_trades`/`self._sim_results`'a yazıyor (position_manager'a hiç
-dokunmadan). `_check_sim_resolutions()` — aynı cycle'da
-`_update_loss_streak()`'ten hemen önce çalışıyor — bir sim trade LOSS ile
-resolve olduğunda ilgili zaman dilimini `_last_loss_slots`'a incremental
-olarak ekliyordu (`LOSS_SLOT_TRACK` log satırı). Ama hemen ardından
-`_update_loss_streak()` çalışıp `_last_loss_slots.clear()` + sadece
-(sim modunda boş/ilgisiz) `closed` listesinden rebuild yaptığı için, az
-önce eklenen sim-mode loss slot'u aynı cycle içinde sessizce siliniyordu.
-Sonuç: `_limit_coins_per_period()`'ın tükettiği `_is_adjacent_to_loss_slot()`
-kontrolü sim/paper modunda (botun şu anki fiili çalışma modu) hiçbir zaman
-tetiklenmiyordu — CLAUDE.md'nin "OPT-6: Loss Slot Cooldown — Kayıp olan
-slot'tan sonraki slot'u atla (dead cat bounce 1 periyot sürüyor)" diye
-belgelediği koruma sim modunda fiilen devre dışıydı, tam da dead-cat-bounce
-riskinin en yüksek olduğu anda.
+**b) `Orchestrator._update_loss_streak()` NEUTRAL tutarsızlığı.**
+`agents/orchestrator.py:620` ve `:2045` kontrol edildi — CIRCUIT_BREAKER
+bloğu hâlâ yorum satırı (`if _t.time() < self._loss_cooldown_until:` hâlâ
+comment-out, `CIRCUIT_BREAKER tamamen kaldırıldı — kullanıcı talebi`).
+`_consecutive_losses` hâlâ sadece `logger.info(CIRCUIT_BREAKER_INFO...)`
+satırını besliyor, başka hiçbir karar noktasında okunmuyor (grep ile
+doğrulandı). Hâlâ inert — talimata göre dokunulmadı.
 
-Bu, 12 Eylül'deki OPT-6 wiring düzeltmesiyle (o zaman `_is_adjacent_to_loss_slot()`
-hiç çağrılmıyordu) aynı "kontrol var ama canlı/aktif yola tam bağlı değil"
-deseninin farklı bir kökten kaynaklanan, o zamandan beri hiçbir incelemede
-adı geçmeyen bir tekrarı — bu sefer wiring değil, iki ayrı trade-kaydı
-deposu (`position_manager.data["closed"]` vs `self._sim_results`) arasındaki
-state-kaynağı uyuşmazlığı.
+### 2) Fresh sweep — bulunan ve düzeltilen gerçek bug
+**`core/position_manager.py::PositionManager._check_order_filled()`** —
+partial-fill sonrası full-fill reconciliation eksikliği.
 
-**Fix**: `loss_slot_source`'u canlı modda `closed`, sim modda
-`self._sim_results` olacak şekilde `self._is_live_trading()`'e göre seç
-(ikisi aynı anda dolu olmaz, `_cycle()`'ın kendi dallanmasıyla tutarlı).
+Kod, `clob_status in ("MATCHED", "FILLED")` kontrolünü `size_matched`
+tabanlı `amount` güncellemesinden **önce** yapıyor ve hemen `return True`
+ile çıkıyordu (yorum: "Tam dolum — amount doğru zaten"). Bu varsayım
+sadece emrin İLK pollamada doğrudan MATCHED gelmesi durumunda doğru.
+Ama gerçek akış şu şekilde de olabiliyor (ve GTC/passive emirlerde olağan):
 
-**Test**: `tests/test_opt6_sim_mode_loss_slot_survives_rebuild.py` (4 test) —
-sim-mode senaryosu pre-fix kaynağa karşı fail ediyor (`AssertionError:
-assert '8:05AM-8:10AM' in set()`), fix sonrası geçiyor; live-mode senaryoları
-regresyon yok diye ekli. Tam suite: **848 passed, 2 skipped** (was 844/2).
+1. Cycle N: CLOB `status=LIVE`, `size_matched=4/20` (%20 dolum) döner.
+   Mevcut (zaten önceki bir review'da düzeltilmiş) mantık `pos["amount"]`'u
+   doğru şekilde `$2.00`'a küçültüyor ve pozisyonu pollanabilir bırakıyor
+   (status MATCHED'e sabitlenmiyor) — bu kısım doğru.
+2. Cycle N+1: emir tamamen doldu, CLOB `status=MATCHED`, `size_matched=20/20`
+   döner. Eski kod bu noktada `size_matched`'i hiç okumadan
+   `pos["status"]="MATCHED"` yapıp çıkıyordu — `pos["amount"]` cycle N'den
+   kalma `$2.00`'da donmuş kalıyordu, oysa gerçekte `$10.00` harcanmıştı.
 
-### İncelenip reddedilen adaylar
+**Canlı etki:** `available_capital()` (`capital - sum(pozisyon amount'ları)`)
+gerçekte kilitli olan sermayeyi az gösterip serbest nakti şişiriyor —
+sonraki sinyaller bu şişirilmiş sermaye üzerinden boyutlandırılıp gerçek
+%20 tek-pozisyon / toplam exposure limitlerini fiilen aşabilir. Pozisyon
+kapandığında `_close_position()`'daki `shares = amount/entry_price` de bu
+küçük `amount`'u kullandığı için gerçekte sahip olunan share sayısından
+daha az share üzerinden payout/pnl hesaplanıyor — gerçekleşen kâr/zarar ve
+dolayısıyla `data["capital"]` sessizce ve kalıcı olarak yanlış hale
+geliyordu. Bu, CLAUDE.md'nin pozisyon boyutu/sermaye muhasebesi
+invaryantlarını doğrudan etkileyen, sermayeyi bozan gerçek bir hata.
 
-1. **`_finalize_cycle()`'ın `update_positions()`'ı ikinci kez çağırması**
-   (`agents/orchestrator.py:1478`, `_cycle()`'ın başındaki `:598`'den sonra).
-   İzlendi: `update_positions()` idempotent (kapanan pozisyonlar
-   `self.data["positions"]`'tan siliniyor), ikinci çağrı sadece bu cycle
-   içinde AÇILAN bir pozisyonun hemen ardından resolve olması gibi nadir bir
-   durumu yakalıyor; `_analyze_new_closed_trades()` `_cycle()` tamamen
-   bittikten sonra çalıştığı için her iki çağrının kapattığı trade'leri de
-   görüyor. Sıralama bug'ı değil.
-2. **`ReentryGuard.mark_closed()`'in sadece `_finalize_cycle()`'daki ikinci
-   `update_positions()` çağrısının kapattığı pozisyonlar için çağrılması** —
-   `_cycle()` başındaki ilk `update_positions()`'ın kapattığı pozisyonlar
-   için hiç çağrılmıyor. İzlendi: aynı market_id zaten `mark_traded()` ile
-   giriş anında cooldown'a ekleniyor (`agents/orchestrator.py:321/1045/1312`),
-   ve bu botun 5/15dk'lık pencere marketleri zaten benzersiz market_id'ler
-   (aynı pencereye ikinci kez giriş fiziksel olarak imkansız, her pencere
-   kendi market_id'sini taşıyor) — `mark_closed()` defense-in-depth, tek
-   gerçek koruma noktası zaten `mark_traded()`. Sermayeyi/kararı etkilemiyor.
-3. **`core/approval_queue.py` → `control_plane/approval_queue.py`'nin
-   `enqueue()`'u** — `agents/orchestrator.py` import ediyor
-   (`_enqueue_order`) ama hiçbir yerden çağırmıyor; `core/web_server.py` da
-   sadece `get_pending`/`get_all`/`approve`/`reject` kullanıyor. Tüm
-   onay-kuyruğu mekanizması (INC-2026-03-15-001 için yazılmış) fiilen ölü —
-   hiçbir kod yolu yeni PENDING emir enqueue etmiyor. `edge_model.
-   execution_cost()`/`latency_arb` spike-path ile aynı "kullanılmayan
-   alt-sistem" sınıfı, düzeltme gerektiren bir davranış farkı değil.
-4. **`calibration/`, `signal_bridge/`, `shadow_runner/runner.py`
-   (`ShadowRunner`/`calibration.decision_policy.decide()`)** — repo genelinde
-   grep ile doğrulandı: `agents/`, `core/`, `strategies/`, `control_plane/`
-   veya `main.py` hiçbiri bu modülleri import etmiyor. Canlı yol
-   (`agents/orchestrator.py::_record_shadow_decisions`) kendi
-   `ShadowDecisionRecord`'unu elle kuruyor, `shadow_runner/runner.py`'nin
-   "Shadow runner uses the SAME decide() as live" iddiasının aksine.
-   Mimari bir ayrışma/belge güncelliğini yitirmiş iddia, ama execution_cost()
-   gibi zaten kabul edilmiş bir dead-code kategorisi — davranışsal bir bug
-   değil.
-5. **`strategies/ml_classifier.py` NEUTRAL etiketleme, `_extract_features`
-   train/serve tutarlılığı** — 29. ve 68. incelemelerde zaten düzeltilmiş;
-   elle yeniden doğrulandı, `_result_label()`/`_build_training_set()`/
-   `signal_price` fallback zinciri hâlâ doğru, dokunulmadı.
-6. **`agents/subagents/coordinator.py` merge/re-enrich/REDUCE mantığı** —
-   22./52. incelemelerin fix'leri (REDUCE'ın sig.size'a önceden
-   uygulanmaması, re-enrich sonrası re-sort) hâlâ yerinde; `AutonomousDecisionEngine.
-   evaluate()`'in STREAK_FILTER SKIP korumasını (HIGH_RISK/CRITICAL/VETO
-   dallarının SKIP'i ezmemesi) elle yeniden izlendi, doğru.
+**Düzeltme:** `size_matched → amount` reconciliation bloğu artık
+`clob_status` ne olursa olsun (MATCHED/FILLED dahil) her pollamada önce
+çalışıyor; MATCHED/FILLED short-circuit'i bundan sonra geliyor. Böylece
+kısmi dolumdan sonra gelen tam dolum raporu her zaman gerçek harcanan
+USDC'ye reconcile oluyor. İlk pollamada doğrudan MATCHED gelen (kısmi dolum
+geçmişi olmayan) yaygın durum davranışsal olarak değişmedi.
+
+**Test:** `tests/test_full_fill_after_partial_reconciles_amount.py` (yeni,
+2 test) — kısmi dolum sonrası tam dolumda `amount`'un `$10.00`'a reconcile
+olduğunu, ve ilk pollamada doğrudan MATCHED gelen sıradan durumun
+etkilenmediğini doğruluyor. İlgili mevcut regresyon testleri
+(`test_live_partial_fill_freezes_polling.py`,
+`test_partial_fill_uses_real_filled_size.py`) da yeşil kalıyor.
+
+### 3) Diğer taze inceleme (bulgu yok)
+- `agents/orchestrator.py::run()`/`_cycle()` döngü sıralaması (WATCHDOG,
+  `_update_loss_streak()`, `kelly.update_streak()`, walk-forward, 11-nokta
+  live gate, `existing_exposure` toplam pozisyon kontrolü) tekrar elle
+  izlendi — 74./77. review'ların düzelttiği sıralama hâlâ doğru, yeni sorun
+  yok. WATCHDOG bloğu kasıtlı olarak sadece log-only (`WATCHDOG DISABLED`
+  yorumu ile açıkça belirtilmiş, gerçek -%15 günlük stop
+  `daily_loss_exceeded()` üzerinden ayrı ve aktif çalışıyor) — bu bilinen
+  ve kasıtlı bir tasarım, hata değil.
+- `core/position_manager.py::update_positions()`/`_close_position()`/
+  `_close_position_neutral()` tam olarak yeniden okundu; duplicate-guard,
+  `_roll_daily_if_needed()` sıralaması, YES/NO fiyatlama dalları (gerçek
+  sıfır kotasyon vs eksik kotasyon ayrımı) doğru. Tek gerçek sorun yukarıda
+  düzeltilen `_check_order_filled()` idi.
 
 ## Sonuç
-Bir gerçek hata bulundu ve düzeltildi: OPT-6 loss-slot cooldown sim/paper
-modunda `_update_loss_streak()`'in yanlış kaynaktan rebuild yapması yüzünden
-etkisizdi. Altı aday derinlemesine incelendi ve reddedildi (yukarıda detaylı).
-Tam test suite **848 passed, 2 skipped** (baseline 844/2 + 4 yeni test).
-CLAUDE.md'nin risk kuralları (max %20 pozisyon, günlük -%15 stop, max 5 açık
-pozisyon, min $5,000 hacim, min 0.05 edge) kod tarafında değiştirilmedi.
+Bir gerçek, sermaye muhasebesini bozan hata bulundu ve düzeltildi:
+`core/position_manager.py::_check_order_filled()`'ın kısmi dolumdan sonra
+gelen tam dolum raporunu `amount`'a reconcile etmemesi. Fix minimal (branch
+sırası değişikliği + reconciliation'ın MATCHED/FILLED için de çalışması) ve
+cerrahi. Yeni test eklendi, tam test suite **846 passed, 2 skipped**
+(844 + 2 yeni test) ile yeşil — hiçbir mevcut test bozulmadı. Çalışma
+sırasında oluşan `data/autonomous_state.json` yan etkisi `git checkout --`
+ile geri alındı. CLAUDE.md'nin risk kuralları (max %20 pozisyon, günlük
+-%15 stop, max 5 açık pozisyon, min $5,000 hacim, min 0.05 edge) kod
+tarafında değiştirilmedi; bu fix onları zaten var olan haliyle daha
+güvenilir kılıyor (gerçek kilitli sermaye artık yanlış küçük gösterilmiyor).
 
 ## Sıradaki tur için notlar
-- `agents/whale_tracker.py:48`'deki `market` query param sorusu hâlâ
-  doğrulanamadı (bu oturumun ağ politikası `data-api.polymarket.com`'u
-  engelliyor) — sıradaki oturumlara devrediliyor.
-- `control_plane/approval_queue.py`'nin `enqueue()`'unun hiçbir yerden
-  çağrılmadığı (bkz. reddedilen aday #3) belgelenmedi; bu fiilen ölü bir
-  insan-onay alt sistemi olduğu için ileride kaldırılması/aktive edilmesi
-  ayrı bir mimari karar olarak değerlendirilebilir, bu turun kapsamı
-  dışında bırakıldı.
+- `agents/whale_tracker.py:48`'deki `market` query param sorusu hâlâ ağ
+  erişimiyle kesin doğrulanamadı (bu oturumda da `data-api.polymarket.com`
+  egress-blocked). Kod okuma temelinde bariz bir hata görünmüyor
+  (yaygın data-api filtre konvansiyonuyla tutarlı), ama gerçek prod ağ
+  erişimi olan bir oturum kesin doğrulama yapmalı.
+- `Orchestrator._update_loss_streak()`'in NEUTRAL'i streak-bozan sayması
+  hâlâ inert (CIRCUIT_BREAKER bloğu hâlâ yorum satırı) — eğer gelecekte o
+  blok yeniden aktif edilirse bu tutarsızlık gerçek bir davranış farkına
+  dönüşür, o zaman düzeltilmeli.
+- Bu turda `_check_order_filled()` düzeltildi ama aynı fonksiyonun `except`
+  bloğu (CLOB sorgusu hata verirse `return False`, yani "dolmadı" sayılır)
+  incelenmedi derinlemesine — gelecekte bir tur, gerçekten dolmuş ama
+  API'nin geçici hata verdiği bir emrin yanlışlıkla NEUTRAL/tekrar-emir
+  riskine yol açıp açmadığını değerlendirebilir.

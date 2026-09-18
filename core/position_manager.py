@@ -641,15 +641,28 @@ class PositionManager:
                 size_matched = float(order_data.get("size_matched", 0) or 0)
                 original_size = float(order_data.get("original_size", 0) or order_data.get("size", 0) or 0)
 
-                if clob_status in ("MATCHED", "FILLED"):
-                    pos["status"] = "MATCHED"
-                    # Tam dolum — amount doğru zaten
-                    return True
-
+                # BUG: this branch used to run BEFORE the size_matched
+                # reconciliation below and return immediately on
+                # "amount doğru zaten" — true only if this is the very
+                # first poll. If an earlier cycle already saw the order as
+                # LIVE with a partial fill, it shrank pos["amount"] to that
+                # smaller size_matched*entry_price (intentionally, so the
+                # position stayed pollable — see the LIVE branch below).
+                # When a LATER cycle then reports MATCHED/FILLED (the order
+                # finished filling), returning here without re-reading
+                # size_matched left pos["amount"] frozen at that smaller,
+                # stale partial-fill snapshot forever — permanently
+                # understating real USDC spent. available_capital() then
+                # overstates free cash for future sizing, and
+                # _close_position()'s shares=amount/entry_price pays out
+                # for fewer shares than the bot actually holds, silently
+                # corrupting realized P&L/capital on close. Reconcile
+                # size_matched → amount first, for EVERY status, then
+                # decide whether to freeze.
                 if size_matched > 0:
-                    # Kısmi dolum — amount'u gerçek harcanan USDC'ye güncelle.
-                    # size_matched * entry_price doğrudan gerçek harcamayı
-                    # verir. Önceki kod bunun yerine mevcut (önceki
+                    # Kısmi/tam dolum — amount'u gerçek harcanan USDC'ye
+                    # güncelle. size_matched * entry_price doğrudan gerçek
+                    # harcamayı verir. Önceki kod bunun yerine mevcut (önceki
                     # dolumla zaten küçülmüş) pos["amount"]'u fill_ratio ile
                     # çarpıyordu — bu pozisyon birden fazla kez (büyüyen
                     # size_matched ile) tekrar kontrol edildiğinde her
@@ -669,6 +682,12 @@ class PositionManager:
                                 f"${original_amount:.2f} → ${filled_amount:.2f}"
                             )
                             pos["amount"] = filled_amount
+
+                if clob_status in ("MATCHED", "FILLED"):
+                    pos["status"] = "MATCHED"
+                    return True
+
+                if size_matched > 0:
                     if clob_status == "LIVE":
                         # Emir hâlâ borsada açık — daha fazla dolum gelebilir.
                         # Status'u MATCHED'e sabitlersek fonksiyon başındaki
