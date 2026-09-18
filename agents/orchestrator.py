@@ -569,7 +569,19 @@ class Orchestrator:
         except Exception as wd_e:
             logger.debug(f"Watchdog check error: {wd_e}")
 
+        # Resolution check — max pozisyon kontrolünden ÖNCE çalışmalı
+        # Yoksa pozisyonlar resolve olmadan bot kilitlenir
+        await self.position_manager.update_positions(self.client)
+
         # ── Loss streak koruması: son kapanışlardan streak hesapla ──
+        # update_positions() SONRASI çalışmalı: bu döngüde resolve olan
+        # WIN/LOSS pozisyonlar önce update_positions() ile data["closed"]'a
+        # yazılmalı, yoksa _update_loss_streak()/kelly.update_streak()/
+        # walk_forward.validate() ve aşağıdaki autonomous_engine.evaluate()
+        # çağrısı (closed_trades=...) bu döngünün taze kapanışlarını hiç
+        # görmeden bir önceki döngünün streak/drawdown durumuna göre boyut
+        # belirler — 74. günlük review'da get_adaptive_params() için
+        # düzeltilen aynı bug sınıfı, bu kardeş kullanım noktalarında kalmıştı.
         self._update_loss_streak()
         # ── Dynamic Kelly: streak multiplier güncelle ──
         closed_trades = self.position_manager.data.get("closed", [])
@@ -588,10 +600,6 @@ class Orchestrator:
         #     _sw.update(running=True, capital=self.position_manager.available_capital(), cycle=self._cycle_count)
         #     _sw.save()
         #     return
-
-        # Resolution check — max pozisyon kontrolünden ÖNCE çalışmalı
-        # Yoksa pozisyonlar resolve olmadan bot kilitlenir
-        await self.position_manager.update_positions(self.client)
 
         open_count: int = self.position_manager.open_position_count()
         if open_count >= self.max_open_positions and self._is_live_trading():
