@@ -42,7 +42,7 @@ def test_update_positions_runs_before_closed_trades_snapshot():
 
     resolve_idx = src.index("await self.position_manager.update_positions(self.client)")
     streak_idx = src.index("self._update_loss_streak()")
-    snapshot_idx = src.index('closed_trades = self.position_manager.data.get("closed", [])')
+    snapshot_idx = src.index("closed_trades = self._current_closed_trades()")
     kelly_idx = src.index("self.arb_engine.kelly.update_streak(closed_trades)")
     wf_idx = src.index("self._walk_forward.validate(closed_trades)")
 
