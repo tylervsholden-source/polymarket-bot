@@ -440,9 +440,15 @@ class Orchestrator:
 
             # AutonomousEngine adaptif interval — gerçek sermayeyi geç, yoksa
             # perf.capital ilk trade kapanana kadar 0.0'da kalıp SURVIVAL modunu
-            # yanlışlıkla kalıcı hale getirir (bkz. get_adaptive_params docstring)
+            # yanlışlıkla kalıcı hale getirir (bkz. get_adaptive_params docstring).
+            # closed_trades de geçiliyor: evaluate() (performans anlık görüntüsünü
+            # tazeleyen TEK yer) sadece bu döngüde onaylanmış bir sinyal varsa
+            # çalışır — sinyalsiz döngülerde bile update_positions() gerçek
+            # pozisyonları kapatabildiği için, bunu vermezsek taze bir kayıp
+            # serisi bir sonraki sinyale kadar (hiç gelmeyebilir) görünmez kalır.
             adaptive = self.autonomous_engine.get_adaptive_params(
-                self.position_manager.available_capital()
+                self.position_manager.available_capital(),
+                self.position_manager.data.get("closed", []),
             )
             if adaptive.get("cycle_interval_seconds", self.interval) != self.interval:
                 wait_time = adaptive["cycle_interval_seconds"] + backoff
