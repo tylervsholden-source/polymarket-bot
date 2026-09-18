@@ -66,6 +66,23 @@ def test_streak_breaks_on_loss():
     assert orch._consecutive_wins_per_coin.get("BTC") == 2
 
 
+def test_neutral_close_does_not_break_no_win_streak():
+    """An unfilled/cancelled GTC order closes with result="NEUTRAL" (USDC
+    refunded, pnl=0) — it is neither a win nor a loss and must not break the
+    OPT-7 streak, matching kelly_criterion.update_streak() and
+    autonomous_engine._update_performance()."""
+    closed = [
+        _closed_trade("BTC Up or Down - March 22, 8:00AM-8:05AM", "NO", "WIN"),
+        _closed_trade("BTC Up or Down - March 22, 8:05AM-8:10AM", "NO", "NEUTRAL"),
+        _closed_trade("BTC Up or Down - March 22, 8:10AM-8:15AM", "NO", "WIN"),
+    ]
+    orch = _make_orchestrator(closed)
+
+    orch._update_loss_streak()
+
+    assert orch._consecutive_wins_per_coin.get("BTC") == 2
+
+
 def test_yes_wins_do_not_count_toward_no_guard():
     closed = [
         _closed_trade("BTC Up or Down - March 22, 8:00AM-8:05AM", "YES", "WIN"),
