@@ -28,6 +28,13 @@ def _make_orchestrator(closed: list[dict]) -> Orchestrator:
     orch._consecutive_wins_per_coin = {}
     orch._last_loss_slots = set()
     orch.position_manager = SimpleNamespace(data={"closed": closed})
+    # These fixtures model REAL (live/paper CLOB) closed positions — the
+    # 83rd daily review made _update_loss_streak() source `closed` from
+    # position_manager.data["closed"] only when live (and from
+    # self._sim_results otherwise, mirroring OPT-6's existing live/sim
+    # split), so these tests must say which mode they represent.
+    orch._is_live_trading = lambda: True
+    orch._sim_results = []
     return orch
 
 
