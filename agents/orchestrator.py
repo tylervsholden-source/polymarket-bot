@@ -472,7 +472,7 @@ class Orchestrator:
             # serisi bir sonraki sinyale kadar (hiç gelmeyebilir) görünmez kalır.
             adaptive = self.autonomous_engine.get_adaptive_params(
                 self.position_manager.available_capital(),
-                self.position_manager.data.get("closed", []),
+                self._current_closed_trades(),
             )
             if adaptive.get("cycle_interval_seconds", self.interval) != self.interval:
                 wait_time = adaptive["cycle_interval_seconds"] + backoff
@@ -608,7 +608,22 @@ class Orchestrator:
         # düzeltilen aynı bug sınıfı, bu kardeş kullanım noktalarında kalmıştı.
         self._update_loss_streak()
         # ── Dynamic Kelly: streak multiplier güncelle ──
-        closed_trades = self.position_manager.data.get("closed", [])
+        # BUG (84. review): bu satır koşulsuz olarak SADECE
+        # position_manager.data["closed"] (gerçek CLOB pozisyonları) okuyordu —
+        # tıpkı _update_loss_streak()'in 82./83. review'dan önceki hali gibi.
+        # Ama bu `closed_trades` değişkeni SADECE _update_loss_streak()'i
+        # değil, hemen altındaki kelly.update_streak(), walk_forward.validate()
+        # VE _cycle()'ın execute döngüsündeki autonomous_engine.evaluate()
+        # (closed_trades=...) çağrısını da besliyor. _is_live_trading()==False
+        # iken (varsayılan/güncel çalışma modu) bu üçü de HER ZAMAN boş liste
+        # görüyordu: Dynamic Kelly'nin win/loss streak multiplier'ı, Walk-
+        # Forward'ın confidence multiplier'ı ve AutonomousDecisionEngine'in
+        # win_rate/consecutive_losses/drawdown risk sınıflandırması sim/paper
+        # modunda (fiili varsayılan) hiçbir zaman güncellenmiyordu — 82./83.
+        # review'ın _update_loss_streak() için düzelttiği aynı bug sınıfı, bu
+        # kardeş kullanım noktalarında hâlâ mevcuttu. Tek ortak kaynağa
+        # (_current_closed_trades()) taşındı.
+        closed_trades = self._current_closed_trades()
         self.arb_engine.kelly.update_streak(closed_trades)
 
         # ── Walk-Forward Validation ──
@@ -2029,26 +2044,27 @@ class Orchestrator:
 
         self._sim_trades = still_open
 
-    def _update_loss_streak(self):
-        """Son kapanan trade'lerden ardışık kayıp sayısını güncelle."""
-        # BUG (83. review): bu satır koşulsuz olarak SADECE
-        # position_manager.data["closed"] (gerçek CLOB pozisyonları) okuyordu.
-        # _is_live_trading()==False iken (varsayılan/güncel çalışma modu — bkz.
-        # CLAUDE.md) bu liste HER ZAMAN boş kalıyor — gerçek trade'ler hiç
-        # açılmıyor, sim trade'ler self._sim_results'a yazılıyor. 82. review
-        # bu AYNI state-kaynağı ayrımını SADECE aşağıdaki OPT-6
-        # `loss_slot_source`'a uyguladı; `_consecutive_losses` ve OPT-7
-        # `_consecutive_wins_per_coin` hesapları (hemen altta) o düzeltmeyi
-        # hiç görmeden koşulsuz boş `closed` üzerinden çalışmaya devam etti —
-        # yani OPT-7'nin "3+ ardışık NO WIN → SKIP / 2 ardışık NO WIN →
-        # half-kelly" bounce koruması sim/paper modunda (botun fiili çalışma
-        # biçimi) hiçbir zaman tetiklenmiyordu. Aynı `_is_live_trading()`
-        # seçimini burada da uygula — OPT-6'nın loss_slot_source'u artık bu
-        # `closed`'ın ta kendisi (aşağıda tekilleştirildi).
-        closed = (
+    def _current_closed_trades(self) -> list:
+        """Canlı modda gerçek pozisyonlar (position_manager.data["closed"]),
+        sim/paper modda (botun varsayılan çalışma biçimi — bkz. CLAUDE.md)
+        self._sim_results — ikisi aynı anda dolu olmaz, çünkü _cycle() gerçek
+        emirleri sadece _is_live_trading()==True iken position_manager'a yazar,
+        aksi halde sonuçlar self._sim_results'a gider (bkz. 82./83. günlük
+        review, OPT-6/OPT-7). _update_loss_streak() dışında Dynamic Kelly
+        (kelly.update_streak), Walk-Forward (walk_forward.validate),
+        AutonomousDecisionEngine.evaluate()/get_adaptive_params() de bu aynı
+        kapanmış-trade anlık görüntüsünü tüketir; hepsi tek bu metottan
+        beslenmeli, yoksa sim modunda (fiili varsayılan) hepsi kalıcı olarak
+        boş liste görür ve risk/boyut adaptasyonu hiç tetiklenmez.
+        """
+        return (
             self.position_manager.data.get("closed", [])
             if self._is_live_trading() else getattr(self, "_sim_results", [])
         )
+
+    def _update_loss_streak(self):
+        """Son kapanan trade'lerden ardışık kayıp sayısını güncelle."""
+        closed = self._current_closed_trades()
         # Son 10 kapanışı ters sırada kontrol et
         streak = 0
         for trade in reversed(closed[-10:]):
