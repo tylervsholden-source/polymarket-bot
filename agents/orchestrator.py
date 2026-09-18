@@ -2031,7 +2031,24 @@ class Orchestrator:
 
     def _update_loss_streak(self):
         """Son kapanan trade'lerden ardışık kayıp sayısını güncelle."""
-        closed = self.position_manager.data.get("closed", [])
+        # BUG (83. review): bu satır koşulsuz olarak SADECE
+        # position_manager.data["closed"] (gerçek CLOB pozisyonları) okuyordu.
+        # _is_live_trading()==False iken (varsayılan/güncel çalışma modu — bkz.
+        # CLAUDE.md) bu liste HER ZAMAN boş kalıyor — gerçek trade'ler hiç
+        # açılmıyor, sim trade'ler self._sim_results'a yazılıyor. 82. review
+        # bu AYNI state-kaynağı ayrımını SADECE aşağıdaki OPT-6
+        # `loss_slot_source`'a uyguladı; `_consecutive_losses` ve OPT-7
+        # `_consecutive_wins_per_coin` hesapları (hemen altta) o düzeltmeyi
+        # hiç görmeden koşulsuz boş `closed` üzerinden çalışmaya devam etti —
+        # yani OPT-7'nin "3+ ardışık NO WIN → SKIP / 2 ardışık NO WIN →
+        # half-kelly" bounce koruması sim/paper modunda (botun fiili çalışma
+        # biçimi) hiçbir zaman tetiklenmiyordu. Aynı `_is_live_trading()`
+        # seçimini burada da uygula — OPT-6'nın loss_slot_source'u artık bu
+        # `closed`'ın ta kendisi (aşağıda tekilleştirildi).
+        closed = (
+            self.position_manager.data.get("closed", [])
+            if self._is_live_trading() else getattr(self, "_sim_results", [])
+        )
         # Son 10 kapanışı ters sırada kontrol et
         streak = 0
         for trade in reversed(closed[-10:]):
@@ -2055,11 +2072,14 @@ class Orchestrator:
             _coin = self._shadow_detect_asset(_q)
             if not _coin or _coin in _coin_done:
                 continue
-            # Real closed positions carry "outcome" (YES/NO), not "direction" —
-            # "direction" only exists on sim-mode trades. Reading "direction" here
-            # always returned "" and this streak (and the OPT-7 bounce guard below)
-            # never fired in live/paper trading.
-            if trade.get("result") == "WIN" and trade.get("outcome", "").upper() == "NO":
+            # Real closed positions carry "outcome" (YES/NO); sim-mode trades
+            # (self._sim_results, now also read above — 83. review) carry
+            # "direction" instead and never have an "outcome" key. Reading
+            # only "outcome" always returned "" for sim trades, so even after
+            # `closed` started including sim results this streak (and the
+            # OPT-7 bounce guard below) still never fired in sim/paper mode.
+            _side = (trade.get("outcome") or trade.get("direction") or "").upper()
+            if trade.get("result") == "WIN" and _side == "NO":
                 self._consecutive_wins_per_coin[_coin] = self._consecutive_wins_per_coin.get(_coin, 0) + 1
             elif trade.get("result") == "NEUTRAL":
                 continue  # Unfilled/cancelled GTC order — neither win nor loss, doesn't break streak
@@ -2072,21 +2092,16 @@ class Orchestrator:
         # OPT-6: Loss slot tracking — sadece bugünkü kayıpları say
         # Question'dan tarihi çek, bugünle karşılaştır
         #
-        # BUG: bu blok koşulsuz olarak SADECE position_manager.data["closed"]
-        # (gerçek CLOB pozisyonları) üzerinden rebuild yapıyordu. Ama
-        # _is_live_trading()==False iken (bu botun varsayılan/güncel çalışma
-        # modu — bkz. CLAUDE.md, docs/architecture.md) gerçek trade'ler hiç
-        # açılmıyor; onun yerine _check_sim_resolutions() (bu cycle'da
-        # _update_loss_streak()'ten HEMEN ÖNCE çalışır) sonuçları
-        # self._sim_results'a yazıyor ve OPT-6 bookkeeping'ini _last_loss_slots'a
-        # incremental olarak ekliyor (bkz. o metoddaki LOSS_SLOT_TRACK). Bu
-        # blok her cycle'da koşulsuz clear() edip SADECE closed'dan (sim
-        # modunda hep boş/ilgisiz) rebuild ettiği için, aynı cycle içinde az
-        # önce eklenmiş sim-mode loss slot'unu sessizce siliyordu —
-        # _limit_coins_per_period()'daki OPT-6 dead-cat-bounce cooldown'u sim
-        # modunda hiçbir zaman tetiklenmiyordu. Kaynağı canlı/sim moduna göre
-        # seç, ikisi de aynı anda dolu olmaz.
-        loss_slot_source = closed if self._is_live_trading() else getattr(self, "_sim_results", [])
+        # 82. review'da bu blok koşulsuz olarak SADECE
+        # position_manager.data["closed"]'dan (sim modunda hep boş) rebuild
+        # yapıyordu ve az önce _check_sim_resolutions()'ın _last_loss_slots'a
+        # incremental eklediği bir sim-mode loss slot'unu aynı cycle içinde
+        # sessizce siliyordu; düzeltme olarak burada ayrı bir
+        # `loss_slot_source` (closed/sim_results seçimi) tanımlanmıştı. 83.
+        # review aynı canlı/sim seçimini fonksiyonun en başındaki `closed`
+        # değişkenine taşıdı (yukarıda) — artık tek kaynak, tekrar seçmeye
+        # gerek yok.
+        loss_slot_source = closed
         self._last_loss_slots.clear()
         from zoneinfo import ZoneInfo as _ZI
         _today_et = datetime.now(_ZI("America/New_York")).strftime("%B %d").replace(" 0", " ")
