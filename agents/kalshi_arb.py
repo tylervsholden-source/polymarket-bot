@@ -169,8 +169,14 @@ class KalshiArbTracker:
         if not matching:
             return 0.0
 
-        # En güncel Kalshi fiyatı
-        kalshi_yes = matching[0]["yes_price"]
+        # En güncel Kalshi fiyatı — self._cache can hold several entries for
+        # the same asset at once (refresh() caches one entry per ticker, and
+        # a "status=open" query routinely returns multiple simultaneously
+        # open contracts per asset series). `matching[0]` was the dict's
+        # positional first match, i.e. whichever ticker happened to be
+        # inserted first — not the freshest one, contradicting this
+        # comment's own stated intent. Pick by `timestamp` explicitly.
+        kalshi_yes = max(matching, key=lambda v: v["timestamp"])["yes_price"]
         diff = kalshi_yes - poly_yes  # pozitif = poly ucuz (iyi)
 
         adjustment = max(-0.02, min(0.02, diff * 0.5))
