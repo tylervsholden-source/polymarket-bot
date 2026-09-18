@@ -1448,9 +1448,19 @@ class Orchestrator:
             logger.info(f"BOND_CYCLE: {placed} bond(s) placed, remaining=${bond_capital:.2f}")
 
     def _analyze_new_closed_trades(self):
-        """Yeni kapanan trade'leri analiz et — bot durmadan çalışır."""
+        """Yeni kapanan trade'leri analiz et — bot durmadan çalışır.
+
+        `_current_closed_trades()` kullanılmalı (85. inceleme) — doğrudan
+        `position_manager.data["closed"]` okumak sim/paper modda (botun
+        fiili varsayılan çalışma biçimi, bkz. CLAUDE.md) her zaman boş liste
+        döndürür, çünkü `_cycle()` sim modunda gerçek emir vermez, sonuçları
+        `self._sim_results`'a yazar. Bu satır düzeltilmeden TradeAnalyzer
+        (root-cause analizi, pattern eşleştirme, adaptif öneriler) sim
+        modunda hiçbir zaman tetiklenmiyordu — `new_count` her döngüde
+        `0 - 0 = 0` kalıp erken dönüyordu.
+        """
         try:
-            closed_trades = self.position_manager.data.get("closed", [])
+            closed_trades = self._current_closed_trades()
             new_count = len(closed_trades) - self._last_analyzed_count
 
             if new_count <= 0:
