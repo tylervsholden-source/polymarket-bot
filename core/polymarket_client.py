@@ -404,26 +404,12 @@ class PolymarketClient:
             # GTC with price bump for fill priority.
             # Bump read from control.json (hot-configurable, no restart needed).
             # Default 0.03. +0.02 gave 17% fill rate (Mar 21).
-            # Edge model SPREAD_COST=0.025 accounts for this cost.
+            # Edge model SPREAD_COST is kept equal to this bump (see edge_model.py)
+            # so the edge gate isn't computed against a cost lower than what we pay.
             import asyncio
             import math
-            import json as _json
 
-            _bump = 0.02  # default reduced: 0.03 was too aggressive, 100% timeout on Mar 21
-            try:
-                with open(os.path.join("data", "control.json")) as _cf:
-                    _ctrl = _json.load(_cf)
-                    _bump = _ctrl.get("price_bump", 0.02)
-            except Exception:
-                pass
-
-            # Adaptive bump: don't exceed 0.99, don't bump past midpoint
-            # If price already high (>0.90), reduce bump to avoid overpaying
-            if price > 0.90:
-                _bump = min(_bump, 0.01)
-            elif price > 0.80:
-                _bump = min(_bump, 0.02)
-            price = round(min(price + _bump, 0.99), 2)
+            price = round(min(price + self._price_bump(price), 0.99), 2)
 
             # Size (taker_amount) max 2 decimals per CLOB API.
             # maker_amount (USDC) max 4 decimals.
@@ -839,14 +825,36 @@ class PolymarketClient:
     # Simülasyon (API key yokken)
     # ------------------------------------------------------------------ #
 
+    def _price_bump(self, price: float) -> float:
+        """GTC fill-priority price bump applied to every live BUY order.
+        Read from control.json (hot-configurable), adaptively reduced near
+        price extremes. Shared by place_order() and _simulate() so paper
+        trades pay the same execution cost real fills do."""
+        bump = 0.02
+        try:
+            with open(os.path.join("data", "control.json")) as cf:
+                ctrl = json.load(cf)
+                bump = ctrl.get("price_bump", 0.02)
+        except Exception:
+            pass
+        if price > 0.90:
+            bump = min(bump, 0.01)
+        elif price > 0.80:
+            bump = min(bump, 0.02)
+        return bump
+
     def _simulate(self, market_id: str, outcome: str, amount: float, price: float) -> dict:
         logger.warning("Simülasyon modu — gerçek emir gönderilmedi.")
+        # Live BUY orders pay price + _price_bump() for fill priority (see
+        # place_order). Applying the same bump here keeps simulated PnL from
+        # scoring signals against a cost basis live trading never actually gets.
+        filled_price = round(min(price + self._price_bump(price), 0.99), 2)
         return {
             "order_id": f"SIM-{market_id}",
             "market_id": market_id,
             "outcome": outcome,
             "amount": amount,
-            "price": price,
+            "price": filled_price,
             "status": "SIMULATED",
         }
 

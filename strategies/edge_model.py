@@ -16,8 +16,12 @@ Max fee at price 0.50: 0.50*0.50*0.02 = 0.5%
 At extremes (0.10/0.90): 0.10*0.90*0.02 = 0.18%
 """
 
-SPREAD_COST = 0.005   # GTC limit order: minimal spread impact for $3-5 bets
-SLIPPAGE_EST = 0.003  # Sub-$5 bets have negligible orderbook impact
+SPREAD_COST = 0.02    # GTC orders are placed with a fill-priority price bump
+                       # (default 0.02, see polymarket_client._price_bump) —
+                       # that bump IS the real execution cost, not a $3-5 bet's
+                       # negligible book spread. Must track the live bump or the
+                       # edge gate passes trades whose true cost is understated.
+SLIPPAGE_EST = 0.003  # Sub-$5 bets have negligible additional orderbook impact
 
 # Polymarket GTC orders are MAKER orders → fee is 0% on most markets
 # Only taker orders (FOK) pay 2% fee. We use GTC.

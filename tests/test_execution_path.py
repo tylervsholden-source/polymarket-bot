@@ -55,7 +55,10 @@ def test_simulate_yes_order():
     assert order["outcome"] == "YES"
     assert order["status"] == "SIMULATED"
     assert order["amount"] == 1.0
-    assert order["price"] == 0.55
+    # _simulate() applies the same fill-priority price bump (default 0.02,
+    # see PolymarketClient._price_bump) real GTC orders pay, so paper trades
+    # aren't scored against a cost basis live trading never actually gets.
+    assert order["price"] == 0.57
 
 
 def test_simulate_no_order():
@@ -200,8 +203,11 @@ async def test_full_sim_execution_chain():
     assert pm.has_position("btc-exec-test")
     assert pm.available_capital() < 5.0
 
-    # Neutral kapanis (pnl=0, giris fiyatindan cikis)
-    pm._close_position("btc-exec-test", token_close_price=sig.entry_price)
+    # Neutral kapanis (pnl=0, giris fiyatindan cikis). Must close at the
+    # position's recorded entry price (order["price"], post price-bump) —
+    # sig.entry_price is the pre-bump signal price and no longer matches what
+    # _simulate() actually filled at.
+    pm._close_position("btc-exec-test", token_close_price=order["price"])
     assert not pm.has_position("btc-exec-test")
     assert abs(pm.data["capital"] - 5.0) < 0.01, (
         f"Neutral kapanista capital kaydi: {pm.data['capital']}"
