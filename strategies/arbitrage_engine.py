@@ -563,15 +563,6 @@ class ArbitrageEngine:
             regime.get("eth_5m_pct", 0.0) * 0.4
         ) * 0.4
 
-        # ── CROSS-EXCHANGE BOOST (Bayesian input) ──────────────────────
-        _cross_boost = 0.0
-        try:
-            if sym and self.binance_feed:
-                _xex = self.binance_feed.get_cross_exchange_signal(sym)
-                _cross_boost = _xex.get("boost", 0.0) if _xex else 0.0
-        except Exception:
-            pass
-
         # ── REGIME params for Bayesian ────────────────────────────────
         _regime_str = regime.get("strength", 0.0)
         _regime_dir = regime.get("regime", "NEUTRAL")
@@ -597,7 +588,24 @@ class ArbitrageEngine:
             ichi_signal=ichi_signal,
             ichi_tk_cross=ichi_tk_cross,
             fib_level=fib_level,
-            cross_exchange_boost=_cross_boost,
+            # BUG: this used to feed the live Binance/Bitstamp lead-lag spread
+            # (self.binance_feed.get_cross_exchange_signal(sym)["boost"]) straight
+            # into BayesianEstimator.estimate(), which bakes it into raw_signal
+            # (strategies/bayesian.py: "raw_signal += cross_exchange_boost * 0.8")
+            # before the log-odds update — i.e. before bayesian_prob even exists.
+            # The "TÜM EXTERNAL BOOST'LAR DEVRE DIŞI" reset a few dozen lines
+            # below (`bayesian_prob = _pre_boost_prob`) explicitly lists LEAD_LAG
+            # under "Kapatılan" and its own "CROSS-EXCHANGE LEAD-LAG" block further
+            # down correctly leaves its `bayesian_prob = ... + boost` line commented
+            # out — but that reset only ever wipes a `bayesian_prob += ...` applied
+            # *after* the reset point, so it can never undo a boost baked into
+            # bayesian_prob's own inputs before it exists. LEAD_LAG was the only
+            # one of the "Kapatılan" signals routed through this parameter instead
+            # of a post-hoc `+=`, so it silently kept moving bayesian_prob (and
+            # therefore edge/Kelly sizing) on every live cycle despite being
+            # documented and believed disabled. Hardcoded to 0.0 so the Bayesian
+            # core is actually spot-price-action-only, as intended.
+            cross_exchange_boost=0.0,
             regime_strength=_regime_str,
             regime_direction=_regime_dir,
             trend_pct=trend_pct,
