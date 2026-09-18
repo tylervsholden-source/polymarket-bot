@@ -87,10 +87,13 @@ def _mock_edge_model(engine: ArbitrageEngine, single: float = 0.0, cross: float 
 async def test_yes_direction_uses_yes_token_id():
     """When YES edge dominates, token_id must be the yes_token_id."""
     engine = _make_engine()
-    market = _base_market()
+    # yes_ask lowered to 0.47 (from the 0.50 default) so the edge still clears
+    # OPT-5's effective_min_edge now that total_cost() reflects the real GTC
+    # fill-priority price bump (~0.02) instead of the stale 0.008 estimate.
+    market = _base_market(best_ask="0.47")
 
-    # yes_ask=0.50, probability pushed past the PROB_CAP ceiling (0.65) so the
-    # post-dampening/cap edge (0.15) clears OPT-5's effective_min_edge for YES
+    # probability pushed past the PROB_CAP ceiling (0.65) so the
+    # post-dampening/cap edge clears OPT-5's effective_min_edge for YES
     # no_ask=0.46 → no_prob capped low → no_edge negative
     _mock_bayesian(engine, probability=0.90)
     _mock_kelly(engine, size=50.0)
@@ -267,7 +270,9 @@ async def test_no_direction_rejected_when_no_best_ask_is_none():
 async def test_signal_direction_matches_diagnostics_selected_direction_yes():
     """For YES signals, TradeSignal.direction and diag.selected_direction must both be YES."""
     engine = _make_engine()
-    market = _base_market()
+    # yes_ask lowered so the edge clears OPT-5's effective_min_edge now that
+    # total_cost() reflects the real GTC price-bump cost (see test_yes_direction_uses_yes_token_id).
+    market = _base_market(best_ask="0.47")
 
     _mock_bayesian(engine, probability=0.90)  # strong YES edge at 0.70
     _mock_kelly(engine, size=50.0)

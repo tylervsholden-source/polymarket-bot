@@ -42,9 +42,12 @@ def make_market(yes_price: float, yes_token="yes_tok", no_token="no_tok",
 @pytest.mark.asyncio
 async def test_bullish_yields_yes_direction():
     eng = make_engine()
-    market = make_market(yes_price=0.48)
+    # yes_price=0.46 (lowered from 0.48) so the edge still clears
+    # effective_min_edge now that total_cost() reflects the real GTC
+    # fill-priority price bump (~0.02) instead of the stale 0.008 estimate.
+    market = make_market(yes_price=0.46)
 
-    # Bayesian'ı 0.65 dön (48c piyasa, %65 tahmin → bullish, edge=0.17)
+    # Bayesian'ı 0.65 dön (46c piyasa, %65 tahmin → bullish, edge=0.19)
     with patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.65, signal_strength=0.5)
         signal = await eng._evaluate_market(market, capital=50.0, z_score=0.0, signal_type="bayesian")
@@ -115,7 +118,10 @@ async def test_no_signal_entry_price_is_no_price():
 @pytest.mark.asyncio
 async def test_yes_signal_market_price_is_yes_price():
     eng = make_engine()
-    market = make_market(yes_price=0.48)
+    # yes_price=0.46 (lowered from 0.48) so the edge still clears
+    # effective_min_edge now that total_cost() reflects the real GTC
+    # fill-priority price bump (~0.02) instead of the stale 0.008 estimate.
+    market = make_market(yes_price=0.46)
 
     with patch.object(eng.bayesian, "estimate") as mock_est:
         mock_est.return_value = MagicMock(probability=0.65, signal_strength=0.5)
@@ -123,5 +129,5 @@ async def test_yes_signal_market_price_is_yes_price():
 
     assert signal is not None
     assert signal.direction == "YES"
-    assert signal.market_price == pytest.approx(0.48)
+    assert signal.market_price == pytest.approx(0.46)
     assert signal.token_id == "yes_tok"

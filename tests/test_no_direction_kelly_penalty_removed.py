@@ -70,7 +70,10 @@ async def test_no_direction_no_longer_size_penalized():
     # binance_feed=None -> change_pct=0.0 -> Factor 1 (micro-move) always
     # fires, guaranteeing the CONFIDENCE_MULT log line is emitted so we can
     # inspect its reasons regardless of other (e.g. time-of-day) factors.
-    market = make_market(yes_price=0.70, no_best_ask=0.35, no_best_bid=0.33)
+    # no_best_ask lowered from 0.35 to 0.32 so the edge still clears
+    # effective_min_edge now that total_cost() reflects the real GTC
+    # fill-priority price bump (~0.02) instead of the stale 0.008 estimate.
+    market = make_market(yes_price=0.70, no_best_ask=0.32, no_best_bid=0.30)
 
     captured = []
     handler_id = logger.add(lambda m: captured.append(m.record["message"]), level="INFO")
@@ -103,7 +106,8 @@ async def test_no_direction_size_matches_yes_size_for_symmetric_edge():
     from strategies.kelly_criterion import KellyCriterion
 
     eng = make_engine()
-    market = make_market(yes_price=0.70, no_best_ask=0.35, no_best_bid=0.33)
+    # no_best_ask lowered from 0.35 (see test_no_direction_no_longer_size_penalized)
+    market = make_market(yes_price=0.70, no_best_ask=0.32, no_best_bid=0.30)
 
     with patch("strategies.arbitrage_engine.datetime", _FrozenDatetime), \
          patch.object(eng.bayesian, "estimate") as mock_est:
