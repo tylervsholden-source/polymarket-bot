@@ -430,7 +430,9 @@ class AutonomousDecisionEngine:
     # ADAPTİF PARAMETRE AYARLAMA
     # ═══════════════════════════════════════════════════════════════════
 
-    def get_adaptive_params(self, capital: float | None = None) -> dict:
+    def get_adaptive_params(
+        self, capital: float | None = None, closed_trades: list[dict] | None = None
+    ) -> dict:
         """
         Performansa göre dinamik parametre önerileri.
         Orchestrator bu değerleri okuyup uygulayabilir.
@@ -441,8 +443,25 @@ class AutonomousDecisionEngine:
         ilk trade kapanmadan önce dahil) çağrılıyor. capital verilmezse taze bir
         deploy'da perf.capital 0.0'da kalır ve SURVIVAL modu (min_edge_no 0.18→0.25,
         bet×0.3) yanlışlıkla kalıcı olarak tetiklenir.
+
+        closed_trades: en güncel kapanmış trade listesi. win_rate/
+        consecutive_losses/drawdown_pct SADECE _update_performance() içinde
+        hesaplanır, ve onun TEK çağrı yeri evaluate() — ki o da SADECE bu
+        döngüde en az bir sinyal coord_result.approved_signals'a ulaştıysa
+        çalışır. Çoğu döngüde (aday market yok / her aday bir gate'te
+        elendi) hiç sinyal onaylanmaz, ama position_manager.update_positions()
+        yine de her döngüde gerçek pozisyonları kapatabilir. closed_trades
+        verilmezse, o kapanışlardan doğan gerçek bir kayıp serisi/win_rate
+        düşüşü, bir sonraki sinyal ortaya çıkana kadar (hiç olmayabilir)
+        DEFENSIVE/SURVIVAL sıkılaştırmasını hiç tetiklemeden "NORMAL"
+        görünmeye devam eder. Verildiğinde, evaluate()'in zaten yaptığı gibi
+        önce performans anlık görüntüsünü tazeler.
         """
         perf = self._performance
+        if closed_trades:
+            self._update_performance(
+                closed_trades, capital if capital is not None else perf.capital
+            )
         if capital is not None:
             perf.capital = capital
         params = {
