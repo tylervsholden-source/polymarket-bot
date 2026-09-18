@@ -246,6 +246,12 @@ class TradeAnalyzer:
             return accuracy
 
         is_win = analysis.outcome == "WIN"
+        # NEUTRAL (GTC hiç dolmadı, pnl=0) kapanışlar yön hakkında hiçbir bilgi
+        # taşımaz — trade fiilen gerçekleşmedi. `not is_win` NEUTRAL için de True
+        # olduğundan, bu guard olmadan NEUTRAL kapanışlar "sinyal doğru tahmin
+        # etti" olarak yanlış etiketlenir (bu dosyadaki diğer NEUTRAL-hariç-tutma
+        # düzeltmeleriyle aynı desen).
+        is_resolved = analysis.outcome in ("WIN", "LOSS")
 
         # Whale yönü doğru muydu?
         # BUG: every real producer of this field (agents/whale_tracker.py's
@@ -260,7 +266,7 @@ class TradeAnalyzer:
         # the trade's direction, and WHALE_ALIGNED_WIN could never be
         # detected on a real win (whale_acc could never be True).
         whale_dir = str(signal_data.get("whale_direction", "")).upper()
-        if whale_dir:
+        if whale_dir and is_resolved:
             whale_correct = (
                 (whale_dir == "BULLISH" and analysis.direction == "YES" and is_win) or
                 (whale_dir == "BEARISH" and analysis.direction == "NO" and is_win) or
@@ -275,7 +281,7 @@ class TradeAnalyzer:
         # bunlar asla string-eşit olamaz, bu yüzden UP/DOWN'ı YES/NO'ya
         # haritalayıp karşılaştırıyoruz (whale_direction fix'indeki desenle aynı).
         regime_dir = str(signal_data.get("regime_direction", "")).upper()
-        if regime_dir in ("UP", "DOWN"):
+        if regime_dir in ("UP", "DOWN") and is_resolved:
             regime_correct = (
                 (regime_dir == "UP" and analysis.direction == "YES" and is_win) or
                 (regime_dir == "DOWN" and analysis.direction == "NO" and is_win) or
@@ -286,11 +292,12 @@ class TradeAnalyzer:
 
         # Smart money doğru muydu?
         smart = signal_data.get("smart_money_signal", "")
-        if smart:
+        if smart and is_resolved:
             accuracy["smart_money"] = is_win  # Basitleştirme
 
         # Edge doğru muydu?
-        accuracy["edge_prediction"] = is_win
+        if is_resolved:
+            accuracy["edge_prediction"] = is_win
 
         return accuracy
 
