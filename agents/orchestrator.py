@@ -1101,7 +1101,7 @@ class Orchestrator:
                         "entry_price": signal.entry_price,
                         "bayesian_prob": signal.bayesian_prob,
                         "edge": signal.edge,
-                        "size": signal.size,
+                        "size": bet_size,
                         "yes_token_id": market.get("yes_token_id"),
                         "reviewer_verdict": review_decision.verdict.value,
                         "confluence_score": signal.confluence_score,
@@ -1109,11 +1109,19 @@ class Orchestrator:
                         "ts": time.time(),
                     }
                     self._sim_trades.append(sim_entry)
+                    # Sim path never updated these — live's per-position caps
+                    # (max_open_positions, MAX_DIRECTIONAL, cycle_budget above)
+                    # stayed frozen at their pre-loop values for the rest of
+                    # this cycle in sim/paper mode (86th daily review).
+                    open_count += 1
+                    directional_count += 1
+                    cycle_spent += bet_size
+                    capital -= bet_size
                     logger.success(
                         f"[SIM #{total_sim + 1}/{self._sim_target}] "
                         f"[{review_decision.verdict.value}] "
                         f"{signal.direction} {market['question'][:50]} | "
-                        f"Edge={signal.edge:.3f} Confluence={signal.confluence_score:.2f} ${signal.size:.2f}"
+                        f"Edge={signal.edge:.3f} Confluence={signal.confluence_score:.2f} ${bet_size:.2f}"
                     )
                 else:
                     logger.info(f"[SIM] {market['question'][:50]} | ${signal.size:.2f}")
