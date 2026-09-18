@@ -326,15 +326,39 @@ class Orchestrator:
                 amount = round(price * size, 4) if price and size else 0
                 status = (order.get("status") or "").upper()
 
+                # BUG: CLOB'un GET /orders yanıtı her emrin kendi "outcome"
+                # alanını taşır (Yes/No, bu botun trade ettiği up/down
+                # marketlerde Up/Down) — ama bu hiç okunmadan her pozisyon
+                # koşulsuz "YES" olarak kaydediliyordu ("CLOB doesn't expose
+                # side easily" varsayımı yanlış). Restart sonrası açık kalmış
+                # gerçek bir NO emri MATCHED ise bu pozisyon "YES" olarak
+                # yükleniyordu; update_positions()'daki resolution mantığı
+                # (`close_price = 0.0 if outcome=="YES" else 1.0` NO
+                # resolution'da) gerçek kazanan bir NO pozisyonunu tam LOSS,
+                # gerçek kaybeden bir NO pozisyonunu WIN olarak kapatıp
+                # capital'e ters yönde pnl yazıyordu. asset_id de aynı
+                # sebeple token_id olarak taşınıyor — PositionManager
+                # update_positions() NO pozisyonların kendi orderbook'unu
+                # bulmak için önce bunu tercih ediyor (bkz. o dosyadaki
+                # ilgili yorum).
+                raw_outcome = str(order.get("outcome") or "").strip().upper()
+                if raw_outcome in ("YES", "UP"):
+                    outcome = "YES"
+                elif raw_outcome in ("NO", "DOWN"):
+                    outcome = "NO"
+                else:
+                    outcome = "YES"  # bilinmiyor/eksik — eski varsayılan davranış korunur
+
                 if status == "MATCHED" and amount > 0:
                     self.position_manager.add_position(
                         market_id,
                         {
                             "order_id": order.get("id", market_id),
-                            "outcome": "YES",  # CLOB doesn't expose side easily
+                            "outcome": outcome,
                             "amount": amount,
                             "price": price,
                             "status": "matched",
+                            "token_id": order.get("asset_id", ""),
                         },
                         question=f"[CLOB_SYNC] {market_id[:40]}",
                     )
