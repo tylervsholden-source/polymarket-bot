@@ -30,6 +30,12 @@ from shadow_runner.types import (
     SignalSnapshot,
 )
 from execution_realism.core import compute_executable_ev
+from calibration.types import (
+    BINARY_SANITY_MAX_ASK_SUM_LIVE,
+    BINARY_SANITY_MIN_ASK_SUM_LIVE,
+    LIVE_CAL_CONFIG,
+    CalibrationRejectionReason,
+)
 from core.approval_queue import (
     enqueue as _enqueue_order,
     get_approved as _get_approved_orders,
@@ -2718,11 +2724,34 @@ class Orchestrator:
                 # own gate, so it must not be recorded (or counted by readiness) as EXECUTE.
                 _is_execute_after_realism = is_execute and _er_rejection_reason is None
 
-                # Build rejection reason with NO-side detail
+                # Build rejection reason with NO-side detail.
+                #
+                # Pricing-sanity issues (stale snapshot / suspicious binary ask-sum) are
+                # classified before falling back to the side-diagnostics/NO_SIGNAL_PRODUCED
+                # reasons, using the same CalibrationRejectionReason vocabulary
+                # calibration/decision_policy.py uses. shadow_runner/summary_metrics.py's
+                # stale_pricing_rate / suspicious_underround_rate — which monitoring/
+                # readiness_checks.py's check_stale_pricing_rate / check_suspicious_
+                # underround_rate feed into the TINY_PILOT_CANDIDATE live-gate verdict —
+                # only recognize those exact strings via rej_counts.get("STALE_PRICING"/
+                # "SUSPICIOUS_UNDERROUND"). Without this, a candidate with no matching
+                # signal (sig_match is None, never reaches the execution_realism branch
+                # above) whose pricing was actually stale or suspiciously underround was
+                # silently absorbed into a NoSideStatus value or "NO_SIGNAL_PRODUCED",
+                # leaving those two readiness checks structurally unable to ever fire for
+                # live data no matter what the pricing feed actually did.
                 if _is_execute_after_realism:
                     _rejection_reason = None
                 elif _er_rejection_reason is not None:
                     _rejection_reason = _er_rejection_reason
+                elif _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
+                    _rejection_reason = CalibrationRejectionReason.STALE_PRICING.value
+                elif not (
+                    BINARY_SANITY_MIN_ASK_SUM_LIVE
+                    <= (ask_yes + _ask_no)
+                    <= BINARY_SANITY_MAX_ASK_SUM_LIVE
+                ):
+                    _rejection_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
                 elif _side_diag and _side_diag.direction_reason:
                     _rejection_reason = _side_diag.direction_reason
                 else:
