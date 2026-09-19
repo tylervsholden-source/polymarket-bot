@@ -46,6 +46,10 @@ class TradeClassifier:
     def _load_model(self) -> None:
         """Load pre-trained model from disk if available."""
         if not _ML_AVAILABLE:
+            logger.warning(
+                "scikit-learn not importable — ML classifier disabled, "
+                "ml_score will stay 0.0 (no ML_CAUTION/ML_BOOST sizing effect)"
+            )
             return
         if MODEL_PATH.exists():
             try:
