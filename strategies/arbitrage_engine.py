@@ -1897,7 +1897,22 @@ class ArbitrageEngine:
             size = size * 0.5
             logger.info(f"ML_CAUTION: {question[:40]} ml={ml_score:+.3f} → ${original_ml:.2f}→${size:.2f}")
         elif ml_score > 0.5:
-            logger.info(f"ML_BOOST: {question[:40]} ml={ml_score:+.3f} (high confidence)")
+            # BUG: this branch computed ml_score and logged "ML_BOOST" but
+            # never actually resized — unlike its symmetric ML_CAUTION
+            # counterpart just above (0.5x reduction). Both
+            # strategies/ml_classifier.py's own _load_model() warning
+            # ("ml_score will stay 0.0 (no ML_CAUTION/ML_BOOST sizing
+            # effect)") and the 86th daily review's commit message ("wired
+            # into live Kelly sizing via ML_CAUTION/ML_BOOST/...") document
+            # an ML_BOOST sizing effect that the code never implemented, so
+            # a high-confidence ML prediction never actually influenced a
+            # live bet's size. Mirror ML_CAUTION's 0.5x magnitude with a
+            # symmetric 1.5x increase (re-capped by the MAX_BET_CAP_POST_BOOST
+            # check in the GOLDEN_HOUR block just below, same as any other
+            # boost applied at this point in the pipeline).
+            original_ml = size
+            size = size * 1.5
+            logger.info(f"ML_BOOST: {question[:40]} ml={ml_score:+.3f} → ${original_ml:.2f}→${size:.2f} (high confidence)")
 
         # ── GOLDEN HOUR BOOST ────────────────────────────────────────────
         # Data: 5-8PM ET (1-4AM TR) = 73-100% WR, +$138 profit.
