@@ -1,9 +1,16 @@
 """execution_realism/staleness_penalty.py — Horizon-aware staleness penalty."""
 from __future__ import annotations
 
-from execution_realism.types import StalenessZone, StalenessResult, STALENESS_5M, STALENESS_15M
+from execution_realism.types import (
+    StalenessZone,
+    StalenessResult,
+    STALENESS_5M,
+    STALENESS_15M,
+    STALENESS_60M,
+    STALENESS_240M,
+)
 
-_THRESHOLDS = {5: STALENESS_5M, 15: STALENESS_15M}
+_THRESHOLDS = {5: STALENESS_5M, 15: STALENESS_15M, 60: STALENESS_60M, 240: STALENESS_240M}
 
 
 def compute_staleness_penalty(age_seconds: float, horizon_minutes: int) -> StalenessResult:

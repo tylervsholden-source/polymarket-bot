@@ -112,8 +112,67 @@ class TestHorizonTighterComparison:
         assert result_15m.should_reject is False
 
 
+class TestHorizon60m:
+    """1-hour horizon (live-traded, control_plane/entry_window_guard.py's
+    windows_1h): fresh ≤ 120s, aging 121-300s, stale 301-600s, expired > 600s."""
+
+    def test_fresh(self):
+        result = compute_staleness_penalty(age_seconds=60.0, horizon_minutes=60)
+        assert result.zone == StalenessZone.FRESH
+        assert result.penalty == 0.0
+        assert result.should_reject is False
+
+    def test_aging(self):
+        result = compute_staleness_penalty(age_seconds=200.0, horizon_minutes=60)
+        assert result.zone == StalenessZone.AGING
+        assert result.penalty == 0.002
+        assert result.should_reject is False
+
+    def test_stale(self):
+        result = compute_staleness_penalty(age_seconds=450.0, horizon_minutes=60)
+        assert result.zone == StalenessZone.STALE
+        assert result.penalty == 0.007
+        assert result.should_reject is False
+
+    def test_expired(self):
+        result = compute_staleness_penalty(age_seconds=700.0, horizon_minutes=60)
+        assert result.zone == StalenessZone.EXPIRED
+        assert result.should_reject is True
+
+
+class TestHorizon240m:
+    """4-hour horizon (live-traded per agents/orchestrator.py's "5m/15m/1h/4h"
+    policy): fresh ≤ 180s, aging 181-450s, stale 451-900s, expired > 900s."""
+
+    def test_fresh(self):
+        result = compute_staleness_penalty(age_seconds=60.0, horizon_minutes=240)
+        assert result.zone == StalenessZone.FRESH
+        assert result.penalty == 0.0
+        assert result.should_reject is False
+
+    def test_aging(self):
+        result = compute_staleness_penalty(age_seconds=300.0, horizon_minutes=240)
+        assert result.zone == StalenessZone.AGING
+        assert result.penalty == 0.001
+        assert result.should_reject is False
+
+    def test_stale(self):
+        result = compute_staleness_penalty(age_seconds=700.0, horizon_minutes=240)
+        assert result.zone == StalenessZone.STALE
+        assert result.penalty == 0.005
+        assert result.should_reject is False
+
+    def test_expired(self):
+        result = compute_staleness_penalty(age_seconds=1000.0, horizon_minutes=240)
+        assert result.zone == StalenessZone.EXPIRED
+        assert result.should_reject is True
+
+
 class TestUnsupportedHorizon:
-    """Unsupported horizon → EXPIRED with should_reject=True."""
+    """Unsupported horizon (not one of 5/15/60/240) → EXPIRED with
+    should_reject=True. 60m used to fall in this bucket too, even though
+    agents/orchestrator.py and control_plane/entry_window_guard.py both
+    treat it as a live-traded, first-class horizon — see TestHorizon60m."""
 
     def test_unsupported_horizon_10(self):
         result = compute_staleness_penalty(age_seconds=10.0, horizon_minutes=10)
@@ -125,7 +184,7 @@ class TestUnsupportedHorizon:
         assert result.should_reject is True
 
     def test_unsupported_horizon_penalty(self):
-        result = compute_staleness_penalty(age_seconds=10.0, horizon_minutes=60)
+        result = compute_staleness_penalty(age_seconds=10.0, horizon_minutes=45)
         assert result.penalty == 0.030
 
 
