@@ -45,6 +45,22 @@ STALENESS_15M = StalenessThresholds(
     horizon_minutes=15, fresh_max_seconds=60, aging_max_seconds=180,
     stale_max_seconds=300, aging_penalty=0.003, stale_penalty=0.010,
 )
+# 1h and 4h horizons are live-traded (agents/orchestrator.py explicitly
+# allows 5m/15m/1h/4h markets, and control_plane/entry_window_guard.py
+# treats 60m as a first-class supported horizon), so they need their own
+# thresholds too — continuing the same trend as 5m→15m (longer horizon =
+# a stale price snapshot matters proportionally less, so wider windows /
+# smaller penalties), rather than falling through to the "unsupported
+# horizon" branch below (which always returned EXPIRED/should_reject=True,
+# silently maxing out the staleness penalty on every 1h/4h trade).
+STALENESS_60M = StalenessThresholds(
+    horizon_minutes=60, fresh_max_seconds=120, aging_max_seconds=300,
+    stale_max_seconds=600, aging_penalty=0.002, stale_penalty=0.007,
+)
+STALENESS_240M = StalenessThresholds(
+    horizon_minutes=240, fresh_max_seconds=180, aging_max_seconds=450,
+    stale_max_seconds=900, aging_penalty=0.001, stale_penalty=0.005,
+)
 
 
 @dataclass
