@@ -1275,6 +1275,7 @@ class Orchestrator:
             price = order_req.get("entry_price", 0)
             direction = order_req.get("direction", "YES")
             question = order_req.get("question", "")
+            edge = order_req.get("edge")
 
             if not token_id:
                 logger.error(f"Onaylı emir token_id eksik, atlanıyor: {question[:50]}")
@@ -1335,7 +1336,26 @@ class Orchestrator:
                 self._order_timestamps.append(time.time())
                 order["outcome"] = direction
                 order["token_id"] = token_id or ""
-                self.position_manager.add_position(market_id, order, question, signal_price=price)
+                # BUG: same "wiring" bug class already fixed for token_id above
+                # (see tests/test_approved_order_token_id_wiring.py) — this call
+                # never passed `edge=`, even though `control_plane/approval_queue.
+                # enqueue()` already stores the signal's real edge on every queue
+                # entry (`"edge": order_request.get("edge", 0)`). Every position
+                # opened through this dashboard-approval path was therefore saved
+                # with NO "edge" key at all — not even 0.0, just absent — while the
+                # direct/automatic execution path a few hundred lines up always
+                # passes `edge=signal.edge`. TradeAnalyzer.analyze_trade() later
+                # reads `signal_data.get("edge", 0)` on the closed trade dict, so
+                # every one of these trades silently defaults to edge=0 forever:
+                # root-cause analysis wrongly blames "INSUFFICIENT_EDGE"/
+                # "NO_THIN_EDGE" regardless of the real edge, LOW_EDGE_LOSS fires
+                # on every loss, HIGH_EDGE_WIN can never fire on a win, and
+                # get_recommendations() never sees a true high-edge pattern —
+                # corrupting the whole post-trade learning loop CLAUDE.md
+                # documents for this path.
+                self.position_manager.add_position(
+                    market_id, order, question, signal_price=price, edge=edge,
+                )
                 self._reentry_guard.mark_traded(market_id)
                 open_count += 1  # Sonraki emirler için güncelle
                 # bkz. üstteki doğrudan emir yolundaki aynı düzeltme: CLOB'un
