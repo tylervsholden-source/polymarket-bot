@@ -39,6 +39,10 @@ class MarketInventory:
     no_shares: float = 0.0
     yes_cost: float = 0.0
     no_cost: float = 0.0
+    # When this record was first created (on_fill()'s first fill for this
+    # market_id) — used to expire it once the market must have resolved.
+    # See MakerEngine._expire_resolved_inventory() for why this exists.
+    first_seen: float = field(default_factory=time.time)
 
 
 class MakerEngine:
@@ -52,6 +56,11 @@ class MakerEngine:
     QUOTE_PRICE_MIN = 0.10       # don't bid below 0.10
     QUOTE_PRICE_MAX = 0.90       # don't bid above 0.90
     VOLATILITY_DEFAULT = 0.02    # default 2% volatility for 5m markets
+    # _select_markets() only ever quotes markets closing within 20 minutes,
+    # so any self._inventory record older than this can only belong to a
+    # market that has already resolved (paid out or lost) — comfortably
+    # longer than the 20-minute quoting window plus resolution latency.
+    INVENTORY_MAX_AGE_SEC = 1800  # 30 min
 
     def __init__(
         self,
@@ -128,10 +137,38 @@ class MakerEngine:
         engine has already committed to real orders. Callers must subtract
         this from pool_available("maker") before handing capital to
         refresh_quotes(), or the same capital gets re-committed every cycle.
+
+        BUG: on_fill() only ever increments a MarketInventory's yes_cost/
+        no_cost (self._inventory[market_id] += ...); nothing ever decremented
+        them or removed the entry once that market resolved. Every crypto
+        up/down market is a brand-new, unique market_id valid for only 5-15
+        minutes (_select_markets() only considers markets closing within 20
+        minutes), so within roughly half an hour of any fill the real USDC
+        has already been paid out or lost and is reflected in the wallet
+        balance Orchestrator._sync_real_balance() reads directly from the
+        CLOB — but the matching self._inventory entry lived on forever,
+        permanently counting against this method's total. Committed capital
+        (and therefore maker_capital = pool_available("maker") -
+        get_committed_capital() in Orchestrator._cycle()) only ever grew as
+        more markets cycled through and resolved, eventually clamping
+        maker_capital to $0 forever even though none of that capital was
+        actually still at risk.
         """
+        self._expire_resolved_inventory()
         standing = self.get_total_locked()
         filled = sum(inv.yes_cost + inv.no_cost for inv in self._inventory.values())
         return standing + filled
+
+    def _expire_resolved_inventory(self) -> None:
+        """Drop inventory records old enough that their market must have
+        already resolved (see get_committed_capital()'s docstring)."""
+        cutoff = time.time() - self.INVENTORY_MAX_AGE_SEC
+        stale_ids = [
+            market_id for market_id, inv in self._inventory.items()
+            if inv.first_seen < cutoff
+        ]
+        for market_id in stale_ids:
+            del self._inventory[market_id]
 
     # ── Internal ──
 
