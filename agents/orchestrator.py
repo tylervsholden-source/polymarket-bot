@@ -32,7 +32,9 @@ from shadow_runner.types import (
 from execution_realism.core import compute_executable_ev
 from calibration.types import (
     BINARY_SANITY_MAX_ASK_SUM_LIVE,
+    BINARY_SANITY_MAX_BID_SUM_LIVE,
     BINARY_SANITY_MIN_ASK_SUM_LIVE,
+    BINARY_SANITY_MIN_SINGLE_ASK_LIVE,
     LIVE_CAL_CONFIG,
     CalibrationRejectionReason,
 )
@@ -2747,7 +2749,24 @@ class Orchestrator:
                 # sanity check (step 6b) as a hard REJECT for every live candidate
                 # regardless of whether a signal matched, before any EV/staleness gate.
                 # Compute it unconditionally so it can downgrade an EXECUTE candidate too.
+                #
+                # 96th daily review: the 95th review only ported step 1 of
+                # calibration/decision_policy.py::_check_binary_sanity() (the ask_sum
+                # band). Steps 2 (bid_sum ceiling — near risk-free arb) and 3
+                # (individual ask floor — one-sided quote pathology), which
+                # _check_binary_sanity() applies for live mode exactly like step 1,
+                # were left unported — so a matched, execution_realism-passing
+                # candidate with e.g. bid_yes+bid_no=1.05 or ask_no=0.01 was still
+                # recorded as EXECUTE with rejection_reason=None. Both feed the same
+                # suspicious_underround_rate readiness check (monitoring/
+                # readiness_checks.py::check_suspicious_underround_rate) that gates
+                # control_plane/live_gate.py's TINY_PILOT_CANDIDATE verdict, so this
+                # left the same blind spot the 95th review closed for step 1 open for
+                # steps 2/3. Ported using pricing_snap.bid_yes/bid_no (the same
+                # fallback-filled values, not the raw possibly-zero bid_yes/_bid_no
+                # locals) so this matches what a real PricingSnapshot would carry.
                 _pricing_sanity_reason: str | None = None
+                _bid_sum = pricing_snap.bid_yes + pricing_snap.bid_no
                 if _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
                     _pricing_sanity_reason = CalibrationRejectionReason.STALE_PRICING.value
                 elif not (
@@ -2755,6 +2774,10 @@ class Orchestrator:
                     <= (ask_yes + _ask_no)
                     <= BINARY_SANITY_MAX_ASK_SUM_LIVE
                 ):
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif _bid_sum > BINARY_SANITY_MAX_BID_SUM_LIVE:
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif ask_yes < BINARY_SANITY_MIN_SINGLE_ASK_LIVE or _ask_no < BINARY_SANITY_MIN_SINGLE_ASK_LIVE:
                     _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
 
                 # is_execute is downgraded to a REJECT below execution_realism found

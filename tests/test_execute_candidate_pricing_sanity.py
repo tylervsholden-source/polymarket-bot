@@ -125,6 +125,69 @@ class TestPricingSanityAppliedToExecuteCandidates:
         assert ds.passes_final_gate is False
         assert ds.rejection_reason == "STALE_PRICING"
 
+    def test_bid_sum_ceiling_execute_candidate_downgraded_to_reject(self):
+        """96th daily review: bid_yes(0.49) + bid_no(0.52) = 1.01, just over the
+        live BINARY_SANITY_MAX_BID_SUM_LIVE ceiling of 1.00 (near risk-free-arb
+        territory) -- while ask_sum(1.00) stays comfortably inside the [0.97,
+        1.10] band, so the 95th review's ask_sum-only port would miss this."""
+        market, signal = _yes_signal(
+            "cond-bidsum-execute",
+            best_ask=0.50, best_bid=0.49,
+            no_best_ask=0.50, no_best_bid=0.52,
+        )
+        signal.entry_price = 0.50
+        signal.market_price = 0.50
+        signal.bayesian_prob = 0.65
+        signal.edge = 0.15
+        orch, written = _make_fake_orchestrator()
+
+        orch._record_shadow_decisions(
+            [market], [signal], intended_size=3.0,
+            market_fetch_utc=datetime.now(timezone.utc),
+        )
+
+        assert len(written) == 1
+        ds = written[0].decision_summary
+        assert ds.decision == "REJECT", (
+            "bid_sum-over-ceiling EXECUTE candidate was still recorded as "
+            "EXECUTE — bid_sum ceiling (step 2 of _check_binary_sanity) was "
+            "never ported to the shadow path"
+        )
+        assert ds.passes_final_gate is False
+        assert ds.rejection_reason == "SUSPICIOUS_UNDERROUND"
+
+    def test_min_single_ask_execute_candidate_downgraded_to_reject(self):
+        """96th daily review: ask_yes=0.03, under the live
+        BINARY_SANITY_MIN_SINGLE_ASK_LIVE floor of 0.05 (one-sided quote
+        pathology) -- while ask_sum(1.00) and bid_sum(0.97) both stay inside
+        their respective bands, so neither of the other two checks catches
+        this."""
+        market, signal = _yes_signal(
+            "cond-minsingle-execute",
+            best_ask=0.03, best_bid=0.02,
+            no_best_ask=0.97, no_best_bid=0.95,
+        )
+        signal.entry_price = 0.03
+        signal.market_price = 0.03
+        signal.bayesian_prob = 0.12
+        signal.edge = 0.09
+        orch, written = _make_fake_orchestrator()
+
+        orch._record_shadow_decisions(
+            [market], [signal], intended_size=3.0,
+            market_fetch_utc=datetime.now(timezone.utc),
+        )
+
+        assert len(written) == 1
+        ds = written[0].decision_summary
+        assert ds.decision == "REJECT", (
+            "one-sided-quote EXECUTE candidate was still recorded as EXECUTE "
+            "— the individual ask floor (step 3 of _check_binary_sanity) was "
+            "never ported to the shadow path"
+        )
+        assert ds.passes_final_gate is False
+        assert ds.rejection_reason == "SUSPICIOUS_UNDERROUND"
+
     def test_healthy_execute_candidate_still_records_as_execute(self):
         """No regression: a comfortably fillable, fresh, well-priced candidate
         must still be recorded as EXECUTE, same as before."""
