@@ -651,7 +651,11 @@ class Orchestrator:
                 open_positions=open_count,
                 max_positions=self.max_open_positions,
                 positions=self.position_manager.data.get("positions", {}),
-                closed=self.position_manager.data.get("closed", []),
+                # BUG (86. review): dogrudan position_manager.data["closed"]
+                # okunuyordu — sim/paper modda (varsayilan) her zaman bos,
+                # cunku sonuclar self._sim_results'a yaziliyor (bkz.
+                # _current_closed_trades() docstring, 82-85. review).
+                closed=self._current_closed_trades(),
             )
             _sw.save()
             return
@@ -1531,7 +1535,11 @@ class Orchestrator:
             max_positions=self.max_open_positions,
             next_cycle_in=f"{self.interval}s",
             positions=pm_data.get("positions", {}),
-            closed=pm_data.get("closed", []),
+            # BUG (86. review): pm_data["closed"] sim/paper modda (varsayilan)
+            # hep bos — dashboard kapanmis trade listesi hicbir zaman
+            # dolmuyordu. _current_closed_trades() ile ayni kaynaga tasindi
+            # (bkz. 82-85. review, _analyze_new_closed_trades()).
+            closed=self._current_closed_trades(),
             signal_mode="arbitrage",
             spot_prices=_spot_prices,
         )
