@@ -108,6 +108,33 @@ def compute_bet_size(
     return bet_size, effective_min
 
 
+def compute_cycle_risk_budget(
+    total_capital: float,
+    directional_locked: float,
+    max_pct: float = 0.18,
+    hard_cap: float = 20.0,
+) -> float:
+    """Cycle-level directional risk budget — how much MORE may be committed
+    to new directional positions this cycle, on top of what's already locked.
+
+    Bug: the call site used to compute the ceiling (max_pct of capital,
+    capped at hard_cap) from `capital` = position_manager.available_capital()
+    (total capital minus every locked position, directional_locked included),
+    then subtracted directional_locked from that already-shrunk ceiling —
+    double-counting the locked amount. E.g. total capital=$100 with $15 already
+    locked in directional positions: available capital=$85, so the old code's
+    ceiling was min($85*0.18, $20)=$15.30 and budget=$15.30-$15=$0.30, versus
+    the intended "max 18% of the $100 portfolio in directional risk" reading
+    of min($100*0.18, $20)=$18, budget=$18-$15=$3 — a 10x-tighter budget than
+    documented, and one that gets silently tighter still as more positions
+    open, exactly when this cap is meant to matter most. The ceiling must be
+    computed from TOTAL account capital, not from capital that already
+    excludes the very amount being subtracted next.
+    """
+    max_risk = min(total_capital * max_pct, hard_cap)
+    return max(0.0, max_risk - directional_locked)
+
+
 def apply_risk_size_multiplier(bet_size: float, multiplier: float) -> float:
     """Apply AutonomousDecisionEngine's risk-based size_multiplier to bet_size.
 
@@ -786,9 +813,12 @@ class Orchestrator:
             if p.get("strategy") == "bond"
         )
         directional_locked = locked - bond_locked
-        max_risk = min(capital * 0.18, 20.0)
-        remaining_risk = max(0.0, max_risk - directional_locked)
-        cycle_budget = remaining_risk
+        # Ceiling must come from TOTAL account capital, not the
+        # already-locked-excluded `capital` (available_capital()) — see
+        # compute_cycle_risk_budget()'s own docstring for why using the
+        # latter double-counts directional_locked.
+        total_capital = self.position_manager.data.get("capital", capital)
+        cycle_budget = compute_cycle_risk_budget(total_capital, directional_locked)
         cycle_spent = 0.0
 
         # ── EXECUTE APPROVED SIGNALS (coordinator-reviewed + autonomous engine) ──
