@@ -32,7 +32,9 @@ from shadow_runner.types import (
 from execution_realism.core import compute_executable_ev
 from calibration.types import (
     BINARY_SANITY_MAX_ASK_SUM_LIVE,
+    BINARY_SANITY_MAX_BID_SUM_LIVE,
     BINARY_SANITY_MIN_ASK_SUM_LIVE,
+    BINARY_SANITY_MIN_SINGLE_ASK_LIVE,
     LIVE_CAL_CONFIG,
     CalibrationRejectionReason,
 )
@@ -2747,6 +2749,18 @@ class Orchestrator:
                 # sanity check (step 6b) as a hard REJECT for every live candidate
                 # regardless of whether a signal matched, before any EV/staleness gate.
                 # Compute it unconditionally so it can downgrade an EXECUTE candidate too.
+                #
+                # 96th daily review: this only ever copied step 1 of
+                # calibration/decision_policy.py::_check_binary_sanity() (the ask_sum
+                # band). Steps 2 (bid_sum ceiling) and 3 (individual ask floor) — both
+                # enforced unconditionally in live mode per LIVE_CAL_CONFIG.
+                # check_bid_overround=True — were never checked here, so a candidate
+                # with bid_yes+bid_no > 1.00 (near risk-free-arb pricing) or a
+                # pathologically one-sided ask (e.g. ask_no < 0.05) could still be
+                # recorded as EXECUTE. Added to match _check_binary_sanity()'s
+                # remaining checks, using the same effective bid/ask values already
+                # stored on pricing_snap (post fallback-substitution) so this check
+                # sees exactly what the record itself claims.
                 _pricing_sanity_reason: str | None = None
                 if _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
                     _pricing_sanity_reason = CalibrationRejectionReason.STALE_PRICING.value
@@ -2754,6 +2768,13 @@ class Orchestrator:
                     BINARY_SANITY_MIN_ASK_SUM_LIVE
                     <= (ask_yes + _ask_no)
                     <= BINARY_SANITY_MAX_ASK_SUM_LIVE
+                ):
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif (pricing_snap.bid_yes + pricing_snap.bid_no) > BINARY_SANITY_MAX_BID_SUM_LIVE:
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif (
+                    pricing_snap.ask_yes < BINARY_SANITY_MIN_SINGLE_ASK_LIVE
+                    or pricing_snap.ask_no < BINARY_SANITY_MIN_SINGLE_ASK_LIVE
                 ):
                     _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
 
