@@ -159,7 +159,7 @@ class CandlestickAnalyzer:
         c3 = CA._c(klines[-3])   # Two back
 
         body1, body2, body3 = CA._body(c1), CA._body(c2), CA._body(c3)
-        range1, range2 = CA._range(c1), CA._range(c2)
+        range1, range2, range3 = CA._range(c1), CA._range(c2), CA._range(c3)
         uw1, lw1 = CA._upper_wick(c1), CA._lower_wick(c1)
 
         # ═══════════════════════════════════════════════════════════════════
@@ -269,15 +269,23 @@ class CandlestickAnalyzer:
             patterns.append("EVENING_STAR")
 
         # 16. THREE WHITE SOLDIERS — three consecutive bullish with higher closes
+        # Each candle's body must be strong relative to ITS OWN range (body3/range3,
+        # body2/range2, body1/range1) — comparing all three bodies against range1
+        # (a bug: range3 was never even computed) let a strong-but-unrelated last
+        # candle's range set the bar for candles 2/3, so two weak/indecisive
+        # (near-doji) candles could pass whenever the most recent candle's range
+        # happened to be small, falsely emitting the single highest-magnitude
+        # score in _PATTERN_SCORES (+0.9).
         if (CA._is_bullish(c3) and CA._is_bullish(c2) and CA._is_bullish(c1) and
                 c2[4] > c3[4] and c1[4] > c2[4] and
-                body3 > range1 * 0.3 and body2 > range1 * 0.3 and body1 > range1 * 0.3):
+                body3 > range3 * 0.3 and body2 > range2 * 0.3 and body1 > range1 * 0.3):
             patterns.append("THREE_WHITE_SOLDIERS")
 
         # 17. THREE BLACK CROWS — three consecutive bearish with lower closes
+        # Same own-range fix as THREE_WHITE_SOLDIERS above.
         if (CA._is_bearish(c3) and CA._is_bearish(c2) and CA._is_bearish(c1) and
                 c2[4] < c3[4] and c1[4] < c2[4] and
-                body3 > range1 * 0.3 and body2 > range1 * 0.3 and body1 > range1 * 0.3):
+                body3 > range3 * 0.3 and body2 > range2 * 0.3 and body1 > range1 * 0.3):
             patterns.append("THREE_BLACK_CROWS")
 
         # 18. THREE INSIDE UP — bearish + bullish harami + bullish continuation
