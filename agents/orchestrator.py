@@ -2733,11 +2733,40 @@ class Orchestrator:
                     except Exception:
                         pass
 
+                # 95th daily review: STALE_PRICING/SUSPICIOUS_UNDERROUND (below) were
+                # only ever consulted in the elif chain reached when a candidate was
+                # ALREADY going to be recorded as REJECT for some other reason (no
+                # matching signal, or execution_realism's own gate). A candidate with a
+                # matching signal that passed execution_realism (_er_rejection_reason is
+                # None) skipped this elif chain entirely via the `if
+                # _is_execute_after_realism:` branch — so pricing-sanity was never
+                # checked for it at all, and it was recorded as EXECUTE even if its
+                # ask_yes+ask_no was wildly outside the live sanity band or its snapshot
+                # was stale. calibration/decision_policy.py::decide() — the canonical
+                # policy this shadow path is meant to mirror — runs this exact binary
+                # sanity check (step 6b) as a hard REJECT for every live candidate
+                # regardless of whether a signal matched, before any EV/staleness gate.
+                # Compute it unconditionally so it can downgrade an EXECUTE candidate too.
+                _pricing_sanity_reason: str | None = None
+                if _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
+                    _pricing_sanity_reason = CalibrationRejectionReason.STALE_PRICING.value
+                elif not (
+                    BINARY_SANITY_MIN_ASK_SUM_LIVE
+                    <= (ask_yes + _ask_no)
+                    <= BINARY_SANITY_MAX_ASK_SUM_LIVE
+                ):
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+
                 # is_execute is downgraded to a REJECT below execution_realism found
                 # unexecutable (see _er_rejection_reason above) — the signal existed,
                 # but a real live order would not have survived compute_executable_ev()'s
                 # own gate, so it must not be recorded (or counted by readiness) as EXECUTE.
-                _is_execute_after_realism = is_execute and _er_rejection_reason is None
+                # A pricing-sanity failure (above) downgrades it the same way.
+                _is_execute_after_realism = (
+                    is_execute
+                    and _er_rejection_reason is None
+                    and _pricing_sanity_reason is None
+                )
 
                 # Build rejection reason with NO-side detail.
                 #
@@ -2759,14 +2788,8 @@ class Orchestrator:
                     _rejection_reason = None
                 elif _er_rejection_reason is not None:
                     _rejection_reason = _er_rejection_reason
-                elif _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
-                    _rejection_reason = CalibrationRejectionReason.STALE_PRICING.value
-                elif not (
-                    BINARY_SANITY_MIN_ASK_SUM_LIVE
-                    <= (ask_yes + _ask_no)
-                    <= BINARY_SANITY_MAX_ASK_SUM_LIVE
-                ):
-                    _rejection_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif _pricing_sanity_reason is not None:
+                    _rejection_reason = _pricing_sanity_reason
                 elif _side_diag and _side_diag.direction_reason:
                     _rejection_reason = _side_diag.direction_reason
                 else:
