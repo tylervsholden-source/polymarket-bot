@@ -43,12 +43,18 @@ from agents.orchestrator import Orchestrator
 
 def test_direct_order_path_decrements_by_real_order_amount():
     src = inspect.getsource(Orchestrator._cycle)
-    assert 'real_cost = order.get("amount", bet_size)' in src
-    assert "capital -= real_cost" in src
-    assert "cycle_spent += real_cost" in src
+    # isolate the live-order-placement branch: the 86th daily review added a
+    # legitimate `capital -= bet_size` / `cycle_spent += bet_size` pair to the
+    # sim/paper `else:` branch below this one (see
+    # test_sim_mode_cycle_budget_counters.py), so the negative assertions
+    # below must not scan the whole function.
+    live_branch = src[src.index("if self._is_live_trading():"): src.index("            else:\n")]
+    assert 'real_cost = order.get("amount", bet_size)' in live_branch
+    assert "capital -= real_cost" in live_branch
+    assert "cycle_spent += real_cost" in live_branch
     # the old, buggy form must be gone
-    assert "capital -= bet_size\n" not in src
-    assert "cycle_spent += bet_size\n" not in src
+    assert "capital -= bet_size\n" not in live_branch
+    assert "cycle_spent += bet_size\n" not in live_branch
 
 
 def test_approval_queue_path_decrements_by_real_order_amount():
