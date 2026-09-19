@@ -32,7 +32,9 @@ from shadow_runner.types import (
 from execution_realism.core import compute_executable_ev
 from calibration.types import (
     BINARY_SANITY_MAX_ASK_SUM_LIVE,
+    BINARY_SANITY_MAX_BID_SUM_LIVE,
     BINARY_SANITY_MIN_ASK_SUM_LIVE,
+    BINARY_SANITY_MIN_SINGLE_ASK_LIVE,
     LIVE_CAL_CONFIG,
     CalibrationRejectionReason,
 )
@@ -2747,6 +2749,14 @@ class Orchestrator:
                 # sanity check (step 6b) as a hard REJECT for every live candidate
                 # regardless of whether a signal matched, before any EV/staleness gate.
                 # Compute it unconditionally so it can downgrade an EXECUTE candidate too.
+                # 96th daily review: only _check_binary_sanity()'s step 1 (ask_sum
+                # band) was mirrored here. Steps 2 (bid_sum ceiling) and 3
+                # (per-side min ask floor) were left unimplemented, so a live
+                # candidate with bid_yes+bid_no > 1.00 (risk-free-arb territory)
+                # or a pathological one-sided ask (e.g. ask_no=0.02) still sailed
+                # through as EXECUTE — decision_policy.py::decide() rejects both
+                # as SUSPICIOUS_UNDERROUND for every live candidate, matching
+                # LIVE_CAL_CONFIG.check_bid_overround=True.
                 _pricing_sanity_reason: str | None = None
                 if _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
                     _pricing_sanity_reason = CalibrationRejectionReason.STALE_PRICING.value
@@ -2755,6 +2765,10 @@ class Orchestrator:
                     <= (ask_yes + _ask_no)
                     <= BINARY_SANITY_MAX_ASK_SUM_LIVE
                 ):
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif LIVE_CAL_CONFIG.check_bid_overround and (bid_yes + _bid_no) > BINARY_SANITY_MAX_BID_SUM_LIVE:
+                    _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
+                elif ask_yes < BINARY_SANITY_MIN_SINGLE_ASK_LIVE or _ask_no < BINARY_SANITY_MIN_SINGLE_ASK_LIVE:
                     _pricing_sanity_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
 
                 # is_execute is downgraded to a REJECT below execution_realism found
