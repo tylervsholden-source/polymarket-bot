@@ -145,9 +145,17 @@ class TradeAnalyzer:
 
         # Win/Loss/Neutral belirle — position_manager'ın verdiği gerçek sonucu kullan
         # (dolmamış emir/iade → NEUTRAL, pnl==0 ile LOSS karıştırılmamalı)
+        # EXPIRED (sim modunda market 45dk+ resolve olmadan expire olduğunda,
+        # bkz. orchestrator._check_sim_resolutions) de aynı sebeple NEUTRAL'a
+        # eşlenir: trade["pnl"] hiç set edilmediği için pnl=0 varsayılır ve bu
+        # dal olmasaydı `0 > 0 == False` → her EXPIRED kapanış LOSS olarak
+        # yanlış etiketlenirdi (yön hakkında hiçbir bilgi taşımayan bir
+        # kapanış için).
         result = trade.get("result")
         if result in ("WIN", "LOSS", "NEUTRAL"):
             analysis.outcome = result
+        elif result == "EXPIRED":
+            analysis.outcome = "NEUTRAL"
         else:
             analysis.outcome = "WIN" if analysis.pnl > 0 else "LOSS"
 
