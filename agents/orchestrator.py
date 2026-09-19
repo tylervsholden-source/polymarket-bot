@@ -2656,6 +2656,7 @@ class Orchestrator:
 
                 fill_fraction = None
                 execution_adjusted_ev = gross_ev
+                _er_rejection_reason = None
                 if is_execute and gross_ev is not None:
                     try:
                         # NO-direction signals must be priced on the NO side (1-yes_prob
@@ -2684,12 +2685,44 @@ class Orchestrator:
                         )
                         fill_fraction = er.fill_fraction
                         execution_adjusted_ev = er.executable_ev
+                        # 92nd daily review: er.passes_gate (policy_mode="live") was
+                        # computed but never read — every EXECUTE record was written
+                        # as decision=EXECUTE_*/passes_final_gate=True/rejection_reason=
+                        # None regardless of what execution_realism itself concluded.
+                        # execution_realism/core.py's own docstring says a live PARTIAL
+                        # fill "rejected at decide() as PARTIAL_FILL_REJECTED" — but no
+                        # caller ever performed that mapping. Consequence: the three
+                        # shadow_runner/summary_metrics.py rates that monitoring/
+                        # readiness_checks.py gates the TINY_PILOT_CANDIDATE verdict on
+                        # (partial_fill_rejection_rate, stale_pricing_rate via this path,
+                        # and — had underround detection been wired here — suspicious_
+                        # underround_rate) counted `rejection_counts.get(...)` against a
+                        # rejection_reason that could never be produced for an executed
+                        # candidate, keeping those rates pinned at 0.0/GREEN even when
+                        # execution reality said the trade should not have gone through.
+                        if not er.passes_gate:
+                            if er.fill_sim.fill_decision == "PARTIAL":
+                                _er_rejection_reason = "PARTIAL_FILL_REJECTED"
+                            elif er.fill_sim.fill_decision == "UNFILLABLE":
+                                _er_rejection_reason = "UNFILLABLE"
+                            elif er.staleness.should_reject:
+                                _er_rejection_reason = "STALE_PRICING"
+                            else:
+                                _er_rejection_reason = "EXECUTABLE_EV_BELOW_THRESHOLD"
                     except Exception:
                         pass
 
+                # is_execute is downgraded to a REJECT below execution_realism found
+                # unexecutable (see _er_rejection_reason above) — the signal existed,
+                # but a real live order would not have survived compute_executable_ev()'s
+                # own gate, so it must not be recorded (or counted by readiness) as EXECUTE.
+                _is_execute_after_realism = is_execute and _er_rejection_reason is None
+
                 # Build rejection reason with NO-side detail
-                if is_execute:
+                if _is_execute_after_realism:
                     _rejection_reason = None
+                elif _er_rejection_reason is not None:
+                    _rejection_reason = _er_rejection_reason
                 elif _side_diag and _side_diag.direction_reason:
                     _rejection_reason = _side_diag.direction_reason
                 else:
@@ -2704,7 +2737,7 @@ class Orchestrator:
                 # ("EXECUTE_YES", "EXECUTE_NO") to identify live executes; a bare
                 # "EXECUTE" literal never matches, so every real live EXECUTE
                 # decision written here was silently invisible to those consumers.
-                if is_execute:
+                if _is_execute_after_realism:
                     _decision_value = "EXECUTE_YES" if sig_match.direction == "YES" else "EXECUTE_NO"  # type: ignore[union-attr]
                 else:
                     _decision_value = "REJECT"
@@ -2713,8 +2746,8 @@ class Orchestrator:
                     decision=_decision_value,
                     rejection_reason=_rejection_reason,
                     policy_mode="live",
-                    passes_final_gate=is_execute,
-                    intended_size_usdc_used=intended_size if is_execute else 0.0,
+                    passes_final_gate=_is_execute_after_realism,
+                    intended_size_usdc_used=intended_size if _is_execute_after_realism else 0.0,
                     gross_ev=gross_ev,
                     execution_adjusted_ev=execution_adjusted_ev,
                     fill_fraction=fill_fraction,
