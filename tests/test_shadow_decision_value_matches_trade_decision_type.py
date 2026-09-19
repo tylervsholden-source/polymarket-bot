@@ -87,15 +87,26 @@ def _no_signal(condition_id: str):
     market = {
         "condition_id": condition_id,
         "question": "Bitcoin 5 min up or down?",
-        "best_ask": 0.28,
-        "best_bid": 0.27,
+        "best_ask": 0.35,
+        "best_bid": 0.34,
         "volume": 50_000,
-        "no_best_ask": 0.55,
-        "no_best_bid": 0.53,
+        # ask_yes(0.35) + ask_no(0.65) = 1.00, inside the live sanity band
+        # [0.97, 1.10] (95th daily review wired pricing-sanity checks into
+        # this same EXECUTE path). The original 0.28/0.55 pair summed to
+        # 0.83 — a genuine SUSPICIOUS_UNDERROUND that would now (correctly)
+        # defeat this test's unrelated EXECUTE_NO-labeling assertion below —
+        # and, combined with bayesian_prob=0.30, also left no ask_no value
+        # that was simultaneously sane *and* execution_realism-profitable
+        # (fair no-vig ask_no at ask_yes=0.28 is ~0.72, already above the
+        # implied prob(NO)=0.70, i.e. not a real positive-edge NO trade).
+        # bayesian_prob=0.10 below (prob(NO)=0.90) keeps real edge comfortably
+        # positive (0.90 - 0.65 - fee) against this sane, fairly-priced book.
+        "no_best_ask": 0.65,
+        "no_best_bid": 0.63,
     }
     signal = SimpleNamespace(
-        market=market, direction="NO", bayesian_prob=0.30,
-        market_price=0.28, edge=0.15, entry_price=0.55, size=3.0,
+        market=market, direction="NO", bayesian_prob=0.10,
+        market_price=0.35, edge=0.15, entry_price=0.65, size=3.0,
         z_score=0.0, signal_type="ARB", reasoning="test",
         token_id="tok-no", side_diagnostics=None,
     )
