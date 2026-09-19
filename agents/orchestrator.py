@@ -30,6 +30,12 @@ from shadow_runner.types import (
     SignalSnapshot,
 )
 from execution_realism.core import compute_executable_ev
+from calibration.types import (
+    BINARY_SANITY_MAX_ASK_SUM_LIVE,
+    BINARY_SANITY_MIN_ASK_SUM_LIVE,
+    LIVE_CAL_CONFIG,
+    CalibrationRejectionReason,
+)
 from core.approval_queue import (
     enqueue as _enqueue_order,
     get_approved as _get_approved_orders,
@@ -2687,9 +2693,31 @@ class Orchestrator:
                     except Exception:
                         pass
 
-                # Build rejection reason with NO-side detail
+                # Build rejection reason with NO-side detail.
+                #
+                # Pricing-sanity issues are classified first, with the same
+                # CalibrationRejectionReason vocabulary calibration/decision_policy.py
+                # uses. shadow_runner/summary_metrics.py's stale_pricing_rate and
+                # suspicious_underround_rate — which monitoring/readiness_checks.py's
+                # check_stale_pricing_rate / check_suspicious_underround_rate feed into
+                # the TINY_PILOT_CANDIDATE live-gate verdict — only recognize those
+                # exact strings via rej_counts.get("STALE_PRICING"/"SUSPICIOUS_UNDERROUND").
+                # Previously this branch only ever produced a NoSideStatus value (e.g.
+                # "BOTH_EDGES_NEGATIVE") or "NO_SIGNAL_PRODUCED" for live records, so a
+                # genuinely stale snapshot or a suspicious YES+NO ask sum was silently
+                # absorbed into those other reasons and both rates stayed pinned at 0.0
+                # for live data no matter what actually happened — leaving those two
+                # readiness checks structurally unable to ever fire for live.
                 if is_execute:
                     _rejection_reason = None
+                elif _snapshot_age > LIVE_CAL_CONFIG.max_snapshot_age_seconds:
+                    _rejection_reason = CalibrationRejectionReason.STALE_PRICING.value
+                elif not (
+                    BINARY_SANITY_MIN_ASK_SUM_LIVE
+                    <= (ask_yes + _ask_no)
+                    <= BINARY_SANITY_MAX_ASK_SUM_LIVE
+                ):
+                    _rejection_reason = CalibrationRejectionReason.SUSPICIOUS_UNDERROUND.value
                 elif _side_diag and _side_diag.direction_reason:
                     _rejection_reason = _side_diag.direction_reason
                 else:
