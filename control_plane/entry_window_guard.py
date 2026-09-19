@@ -60,6 +60,7 @@ class EntryWindowPolicy:
     windows_5m: EntryWindowConfig = None  # type: ignore[assignment]
     windows_15m: EntryWindowConfig = None  # type: ignore[assignment]
     windows_1h: EntryWindowConfig = None  # type: ignore[assignment]
+    windows_4h: EntryWindowConfig = None  # type: ignore[assignment]
 
     def __post_init__(self):
         # Entry window genişletildi — sinyal neyse o, zamanlama engellemesin
@@ -78,6 +79,19 @@ class EntryWindowPolicy:
                 entry_before_start_sec=3600,
                 entry_after_start_sec=3600,
             )
+        if self.windows_4h is None:
+            # Same "window = ±1 horizon" ratio used for 15m/1h above.
+            # orchestrator.py's own comment ("Tüm zaman dilimlerine izin
+            # ver: 5m, 15m, 1h, 4h") and _shadow_detect_horizon()'s explicit
+            # "4 hour"/"4h" -> 240 detection both treat 4h as a real, already-
+            # live horizon — this config used to be missing entirely, which
+            # forced every 4h-horizon market into check_entry_window()'s
+            # "unsupported horizon" branch (see below), unconditionally
+            # blocking live entry on them regardless of signal quality.
+            self.windows_4h = EntryWindowConfig(
+                entry_before_start_sec=14400,
+                entry_after_start_sec=14400,
+            )
 
     def get_window(self, horizon_minutes: int) -> Optional[EntryWindowConfig]:
         if horizon_minutes == 5:
@@ -86,6 +100,8 @@ class EntryWindowPolicy:
             return self.windows_15m
         if horizon_minutes == 60:
             return self.windows_1h
+        if horizon_minutes == 240:
+            return self.windows_4h
         return None
 
 
@@ -275,18 +291,24 @@ def check_entry_window(
             market_start_utc=market_start,
         )
 
-    # Normalize to closest supported horizon
+    # Normalize to closest supported horizon. The 240 (4h) band is a tight
+    # +/-5m tolerance around the nominal value, like the 15m/60m bands above,
+    # NOT "anything above 65" — a 30m/1h30m/2h market is a genuinely
+    # different (unsupported) horizon, not a mis-parsed 4h one, and must
+    # still fall through to ENTRY_WINDOW_UNAVAILABLE below.
     if horizon <= 7:
         horizon_key = 5
     elif horizon <= 20:
         horizon_key = 15
     elif horizon <= 65:
         horizon_key = 60
+    elif 235 <= horizon <= 245:
+        horizon_key = 240
     else:
         return EntryWindowResult(
             passed=False,
             rejection=EntryWindowRejection.ENTRY_WINDOW_UNAVAILABLE,
-            reason=f"No entry window policy for horizon={horizon}m (only 5m/15m/1h supported)",
+            reason=f"No entry window policy for horizon={horizon}m (only 5m/15m/1h/4h supported)",
             market_start_utc=market_start,
             horizon_minutes=horizon,
         )

@@ -1,6 +1,6 @@
 """Tests for control_plane/entry_window_guard.py — entry window policy."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 
 from control_plane.entry_window_guard import (
@@ -23,12 +23,16 @@ QUESTION_5M = "Bitcoin Up or Down - March 16, 7:10PM-7:15PM ET"
 QUESTION_15M = "Bitcoin Up or Down - March 16, 7:00PM-7:15PM ET"
 QUESTION_NO_TIME = "Will the Fed raise rates in 2026?"
 QUESTION_30M = "Bitcoin Up or Down - March 16, 7:00PM-9:00PM ET"
+QUESTION_4H = "Bitcoin Up or Down - March 16, 7:00PM-11:00PM ET"
 
 # 5m start: 2026-03-16 23:10:00 UTC  (ET = UTC-4, so 7:10PM ET -> 23:10 UTC)
 START_5M = datetime(2026, 3, 16, 23, 10, 0, tzinfo=UTC)
 
 # 15m start: 2026-03-16 23:00:00 UTC  (7:00PM ET -> 23:00 UTC)
 START_15M = datetime(2026, 3, 16, 23, 0, 0, tzinfo=UTC)
+
+# 4h start: 2026-03-16 23:00:00 UTC  (7:00PM ET -> 23:00 UTC, EDT in effect)
+START_4H = datetime(2026, 3, 16, 23, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +133,49 @@ def test_15m_too_late_rejected():
     result = check_entry_window(QUESTION_15M, now_utc=now)
     assert result.passed is False
     assert result.rejection == EntryWindowRejection.TOO_LATE_FOR_ENTRY_WINDOW
+
+
+# ---------------------------------------------------------------------------
+# 7b. 4h market — within window → passed (horizon=240 must be first-class
+#     supported, not fall into the "unsupported horizon" branch below)
+# ---------------------------------------------------------------------------
+
+
+def test_4h_within_window_passes():
+    # 30 seconds before start — well inside [14400s before, 14400s after]
+    now = START_4H - timedelta(seconds=30)
+    result = check_entry_window(QUESTION_4H, now_utc=now)
+    assert result.passed is True
+    assert result.rejection is None
+    assert result.horizon_minutes == 240
+
+
+def test_4h_too_early_rejected():
+    # 1 second before the 14400s-before window opens
+    now = START_4H - timedelta(seconds=14401)
+    result = check_entry_window(QUESTION_4H, now_utc=now)
+    assert result.passed is False
+    assert result.rejection == EntryWindowRejection.TOO_EARLY_FOR_ENTRY_WINDOW
+
+
+def test_4h_too_late_rejected():
+    # 1 second after the 14400s-after window closes
+    now = START_4H + timedelta(seconds=14401)
+    result = check_entry_window(QUESTION_4H, now_utc=now)
+    assert result.passed is False
+    assert result.rejection == EntryWindowRejection.TOO_LATE_FOR_ENTRY_WINDOW
+
+
+def test_4h_window_bounds_computed_correctly():
+    now = START_4H - timedelta(seconds=30)
+    result = check_entry_window(QUESTION_4H, now_utc=now)
+
+    expected_opens = START_4H - timedelta(seconds=14400)
+    expected_closes = START_4H + timedelta(seconds=14400)
+
+    assert result.window_opens_at == expected_opens
+    assert result.window_closes_at == expected_closes
+    assert result.market_start_utc == START_4H
 
 
 # ---------------------------------------------------------------------------
@@ -251,3 +298,17 @@ def test_default_policy_values():
     assert DEFAULT_ENTRY_WINDOW_POLICY.windows_5m.entry_after_start_sec == 600
     assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_before_start_sec == 900
     assert DEFAULT_ENTRY_WINDOW_POLICY.windows_15m.entry_after_start_sec == 900
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_1h.entry_before_start_sec == 3600
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_1h.entry_after_start_sec == 3600
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_4h.entry_before_start_sec == 14400
+    assert DEFAULT_ENTRY_WINDOW_POLICY.windows_4h.entry_after_start_sec == 14400
+
+
+def test_get_window_returns_4h_config_for_horizon_240():
+    """EntryWindowPolicy.get_window(240) must resolve to windows_4h, not None —
+    a market with a real 4-hour horizon (see _shadow_detect_horizon() in
+    agents/orchestrator.py, which explicitly maps "4 hour"/"4h" -> 240) must
+    not fall through to a missing config."""
+    policy = EntryWindowPolicy()
+    assert policy.get_window(240) is policy.windows_4h
+    assert policy.get_window(240) is not None
