@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import deque
 from loguru import logger
 
 try:
@@ -37,6 +38,8 @@ class RealtimeFeed:
         self._prices: dict[str, float] = {}      # symbol → last price
         self._timestamps: dict[str, float] = {}   # symbol → last update time
         self._trade_counts: dict[str, int] = {}   # symbol → trade count since start
+        # symbol → [(timestamp, price), ...] per-trade history, newest last, capped.
+        self._price_history: dict[str, deque] = {}
         self._ws: websocket.WebSocketApp | None = None
         self._thread: threading.Thread | None = None
         self._running = False
@@ -147,12 +150,37 @@ class RealtimeFeed:
                 return
 
             price = float(data["data"]["price"])
+            now = time.time()
             self._prices[symbol] = price
-            self._timestamps[symbol] = time.time()
+            self._timestamps[symbol] = now
             self._trade_counts[symbol] = self._trade_counts.get(symbol, 0) + 1
+            history = self._price_history.get(symbol)
+            if history is None:
+                history = deque(maxlen=2000)
+                self._price_history[symbol] = history
+            history.append((now, price))
 
         except Exception:
             pass
+
+    def get_change_pct(self, symbol: str, seconds: int = 60) -> float | None:
+        """Real % price change over the last N seconds, from per-trade WS
+        history. Returns None (not 0.0) when there isn't enough in-window
+        history yet, so callers can fall back to a coarser data source
+        instead of silently treating "no data" as "no movement"."""
+        history = self._price_history.get(symbol)
+        if not history or len(history) < 2:
+            return None
+        cutoff = time.time() - seconds
+        old_price = None
+        for ts, p in history:
+            if ts >= cutoff:
+                old_price = p
+                break
+        if old_price is None or old_price <= 0:
+            return None
+        current_price = history[-1][1]
+        return ((current_price - old_price) / old_price) * 100
 
     def _on_error(self, ws, error) -> None:
         logger.debug(f"WS error: {error}")

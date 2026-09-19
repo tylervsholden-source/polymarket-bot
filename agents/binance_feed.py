@@ -1761,7 +1761,17 @@ class BinanceFeed:
         }
 
     def get_recent_change(self, symbol: str, seconds: int = 60) -> float:
-        """Return price change % over last N seconds. 0.0 if insufficient data."""
+        """Return price change % over last N seconds. 0.0 if insufficient data.
+
+        Prefers the WS feed's per-trade history (updates continuously, many
+        points per minute) over self._price_history, which is only appended
+        to once per refresh() call (one orchestrator cycle, 60-120s) — too
+        coarse to reliably hold 2 points inside a 60s window.
+        """
+        if self._ws_feed is not None:
+            ws_change = self._ws_feed.get_change_pct(symbol, seconds=seconds)
+            if ws_change is not None:
+                return ws_change
         import time as _t
         history = self._price_history.get(symbol, [])
         if len(history) < 2:
