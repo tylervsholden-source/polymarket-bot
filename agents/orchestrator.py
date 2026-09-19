@@ -647,6 +647,15 @@ class Orchestrator:
         #     return
 
         open_count: int = self.position_manager.open_position_count()
+        # 86. review'ın intra-cycle sim sayaç fix'i, bir sonraki _cycle()
+        # çağrısında sıfırlanan bu başlangıç değerini kapsamıyordu: sim/paper
+        # modda (fiili varsayılan) self._sim_trades'teki henüz resolve
+        # olmamış pozisyonlar (5-45dk açık kalabilir, bkz.
+        # _check_sim_resolutions()) position_manager.data["positions"]'a hiç
+        # yazılmadığından her yeni cycle'da max_open_positions/MAX_DIRECTIONAL
+        # kontrolü bunları göz ardı edip sıfırdan sayıyordu (94. günlük review).
+        if not self._is_live_trading():
+            open_count += len(self._sim_trades)
         if open_count >= self.max_open_positions and self._is_live_trading():
             logger.info(f"Max pozisyon limitinde ({open_count}/{self.max_open_positions}).")
             _sw.update(
@@ -784,6 +793,12 @@ class Orchestrator:
         # Edge varsa her zaman girebilir — max_open_positions (5) yeterli koruma
         MAX_DIRECTIONAL = 2  # PIVOT: reduced from 5 — maker gets most capital
         directional_count = self.position_manager.pool_position_count("directional")
+        # Aynı sebep: self._sim_trades her zaman "directional" havuzuna aittir
+        # (bond pozisyonları yalnızca _run_bond_cycle() üzerinden, gerçek
+        # position_manager.add_position(strategy="bond") ile açılır, bu
+        # sim_entry döngüsünden hiç geçmez) — bkz. yukarıdaki open_count notu.
+        if not self._is_live_trading():
+            directional_count += len(self._sim_trades)
         for signal, review_decision in coord_result.approved_signals:
             if open_count >= self.max_open_positions:
                 break
