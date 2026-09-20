@@ -10,7 +10,9 @@ Design decisions:
   1. Readiness requires both evidence sufficiency AND behavioral quality.
      A large but badly-behaving corpus is still NO_GO.
   2. BLOCKER checks always produce NO_GO regardless of other results.
-  3. FAIL checks: 2 or more FAILs produce NO_GO; 1 FAIL produces CONDITIONAL.
+  3. FAIL checks: any FAIL produces NO_GO (Task 5.3: any FAIL blocks pilot —
+     tightened from an earlier "1 FAIL -> CONDITIONAL" draft; see
+     tests/test_live_pilot_readiness.py's "1 FAIL -> NO_GO" cases).
   4. WARN checks: 3 or more WARNs produce CONDITIONAL.
   5. GO verdict requires: 0 BLOCKERs, 0 FAILs, ≤ 2 WARNs.
   6. Pilot constraints are pre-defined and frozen.
