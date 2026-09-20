@@ -672,13 +672,19 @@ class BinanceFeed:
         """Verilen semboller için tüm verileri paralel çek."""
         if not symbols:
             return
-        # Start WS feed on first refresh (background thread)
+        # Start WS feed on first refresh (background thread). Subscribe to
+        # the full known coin universe (not just this cycle's `symbols`) —
+        # `_ws_started` never resets, so any coin missing from the very
+        # first cycle's active-market list (e.g. at boot, or a 5m market
+        # between rollovers) would otherwise never get a WS subscription
+        # for the life of the process, starving RT_LAG_BLOCK_YES/NO of
+        # real-time data for that coin.
         if not self._ws_started:
             self._ws_started = True
             try:
                 from agents.ws_feed import RealtimeFeed
                 self._ws_feed = RealtimeFeed()
-                self._ws_feed.start(symbols)
+                self._ws_feed.start()
             except Exception as e:
                 logger.debug(f"WS feed start failed: {e}")
                 self._ws_feed = None
