@@ -849,6 +849,17 @@ class Orchestrator:
         # compute_cycle_risk_budget()'s own docstring for why using the
         # latter double-counts directional_locked.
         total_capital = self.position_manager.data.get("capital", capital)
+        # Same SIM_CAPITAL floor as `capital` above (sim modda gerçek cüzdan
+        # $0.75 gibi olabilir) — position_manager.data["capital"] is kept
+        # pinned to the real CLOB balance by _sync_real_balance() regardless
+        # of sim/live mode, so without this the risk-budget ceiling was
+        # computed off the tiny real balance while sizing used SIM_CAPITAL,
+        # e.g. real=$0.75 → ceiling=min(0.75*0.18,20)=$0.135 instead of the
+        # intended min(100*0.18,20)=$18 — collapsing to $0 after one sim
+        # trade and blocking all further directional sim trades for the rest
+        # of the position's 5-45min lifetime.
+        if self._is_simulation_running() and not self._is_live_trading():
+            total_capital = max(total_capital, float(os.getenv("SIM_CAPITAL", 100)))
         cycle_budget = compute_cycle_risk_budget(total_capital, directional_locked)
         cycle_spent = 0.0
 
