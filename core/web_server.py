@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
 from loguru import logger
 
@@ -395,7 +395,14 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def start(port: int = 8080) -> HTTPServer:
-    server = HTTPServer(("127.0.0.1", port), _Handler)
+    # ThreadingHTTPServer, not HTTPServer: /api/chamber/* okur binlerce satırlık
+    # shadow_journal_*.jsonl dosyalarını (build_chamber_summary → read_journal_records,
+    # frontend'in her 5sn'de bir poll ettiği /api/chamber/summary) — gün geçtikçe
+    # büyüyen bu dosyalar üzerinde tek okuma birkaç saniye sürebiliyor. Plain
+    # (tek thread'li) HTTPServer bu sürede başka HİÇBİR isteğe cevap veremez —
+    # /api/control POST (acil "live_trading" kapatma) dahil. ThreadingHTTPServer
+    # her isteği ayrı thread'de işleyerek bu kilitlenmeyi önler.
+    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     logger.info(f"Web dashboard aktif → http://127.0.0.1:{port}")
@@ -407,7 +414,7 @@ if __name__ == "__main__":
     import sys
 
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    server = HTTPServer(("127.0.0.1", port), _Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     logger.info(f"Standalone dashboard → http://127.0.0.1:{port}")
     logger.info(f"Architect Chamber   → http://localhost:{port}/chamber")
     logger.info("Durdurmak için Ctrl+C")
