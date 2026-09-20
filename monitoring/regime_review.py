@@ -161,6 +161,7 @@ def compute_regime_review(
         idx += 1
 
     flags = StabilityFlags()
+    insufficient_windows = len(snapshots) < 2
 
     if len(snapshots) >= 2:
         rej_rates = [s.rejection_rate for s in snapshots if s.rejection_rate is not None]
@@ -205,14 +206,27 @@ def compute_regime_review(
                     f"{ur_rates[-1]:.1%}, rise={ur_rise:.1%}."
                 )
 
-    is_stable = not (
-        flags.rejection_rate_spike
-        or flags.ev_trend_negative
-        or flags.fillability_degrading
-        or flags.underround_rising
-    )
+    if insufficient_windows:
+        flags.notes.append(
+            f"Only {len(snapshots)} rolling window(s) formed (need >= 2 to detect a "
+            "trend); stability cannot be assessed."
+        )
+        is_stable = False  # unknown ≠ stable
+    else:
+        is_stable = not (
+            flags.rejection_rate_spike
+            or flags.ev_trend_negative
+            or flags.fillability_degrading
+            or flags.underround_rising
+        )
 
-    if is_stable:
+    if insufficient_windows:
+        summary = (
+            f"Insufficient rolling windows ({len(snapshots)}) for trend analysis "
+            f"(window={window_size}, step={step}); need >= 2 windows. "
+            "Cannot assess stability."
+        )
+    elif is_stable:
         summary = (
             f"Stable over {len(snapshots)} rolling windows "
             f"(window={window_size}, step={step}). No instability flags set."
