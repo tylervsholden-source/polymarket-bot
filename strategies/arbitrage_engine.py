@@ -1532,6 +1532,22 @@ class ArbitrageEngine:
                         f"15-candle trend={macro_trend_pct:+.3f}% (bullish) → NO blocked"
                     )
 
+            # ── REGIME DECAY GUARD (v8) ──────────────────────────────────
+            # BUG: self._regime_decay_pause is computed every cycle (see
+            # "Regime decay detection" block at top of analyze()) and logs
+            # that NO trades are paused, but was never actually consulted
+            # here — every _no_viable=True reactivation above (3GREEN_NO,
+            # EXHAUSTION_NO, CANDLE_NO, TF_CONFLICT_FLIP_NO) could still
+            # fire during the exact post-peak decay window the guard exists
+            # to block. Enforce it last, after all reactivation branches,
+            # so no path bypasses it.
+            if self._regime_decay_pause and _no_viable:
+                _no_viable = False
+                logger.info(
+                    f"REGIME_DECAY_BLOCK_NO: {question[:35]} | "
+                    f"peak={self._regime_strength_peak:.2f} decay-pause active → NO blocked"
+                )
+
             # Pick the better viable direction — pure edge comparison
             if _yes_viable and _no_viable:
                 if yes_edge >= no_edge:
