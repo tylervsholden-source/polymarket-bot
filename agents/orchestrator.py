@@ -135,6 +135,31 @@ def compute_cycle_risk_budget(
     return max(0.0, max_risk - directional_locked)
 
 
+def compute_sim_trades_locked(sim_trades: list[dict]) -> float:
+    """Total USDC locked in still-open sim/paper positions.
+
+    Bug: `_cycle()`'s TOPLAM RİSK LİMİTİ block computed `directional_locked`
+    (fed into compute_cycle_risk_budget() above) from
+    position_manager.locked_capital() alone. Sim/paper trades — the bot's
+    actual default running mode (see self._sim_trades' own docstring and the
+    94th daily review) — are never written to position_manager.data via
+    add_position(); they live only in Orchestrator._sim_trades until
+    _check_sim_resolutions() closes them 5-45 minutes later. So
+    directional_locked was always 0 in sim/paper mode no matter how much
+    capital earlier cycles' still-open sim positions had already committed,
+    letting cycle_budget silently reset to the FULL 18%-of-capital/$20
+    ceiling every cycle instead of shrinking by what was already at risk —
+    the same "sim positions invisible to position_manager" gap the 94th
+    daily review fixed for the open_count/directional_count position-COUNT
+    caps, left unfixed here for this dollar-based cap. E.g. $30 capital with
+    one already-open $4 sim position: correct budget = min(30*0.18,20)-4 =
+    $1.40, but the bug kept computing $5.40 — enough headroom for a second
+    ~$4 trade that would push real directional exposure to ~27% of capital,
+    well past the documented 18% ceiling.
+    """
+    return sum(t.get("size", 0) for t in sim_trades)
+
+
 def apply_risk_size_multiplier(bet_size: float, multiplier: float) -> float:
     """Apply AutonomousDecisionEngine's risk-based size_multiplier to bet_size.
 
@@ -813,6 +838,12 @@ class Orchestrator:
             if p.get("strategy") == "bond"
         )
         directional_locked = locked - bond_locked
+        # Sim/paper positions never reach position_manager (see
+        # compute_sim_trades_locked()'s own docstring) — add their locked
+        # capital back in so cycle_budget shrinks by what earlier cycles'
+        # still-open sim positions already committed, not just live ones.
+        if not self._is_live_trading():
+            directional_locked += compute_sim_trades_locked(self._sim_trades)
         # Ceiling must come from TOTAL account capital, not the
         # already-locked-excluded `capital` (available_capital()) — see
         # compute_cycle_risk_budget()'s own docstring for why using the
