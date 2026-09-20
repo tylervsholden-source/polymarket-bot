@@ -2227,8 +2227,19 @@ class Orchestrator:
             _side = (trade.get("outcome") or trade.get("direction") or "").upper()
             if trade.get("result") == "WIN" and _side == "NO":
                 self._consecutive_wins_per_coin[_coin] = self._consecutive_wins_per_coin.get(_coin, 0) + 1
-            elif trade.get("result") == "NEUTRAL":
-                continue  # Unfilled/cancelled GTC order — neither win nor loss, doesn't break streak
+            elif trade.get("result") in ("NEUTRAL", "EXPIRED"):
+                # NEUTRAL: unfilled/cancelled GTC order. EXPIRED: sim market
+                # didn't resolve within 45min (_check_sim_resolutions()) —
+                # both carry zero directional information (same reasoning
+                # trade_analyzer.py uses to map EXPIRED→NEUTRAL), so neither
+                # should break the streak. Before this fix, EXPIRED fell
+                # into the `else` branch below and wrongly reset a coin's
+                # in-progress consecutive-NO-WIN count to 0, letting the
+                # OPT-7 CONSEC_WIN_GUARD (SKIP at streak>=3, half-Kelly at
+                # streak==2 — see usage above) silently under-count a real
+                # bounce-risk streak whenever an EXPIRED trade landed
+                # between two NO wins for the same coin.
+                continue
             else:
                 _coin_done.add(_coin)  # Bu coin'in streak'i kırıldı
         _active_guards = {k: v for k, v in self._consecutive_wins_per_coin.items() if v >= 2}
