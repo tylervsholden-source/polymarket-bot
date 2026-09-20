@@ -196,8 +196,19 @@ class CandlestickAnalyzer:
         # "HAMMER" into _bullish_patterns / _has_strong_bullish_pattern in
         # strategies/arbitrage_engine.py — i.e. a bearish candle activated
         # the YES side.
+        # NOTE: the split must key off c2's direction ALONE. A stray
+        # "not is_doji" guard here (is_doji describes c1, the hammer/hanging
+        # -man candle itself, not c2) forced every hammer-shaped candle whose
+        # tiny body also qualified as a DOJI/DRAGONFLY_DOJI into the `else`
+        # branch, i.e. always HAMMER — even after a bullish c2, where it is a
+        # HANGING_MAN. Since a hammer/hanging-man body is small by
+        # definition, this doji overlap is common, not an edge case, and it
+        # flipped a bearish reversal signal (-0.5) into a bullish one (+0.5)
+        # feeding straight into _has_strong_bullish_pattern / _pattern_bullish
+        # in strategies/arbitrage_engine.py — see
+        # tests/test_hanging_man_doji_shape_not_forced_bullish.py.
         if body1 > 0 and lw1 >= body1 * 2 and uw1 <= body1 * 0.5:
-            if not is_doji and CA._is_bullish(c2):
+            if CA._is_bullish(c2):
                 patterns.append("HANGING_MAN")
             else:
                 patterns.append("HAMMER")
