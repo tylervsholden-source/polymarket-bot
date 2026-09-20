@@ -337,15 +337,6 @@ class _Handler(BaseHTTPRequestHandler):
                 status = json.load(f)
         except FileNotFoundError:
             status = {}
-        # position_meta.json'dan ek alanları positions'a merge et
-        try:
-            with open(META_FILE) as f:
-                meta = json.load(f)
-            for market_id, extra in meta.items():
-                if market_id in status.get("positions", {}):
-                    status["positions"][market_id].update(extra)
-        except FileNotFoundError:
-            pass
         # positions.json'dan güncel capital ve closed trades'i al
         # (status.json bot durduğunda stale kalır)
         try:
@@ -361,6 +352,19 @@ class _Handler(BaseHTTPRequestHandler):
             elif not status.get("positions"):
                 status["positions"] = {}
                 status["open_positions"] = 0
+        except FileNotFoundError:
+            pass
+        # position_meta.json'dan ek alanları positions'a merge et — positions.json
+        # override'ından SONRA çalışmalı. Eskiden bu merge önce yapılıyordu ve
+        # hemen ardından yukarıdaki blok status["positions"]'ı positions.json'daki
+        # (meta içermeyen) dict ile tamamen değiştiriyordu — pm_data["positions"]
+        # dolu olduğu her normal durumda (bot çalışırken) merge sessizce kayboluyordu.
+        try:
+            with open(META_FILE) as f:
+                meta = json.load(f)
+            for market_id, extra in meta.items():
+                if market_id in status.get("positions", {}):
+                    status["positions"][market_id].update(extra)
         except FileNotFoundError:
             pass
         self._send_json_data(json.dumps(status, ensure_ascii=False).encode())
