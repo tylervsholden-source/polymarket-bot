@@ -23,14 +23,24 @@ class SpreadModel:
         return f"{min(id1, id2)}|{max(id1, id2)}"
 
     def record(self, market1_id: str, price1: float, market2_id: str, price2: float) -> float:
-        """Record spread and return current z-score."""
+        """Record spread and return current z-score.
+
+        z_score() must run BEFORE the current spread is appended to history.
+        Appending first (the previous order) made z_score()'s own mu/sigma
+        include the very point being tested against them — for a genuine
+        outlier this pulls mu toward it and inflates sigma, systematically
+        understating the z-score (e.g. a spread that should score z≈11.5
+        against its prior history scored just z≈2.2 once folded into its
+        own baseline) and letting real dislocations slip under
+        find_dislocations()'s min_z threshold.
+        """
         key = self._pair_key(market1_id, market2_id)
         if key not in self._history:
             self._history[key] = deque(maxlen=self.window)
 
-        spread = price1 - price2
-        self._history[key].append(spread)
-        return self.z_score(market1_id, price1, market2_id, price2)
+        z = self.z_score(market1_id, price1, market2_id, price2)
+        self._history[key].append(price1 - price2)
+        return z
 
     def z_score(self, market1_id: str, price1: float, market2_id: str, price2: float) -> float:
         """
