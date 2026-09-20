@@ -300,14 +300,25 @@ class CandlestickAnalyzer:
             patterns.append("THREE_BLACK_CROWS")
 
         # 18. THREE INSIDE UP — bearish + bullish harami + bullish continuation
+        # Harami containment needs BOTH bounds (as BULLISH_HARAMI above checks
+        # body_top and body_bot of the inner candle against the outer one).
+        # This only checked body_top(c2) < c3[1] (c2's body stays below c3's
+        # open) and never body_bot(c2) > c3[4] — so a c2 whose body poked out
+        # UNDER c3's close (not actually "inside" c3's body at all) still
+        # passed as long as its top stayed under c3's open, firing the
+        # +0.7-score pattern on what is really just two overlapping candles.
         if (CA._is_bearish(c3) and CA._is_bullish(c2) and CA._is_bullish(c1) and
                 body2 < body3 * 0.5 and CA._body_top(c2) < c3[1] and
+                CA._body_bot(c2) > c3[4] and
                 c1[4] > c3[1]):
             patterns.append("THREE_INSIDE_UP")
 
         # 19. THREE INSIDE DOWN — bullish + bearish harami + bearish continuation
+        # Same missing-bound bug as THREE_INSIDE_UP: only checked
+        # body_bot(c2) > c3[1], never body_top(c2) < c3[4].
         if (CA._is_bullish(c3) and CA._is_bearish(c2) and CA._is_bearish(c1) and
                 body2 < body3 * 0.5 and CA._body_bot(c2) > c3[1] and
+                CA._body_top(c2) < c3[4] and
                 c1[4] < c3[1]):
             patterns.append("THREE_INSIDE_DOWN")
 
