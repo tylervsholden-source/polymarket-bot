@@ -27,6 +27,30 @@ def _isolate_autonomous_engine_state(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_status_writer_file(monkeypatch, tmp_path):
+    """Redirect core.status_writer's dashboard status file to a tmp path.
+
+    `core.status_writer.save()` writes to a module-level `_STATUS_FILE`
+    constant pointing at the real `data/status.json`. Most orchestrator
+    tests mock `agents.orchestrator._sw` entirely, but at least one
+    (`test_maker_cycle_daily_stop_and_lock_gate.py::
+    test_maker_cycle_skips_when_account_wide_position_cap_reached`) drives
+    `Orchestrator._cycle()` far enough to hit the real
+    `_sw.update(...); _sw.save()` call at the account-wide position-cap
+    guard without mocking `_sw` — so every such pytest run wrote fixture
+    values (capital=100, cycle=1, ...) into the repo's own
+    `data/status.json`, the same test-isolation bug class the
+    `_isolate_autonomous_engine_state` fixture above fixed for
+    `data/autonomous_state.json`.
+    """
+    try:
+        import core.status_writer as sw
+        monkeypatch.setattr(sw, "_STATUS_FILE", str(tmp_path / "status.json"))
+    except ImportError:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _pin_et_hour_gate(monkeypatch):
     """Pin ArbitrageEngine's bad-hour gate to a neutral hour so tests are
     deterministic regardless of the real wall-clock time they run at.
