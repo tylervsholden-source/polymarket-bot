@@ -746,12 +746,18 @@ class ArbitrageEngine:
             logger.debug(f"SUM_MONITOR error: {_e}")
 
         # ── OVERPRICED MARKET BLOCK ──────────────────────────────────────
-        # YES+NO > 1.10 = market maker spread too wide, edge is fake
+        # YES+NO > 1.10 = market maker spread too wide, edge is fake.
+        # 105. review: the code compared against 1.50, not 1.10, contradicting
+        # this comment, docs/PRICING_SANITY_SPEC.md's LIVE-profile max_ask_sum
+        # (1.10), and tests/test_no_side_execution_path.py's own
+        # "no_best_ask=0.99 → OVERPRICED_BLOCK" comment — a 40-cent gap in
+        # which severely mispriced/illiquid books (fake edge) still reached
+        # a real order. Threshold corrected to match the documented value.
         try:
             _real_no_price = market.get("no_best_ask")
             if _real_no_price and float(_real_no_price) > 0:
                 _sum_total = yes_price + float(_real_no_price)
-                if _sum_total > 1.50:
+                if _sum_total > 1.10:
                     logger.info(
                         f"OVERPRICED_BLOCK: {question[:40]} | YES+NO={_sum_total:.3f} "
                         f"({(_sum_total-1)*100:+.0f}% sapma) → trade blocked"
