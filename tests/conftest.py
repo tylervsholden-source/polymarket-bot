@@ -6,6 +6,27 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _isolate_autonomous_engine_state(monkeypatch, tmp_path):
+    """Redirect AutonomousDecisionEngine's persistence file to a tmp path.
+
+    9 test files construct AutonomousDecisionEngine() without overriding
+    PERSISTENCE_FILE themselves, so without this every test run writes
+    real state (bumping last_update, counters) into the repo's own
+    data/autonomous_state.json — showing up as an uncommitted diff after
+    every `pytest` invocation instead of staying test-isolated.
+    """
+    try:
+        import agents.autonomous_engine as ae
+        monkeypatch.setattr(
+            ae.AutonomousDecisionEngine,
+            "PERSISTENCE_FILE",
+            tmp_path / "autonomous_state.json",
+        )
+    except ImportError:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _pin_et_hour_gate(monkeypatch):
     """Pin ArbitrageEngine's bad-hour gate to a neutral hour so tests are
     deterministic regardless of the real wall-clock time they run at.
