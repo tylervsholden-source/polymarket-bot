@@ -42,6 +42,9 @@ project_snapshot.zip
 # Claude Code agent worktrees (transient, harness-managed)
 .claude/worktrees/
 
+# Claude Code local/per-machine settings (never shared project config)
+.claude/settings.local.json
+
 # IDE
 .vscode/
 .idea/
