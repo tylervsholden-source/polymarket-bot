@@ -2,11 +2,7 @@
   "permissions": {
     "allow": [
       "Bash",
-      "WebSearch",
-      "Read(//c/Users/lcladm/.antigravity/**)"
-    ],
-    "additionalDirectories": [
-      "c:\\Users\\lcladm\\.antigravity"
+      "WebSearch"
     ]
   }
 }
