@@ -1134,57 +1134,48 @@ class Orchestrator:
                 if not await self._fresh_price_ok(market, market_id, signal):
                     continue
 
-                # ── DOĞRUDAN EMİR VER (onay kuyruğu bypass) ──
-                order = await self.client.place_order(
-                    market_id=market_id,
-                    outcome=signal.direction,
-                    amount=bet_size,
-                    price=signal.entry_price,
-                    token_id=token_id,
-                    question=market.get("question", ""),
+                # ── ONAY KUYRUĞUNA EKLE (INC-2026-03-15-001: sinyal → emir
+                # arasında insan onayı zorunlu) ──
+                # Üstteki LiveGate ön-kontrolü is_approved=True ile geçildi
+                # çünkü burada henüz gerçek bir onay yok — o parametre
+                # sadece diğer 10 kontrolü (capital/rate-limit/expiry/...)
+                # enqueue öncesi ön-elemek için var. Gerçek yürütme, ve
+                # gerçek is_approved kontrolü, operatör dashboard'dan
+                # onayladıktan sonra _execute_approved_orders() içinde
+                # yapılır (bkz. o metodun LiveGate re-check'i).
+                order_id = _enqueue_order({
+                    "market_id": market_id,
+                    "question": market.get("question", ""),
+                    "direction": signal.direction,
+                    "amount": bet_size,
+                    "entry_price": signal.entry_price,
+                    "edge": signal.edge,
+                    "bayesian_prob": signal.bayesian_prob,
+                    "token_id": token_id,
+                    "end_date_iso": end_iso,
+                })
+                logger.info(
+                    f"ONAY BEKLİYOR [{review_decision.verdict.value}]: "
+                    f"{market['question'][:50]} | "
+                    f"${bet_size:.2f} @ {signal.entry_price:.4f} | Dashboard'dan onaylayın."
                 )
-                if order:
-                    self._order_timestamps.append(time.time())
-                    order["outcome"] = signal.direction
-                    order["token_id"] = token_id or ""
-                    self.position_manager.add_position(
-                        market_id, order, market["question"],
-                        edge=signal.edge,
-                        confluence_score=signal.confluence_score,
-                        risk_flags=signal.risk_flags,
-                        whale_direction=signal.whale_direction,
-                        regime_direction=signal.regime_direction,
-                        signal_price=signal.entry_price,
-                    )
-                    self._reentry_guard.mark_traded(market_id)
-                    open_count += 1
-                    directional_count += 1
-                    # CLOB'un 5-share min-size tabani, kucuk bet_size + yuksek
-                    # fiyat kombinasyonunda gercek maliyeti (order["amount"])
-                    # istenen bet_size'in kat kat uzerine cikarabiliyor
-                    # (orn. bet_size=$1 @ price=0.90 -> gercek $4.55). bet_size
-                    # ile dusulunce bu cycle'in gercek capital/harcama
-                    # gorunumu sisirilir; sonraki sinyaller icin
-                    # compute_bet_size()'in %20 pozisyon tavani da bu sisirilmis
-                    # capital'e gore hesaplanir.
-                    real_cost = order.get("amount", bet_size)
-                    capital -= real_cost
-                    cycle_spent += real_cost
-                    logger.success(
-                        f"EMİR VERİLDİ [{review_decision.verdict.value}]: "
-                        f"{market['question'][:50]} | "
-                        f"${bet_size:.2f} @ {signal.entry_price:.4f}"
-                    )
-                else:
-                    logger.error(f"Emir başarısız: {market['question'][:50]}")
+                # Henüz gerçek pozisyon yok (onay bekliyor), bu yüzden `capital`
+                # düşülmez — gerçek harcama _execute_approved_orders()'da
+                # onaylandıktan sonra gerçekleşir. Ama aynı cycle'da art arda
+                # enqueue edilen emirlerin max_open_positions/MAX_DIRECTIONAL/
+                # cycle_budget üstüne çıkmaması için bu per-cycle sayaçlar
+                # yine de güncellenir.
+                open_count += 1
+                directional_count += 1
+                cycle_spent += bet_size
 
                 _sw.add_order(
                     market=market["question"],
                     outcome=signal.direction,
                     amount=bet_size,
                     price=signal.entry_price,
-                    order_id=order.get("id", "DIRECT") if order else "FAILED",
-                    status="EXECUTED" if order else "FAILED",
+                    order_id=order_id,
+                    status="PENDING_APPROVAL",
                     edge=signal.edge,
                 )
                 _sw.save()
