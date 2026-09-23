@@ -1514,8 +1514,14 @@ class Orchestrator:
             if self._reentry_guard.is_blocked(opp.condition_id):
                 continue
 
-            # Size: max $10 per bond, max 40% of remaining bond capital
-            bet_size = min(10.0, bond_capital * 0.40)
+            # Size: max $10 per bond, max 40% of remaining bond capital,
+            # never above the account-wide max-position-pct cap (CLAUDE.md:
+            # "Max tek pozisyon: portföyün %20'si") — bond_capital is the
+            # bond POOL's capital, not total capital, so without this clamp
+            # a config like BOND_CAPITAL_PCT=1.0 could size a bond order at
+            # up to 40% of total capital, double the account-wide cap.
+            position_cap = self.position_manager.data["capital"] * self.position_manager.max_position_pct
+            bet_size = min(10.0, bond_capital * 0.40, position_cap)
             if bet_size < 3.0:
                 break
 

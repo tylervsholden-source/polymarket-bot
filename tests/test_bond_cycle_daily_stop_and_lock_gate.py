@@ -46,16 +46,21 @@ def _make_bond_orchestrator(
     process_lock_is_mine: bool = True,
     open_position_count: int = 0,
     max_open_positions: int = 5,
+    bond_capital: float = 100.0,
+    total_capital: float = 1000.0,
+    max_position_pct: float = 0.20,
 ) -> Orchestrator:
     orch = Orchestrator.__new__(Orchestrator)
 
     orch.position_manager = SimpleNamespace(
         daily_loss_exceeded=lambda threshold: daily_loss_exceeded,
         open_position_count=lambda: open_position_count,
-        pool_available=lambda pool: 100.0,
+        pool_available=lambda pool: bond_capital,
         pool_position_count=lambda pool: 0,
         has_position=lambda market_id: False,
         add_position=lambda *a, **k: None,
+        data={"capital": total_capital},
+        max_position_pct=max_position_pct,
     )
     orch.max_open_positions = max_open_positions
     orch.daily_stop_loss = 0.15
@@ -120,6 +125,36 @@ async def test_bond_cycle_still_trades_when_all_gates_pass():
     )
     await orch._bond_cycle()
     orch.client.place_passive_order.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_bond_cycle_respects_account_wide_max_position_pct():
+    """Regression test (149th daily review): bond order sizing ignored the
+    account-wide max-position-pct cap (CLAUDE.md: "Max tek pozisyon:
+    portföyün %20'si"). `bond_capital` is the bond POOL's capital, not
+    total account capital, so with e.g. BOND_CAPITAL_PCT=1.0 the old
+    `min(10.0, bond_capital * 0.40)` sizing could put up to 40% of total
+    capital into a single bond order — double the account-wide cap that
+    every other real-order path (compute_bet_size) enforces.
+
+    Here total_capital == bond_capital == $20 (all capital in the bond
+    pool), so the old formula would size at min(10.0, 8.0) = $8.00 (40%
+    of total capital). With the fix, the account-wide cap of
+    20 * 0.20 = $4.00 must win instead.
+    """
+    orch = _make_bond_orchestrator(
+        bond_capital=20.0,
+        total_capital=20.0,
+        max_position_pct=0.20,
+    )
+    await orch._bond_cycle()
+    orch.client.place_passive_order.assert_called_once()
+    _, kwargs = orch.client.place_passive_order.call_args
+    actual_cost = kwargs["size"] * kwargs["price"]
+    assert actual_cost <= 4.0 + 0.01, (
+        f"bond order cost ${actual_cost:.2f} exceeds the account-wide "
+        f"20% position cap of $4.00 for $20 total capital"
+    )
 
 
 def test_cycle_phase_b_dispatch_still_requires_is_live_trading():
