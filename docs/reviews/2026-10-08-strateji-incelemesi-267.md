@@ -4,7 +4,9 @@
 Planlı günlük strateji incelemesi (hedef: sermayenin %10'u kadar kazanç).
 
 ## Bu turda yapılanlar
-- **Açık PR kontrolü:** açık PR yok (#368 / round-266 zaten merge edilmiş).
+- **Açık PR kontrolü:** #368 (round-266) merge edilmiş; ancak #438–#467 arası 30 adet
+  mükerrer "267th daily strategy review" PR'ı açık bekliyor (hiçbiri merge edilmedi).
+  Bu tur yeni bir PR açılmadı.
 - **Test:** `python3 -m pytest tests/ -q` → **951 passed, 2 skipped**, regresyon yok
   (bu ortamda önce `requirements.txt` kuruldu).
 - **Risk parametreleri** (`MAX_OPEN_POSITIONS=5`, `MIN_EDGE_THRESHOLD=0.08`,
